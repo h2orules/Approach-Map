@@ -1,0 +1,882 @@
+[
+  {
+    "icao": "KATL",
+    "iata": "ATL",
+    "name": "Hartsfield-Jackson Atlanta Intl",
+    "lat": 33.6367,
+    "lon": -84.428101,
+    "elevation": 1026,
+    "city": "Atlanta",
+    "state": "GA"
+  },
+  {
+    "icao": "KBOS",
+    "iata": "BOS",
+    "name": "Boston Logan Intl",
+    "lat": 42.36197,
+    "lon": -71.0079,
+    "elevation": 20,
+    "city": "Boston",
+    "state": "MA"
+  },
+  {
+    "icao": "KBWI",
+    "iata": "BWI",
+    "name": "Baltimore/Washington Intl Thurgood Marshall",
+    "lat": 39.1754,
+    "lon": -76.668297,
+    "elevation": 146,
+    "city": "Baltimore",
+    "state": "MD"
+  },
+  {
+    "icao": "KBUF",
+    "iata": "BUF",
+    "name": "Buffalo Niagara Intl",
+    "lat": 42.940498,
+    "lon": -78.732201,
+    "elevation": 728,
+    "city": "Buffalo",
+    "state": "NY"
+  },
+  {
+    "icao": "KCLE",
+    "iata": "CLE",
+    "name": "Cleveland Hopkins Intl",
+    "lat": 41.411701,
+    "lon": -81.8498,
+    "elevation": 791,
+    "city": "Cleveland",
+    "state": "OH"
+  },
+  {
+    "icao": "KCLT",
+    "iata": "CLT",
+    "name": "Charlotte Douglas Intl",
+    "lat": 35.2140007019043,
+    "lon": -80.94309997558594,
+    "elevation": 748,
+    "city": "Charlotte",
+    "state": "NC"
+  },
+  {
+    "icao": "KDEN",
+    "iata": "DEN",
+    "name": "Denver Intl",
+    "lat": 39.860027,
+    "lon": -104.673792,
+    "elevation": 5431,
+    "city": "Denver",
+    "state": "CO"
+  },
+  {
+    "icao": "KDFW",
+    "iata": "DFW",
+    "name": "Dallas/Fort Worth Intl",
+    "lat": 32.896801,
+    "lon": -97.038002,
+    "elevation": 607,
+    "city": "Dallas/Fort Worth",
+    "state": "TX"
+  },
+  {
+    "icao": "KDTW",
+    "iata": "DTW",
+    "name": "Detroit Metro Wayne County",
+    "lat": 42.21377,
+    "lon": -83.353786,
+    "elevation": 645,
+    "city": "Detroit",
+    "state": "MI"
+  },
+  {
+    "icao": "KEWR",
+    "iata": "EWR",
+    "name": "Newark Liberty Intl",
+    "lat": 40.6894,
+    "lon": -74.170545,
+    "elevation": 18,
+    "city": "Newark",
+    "state": "NJ"
+  },
+  {
+    "icao": "KFLL",
+    "iata": "FLL",
+    "name": "Fort Lauderdale/Hollywood Intl",
+    "lat": 26.072599,
+    "lon": -80.152702,
+    "elevation": 9,
+    "city": "Fort Lauderdale",
+    "state": "FL"
+  },
+  {
+    "icao": "KHOU",
+    "iata": "HOU",
+    "name": "William P Hobby",
+    "lat": 29.645336,
+    "lon": -95.276812,
+    "elevation": 46,
+    "city": "Houston",
+    "state": "TX"
+  },
+  {
+    "icao": "KIAH",
+    "iata": "IAH",
+    "name": "George Bush Intercontinental",
+    "lat": 29.9844,
+    "lon": -95.3414,
+    "elevation": 97,
+    "city": "Houston",
+    "state": "TX"
+  },
+  {
+    "icao": "KIND",
+    "iata": "IND",
+    "name": "Indianapolis Intl",
+    "lat": 39.7173,
+    "lon": -86.294403,
+    "elevation": 797,
+    "city": "Indianapolis",
+    "state": "IN"
+  },
+  {
+    "icao": "KJFK",
+    "iata": "JFK",
+    "name": "John F Kennedy Intl",
+    "lat": 40.639447,
+    "lon": -73.779317,
+    "elevation": 13,
+    "city": "New York",
+    "state": "NY"
+  },
+  {
+    "icao": "KLAS",
+    "iata": "LAS",
+    "name": "Harry Reid Intl",
+    "lat": 36.083361,
+    "lon": -115.151817,
+    "elevation": 2181,
+    "city": "Las Vegas",
+    "state": "NV"
+  },
+  {
+    "icao": "KLAX",
+    "iata": "LAX",
+    "name": "Los Angeles Intl",
+    "lat": 33.942501,
+    "lon": -118.407997,
+    "elevation": 125,
+    "city": "Los Angeles",
+    "state": "CA"
+  },
+  {
+    "icao": "KLGA",
+    "iata": "LGA",
+    "name": "LaGuardia",
+    "lat": 40.777199,
+    "lon": -73.872597,
+    "elevation": 21,
+    "city": "New York",
+    "state": "NY"
+  },
+  {
+    "icao": "KMCO",
+    "iata": "MCO",
+    "name": "Orlando Intl",
+    "lat": 28.429399490356445,
+    "lon": -81.30899810791016,
+    "elevation": 96,
+    "city": "Orlando",
+    "state": "FL"
+  },
+  {
+    "icao": "KMDW",
+    "iata": "MDW",
+    "name": "Chicago Midway Intl",
+    "lat": 41.785999,
+    "lon": -87.752403,
+    "elevation": 620,
+    "city": "Chicago",
+    "state": "IL"
+  },
+  {
+    "icao": "KMEM",
+    "iata": "MEM",
+    "name": "Memphis Intl",
+    "lat": 35.043845,
+    "lon": -89.97634,
+    "elevation": 341,
+    "city": "Memphis",
+    "state": "TN"
+  },
+  {
+    "icao": "KMIA",
+    "iata": "MIA",
+    "name": "Miami Intl",
+    "lat": 25.796011,
+    "lon": -80.289751,
+    "elevation": 8,
+    "city": "Miami",
+    "state": "FL"
+  },
+  {
+    "icao": "KMKE",
+    "iata": "MKE",
+    "name": "Milwaukee Mitchell Intl",
+    "lat": 42.947201,
+    "lon": -87.896599,
+    "elevation": 723,
+    "city": "Milwaukee",
+    "state": "WI"
+  },
+  {
+    "icao": "KMSP",
+    "iata": "MSP",
+    "name": "Minneapolis-St Paul Intl",
+    "lat": 44.880081,
+    "lon": -93.221741,
+    "elevation": 841,
+    "city": "Minneapolis",
+    "state": "MN"
+  },
+  {
+    "icao": "KMSY",
+    "iata": "MSY",
+    "name": "Louis Armstrong New Orleans Intl",
+    "lat": 29.993401,
+    "lon": -90.264673,
+    "elevation": 4,
+    "city": "New Orleans",
+    "state": "LA"
+  },
+  {
+    "icao": "KOAK",
+    "iata": "OAK",
+    "name": "Oakland Intl",
+    "lat": 37.720085,
+    "lon": -122.221184,
+    "elevation": 9,
+    "city": "Oakland",
+    "state": "CA"
+  },
+  {
+    "icao": "KORD",
+    "iata": "ORD",
+    "name": "Chicago O'Hare Intl",
+    "lat": 41.9786,
+    "lon": -87.9048,
+    "elevation": 680,
+    "city": "Chicago",
+    "state": "IL"
+  },
+  {
+    "icao": "KPBI",
+    "iata": "PBI",
+    "name": "Palm Beach Intl",
+    "lat": 26.683201,
+    "lon": -80.095596,
+    "elevation": 19,
+    "city": "West Palm Beach",
+    "state": "FL"
+  },
+  {
+    "icao": "KPDX",
+    "iata": "PDX",
+    "name": "Portland Intl",
+    "lat": 45.588699,
+    "lon": -122.598,
+    "elevation": 31,
+    "city": "Portland",
+    "state": "OR"
+  },
+  {
+    "icao": "KPHL",
+    "iata": "PHL",
+    "name": "Philadelphia Intl",
+    "lat": 39.871899,
+    "lon": -75.241096,
+    "elevation": 36,
+    "city": "Philadelphia",
+    "state": "PA"
+  },
+  {
+    "icao": "KPHX",
+    "iata": "PHX",
+    "name": "Phoenix Sky Harbor Intl",
+    "lat": 33.435302,
+    "lon": -112.005905,
+    "elevation": 1135,
+    "city": "Phoenix",
+    "state": "AZ"
+  },
+  {
+    "icao": "KPIT",
+    "iata": "PIT",
+    "name": "Pittsburgh Intl",
+    "lat": 40.491501,
+    "lon": -80.232903,
+    "elevation": 1203,
+    "city": "Pittsburgh",
+    "state": "PA"
+  },
+  {
+    "icao": "KRDU",
+    "iata": "RDU",
+    "name": "Raleigh-Durham Intl",
+    "lat": 35.878659,
+    "lon": -78.7873,
+    "elevation": 435,
+    "city": "Raleigh/Durham",
+    "state": "NC"
+  },
+  {
+    "icao": "KRSW",
+    "iata": "RSW",
+    "name": "Southwest Florida Intl",
+    "lat": 26.534685,
+    "lon": -81.752816,
+    "elevation": 30,
+    "city": "Fort Myers",
+    "state": "FL"
+  },
+  {
+    "icao": "KSAN",
+    "iata": "SAN",
+    "name": "San Diego Intl",
+    "lat": 32.733601,
+    "lon": -117.190002,
+    "elevation": 17,
+    "city": "San Diego",
+    "state": "CA"
+  },
+  {
+    "icao": "KSEA",
+    "iata": "SEA",
+    "name": "Seattle-Tacoma Intl",
+    "lat": 47.447943,
+    "lon": -122.310276,
+    "elevation": 433,
+    "city": "Seattle",
+    "state": "WA"
+  },
+  {
+    "icao": "KSFO",
+    "iata": "SFO",
+    "name": "San Francisco Intl",
+    "lat": 37.619806,
+    "lon": -122.374821,
+    "elevation": 13,
+    "city": "San Francisco",
+    "state": "CA"
+  },
+  {
+    "icao": "KSJC",
+    "iata": "SJC",
+    "name": "Norman Y Mineta San Jose Intl",
+    "lat": 37.362452,
+    "lon": -121.929188,
+    "elevation": 62,
+    "city": "San Jose",
+    "state": "CA"
+  },
+  {
+    "icao": "KSLC",
+    "iata": "SLC",
+    "name": "Salt Lake City Intl",
+    "lat": 40.78886,
+    "lon": -111.979866,
+    "elevation": 4227,
+    "city": "Salt Lake City",
+    "state": "UT"
+  },
+  {
+    "icao": "KSMF",
+    "iata": "SMF",
+    "name": "Sacramento Intl",
+    "lat": 38.6954,
+    "lon": -121.591003,
+    "elevation": 27,
+    "city": "Sacramento",
+    "state": "CA"
+  },
+  {
+    "icao": "KSTL",
+    "iata": "STL",
+    "name": "St Louis Lambert Intl",
+    "lat": 38.748697,
+    "lon": -90.370003,
+    "elevation": 618,
+    "city": "St. Louis",
+    "state": "MO"
+  },
+  {
+    "icao": "KTPA",
+    "iata": "TPA",
+    "name": "Tampa Intl",
+    "lat": 27.9755,
+    "lon": -82.533203,
+    "elevation": 26,
+    "city": "Tampa",
+    "state": "FL"
+  },
+  {
+    "icao": "KIAD",
+    "iata": "IAD",
+    "name": "Washington Dulles Intl",
+    "lat": 38.9445,
+    "lon": -77.455803,
+    "elevation": 312,
+    "city": "Washington",
+    "state": "DC"
+  },
+  {
+    "icao": "KDCA",
+    "iata": "DCA",
+    "name": "Ronald Reagan Washington National",
+    "lat": 38.8521,
+    "lon": -77.037697,
+    "elevation": 15,
+    "city": "Washington",
+    "state": "DC"
+  },
+  {
+    "icao": "PANC",
+    "iata": "ANC",
+    "name": "Ted Stevens Anchorage Intl",
+    "lat": 61.179004,
+    "lon": -149.992561,
+    "elevation": 152,
+    "city": "Anchorage",
+    "state": "AK"
+  },
+  {
+    "icao": "PHNL",
+    "iata": "HNL",
+    "name": "Daniel K Inouye Intl",
+    "lat": 21.318387,
+    "lon": -157.92567,
+    "elevation": 13,
+    "city": "Honolulu",
+    "state": "HI"
+  },
+  {
+    "icao": "KBNA",
+    "iata": "BNA",
+    "name": "Nashville Intl",
+    "lat": 36.1245,
+    "lon": -86.6782,
+    "elevation": 599,
+    "city": "Nashville",
+    "state": "TN"
+  },
+  {
+    "icao": "KABQ",
+    "iata": "ABQ",
+    "name": "Albuquerque Intl Sunport",
+    "lat": 35.039976,
+    "lon": -106.608925,
+    "elevation": 5355,
+    "city": "Albuquerque",
+    "state": "NM"
+  },
+  {
+    "icao": "KAUS",
+    "iata": "AUS",
+    "name": "Austin-Bergstrom Intl",
+    "lat": 30.197535,
+    "lon": -97.662015,
+    "elevation": 542,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "icao": "KBDL",
+    "iata": "BDL",
+    "name": "Bradley Intl",
+    "lat": 41.938555,
+    "lon": -72.688016,
+    "elevation": 173,
+    "city": "Hartford/Springfield",
+    "state": "CT"
+  },
+  {
+    "icao": "KBHM",
+    "iata": "BHM",
+    "name": "Birmingham-Shuttlesworth Intl",
+    "lat": 33.562877,
+    "lon": -86.750712,
+    "elevation": 650,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "icao": "KBUR",
+    "iata": "BUR",
+    "name": "Hollywood Burbank",
+    "lat": 34.202834,
+    "lon": -118.35805,
+    "elevation": 778,
+    "city": "Burbank",
+    "state": "CA"
+  },
+  {
+    "icao": "KCOS",
+    "iata": "COS",
+    "name": "Colorado Springs",
+    "lat": 38.805801,
+    "lon": -104.700996,
+    "elevation": 6187,
+    "city": "Colorado Springs",
+    "state": "CO"
+  },
+  {
+    "icao": "KCRW",
+    "iata": "CRW",
+    "name": "Yeager",
+    "lat": 38.3731,
+    "lon": -81.593201,
+    "elevation": 981,
+    "city": "Charleston",
+    "state": "WV"
+  },
+  {
+    "icao": "KCVG",
+    "iata": "CVG",
+    "name": "Cincinnati/Northern Kentucky Intl",
+    "lat": 39.048801,
+    "lon": -84.667801,
+    "elevation": 896,
+    "city": "Cincinnati",
+    "state": "OH"
+  },
+  {
+    "icao": "KDAL",
+    "iata": "DAL",
+    "name": "Dallas Love Field",
+    "lat": 32.844776,
+    "lon": -96.847653,
+    "elevation": 487,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "icao": "KELP",
+    "iata": "ELP",
+    "name": "El Paso Intl",
+    "lat": 31.809908,
+    "lon": -106.375607,
+    "elevation": 3959,
+    "city": "El Paso",
+    "state": "TX"
+  },
+  {
+    "icao": "KGRR",
+    "iata": "GRR",
+    "name": "Gerald R Ford Intl",
+    "lat": 42.880798,
+    "lon": -85.522797,
+    "elevation": 794,
+    "city": "Grand Rapids",
+    "state": "MI"
+  },
+  {
+    "icao": "KGSO",
+    "iata": "GSO",
+    "name": "Piedmont Triad Intl",
+    "lat": 36.09937,
+    "lon": -79.937262,
+    "elevation": 925,
+    "city": "Greensboro",
+    "state": "NC"
+  },
+  {
+    "icao": "KHND",
+    "iata": "HND",
+    "name": "Henderson Executive",
+    "lat": 35.9728012085,
+    "lon": -115.134002686,
+    "elevation": 2492,
+    "city": "Henderson",
+    "state": "NV"
+  },
+  {
+    "icao": "KJAX",
+    "iata": "JAX",
+    "name": "Jacksonville Intl",
+    "lat": 30.492469,
+    "lon": -81.687813,
+    "elevation": 30,
+    "city": "Jacksonville",
+    "state": "FL"
+  },
+  {
+    "icao": "KLBB",
+    "iata": "LBB",
+    "name": "Lubbock Preston Smith Intl",
+    "lat": 33.663601,
+    "lon": -101.822998,
+    "elevation": 3282,
+    "city": "Lubbock",
+    "state": "TX"
+  },
+  {
+    "icao": "KLIT",
+    "iata": "LIT",
+    "name": "Bill and Hillary Clinton Natl",
+    "lat": 34.729222,
+    "lon": -92.223591,
+    "elevation": 262,
+    "city": "Little Rock",
+    "state": "AR"
+  },
+  {
+    "icao": "KLOU",
+    "iata": "SDF",
+    "name": "Louisville Intl (Standiford Field)",
+    "lat": 38.2280006409,
+    "lon": -85.6636962891,
+    "elevation": 546,
+    "city": "Louisville",
+    "state": "KY"
+  },
+  {
+    "icao": "KMCI",
+    "iata": "MCI",
+    "name": "Kansas City Intl",
+    "lat": 39.301699,
+    "lon": -94.713893,
+    "elevation": 1026,
+    "city": "Kansas City",
+    "state": "MO"
+  },
+  {
+    "icao": "KMDW",
+    "iata": "MDW",
+    "name": "Chicago Midway Intl",
+    "lat": 41.785999,
+    "lon": -87.752403,
+    "elevation": 620,
+    "city": "Chicago",
+    "state": "IL"
+  },
+  {
+    "icao": "KMFE",
+    "iata": "MFE",
+    "name": "McAllen Miller Intl",
+    "lat": 26.176141,
+    "lon": -98.237965,
+    "elevation": 107,
+    "city": "McAllen",
+    "state": "TX"
+  },
+  {
+    "icao": "KMHR",
+    "iata": "MHR",
+    "name": "Sacramento Mather",
+    "lat": 38.554744,
+    "lon": -121.297989,
+    "elevation": 98,
+    "city": "Sacramento",
+    "state": "CA"
+  },
+  {
+    "icao": "KMIA",
+    "iata": "MIA",
+    "name": "Miami Intl",
+    "lat": 25.796011,
+    "lon": -80.289751,
+    "elevation": 8,
+    "city": "Miami",
+    "state": "FL"
+  },
+  {
+    "icao": "KMKC",
+    "iata": "MKC",
+    "name": "Charles B Wheeler Downtown",
+    "lat": 39.123199,
+    "lon": -94.592796,
+    "elevation": 759,
+    "city": "Kansas City",
+    "state": "MO"
+  },
+  {
+    "icao": "KMLB",
+    "iata": "MLB",
+    "name": "Melbourne Orlando Intl",
+    "lat": 28.102009,
+    "lon": -80.641088,
+    "elevation": 33,
+    "city": "Melbourne",
+    "state": "FL"
+  },
+  {
+    "icao": "KMOB",
+    "iata": "MOB",
+    "name": "Mobile Regional",
+    "lat": 30.6912,
+    "lon": -88.242798,
+    "elevation": 219,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "icao": "KOMA",
+    "iata": "OMA",
+    "name": "Eppley Airfield",
+    "lat": 41.3032,
+    "lon": -95.894096,
+    "elevation": 984,
+    "city": "Omaha",
+    "state": "NE"
+  },
+  {
+    "icao": "KONT",
+    "iata": "ONT",
+    "name": "Ontario Intl",
+    "lat": 34.056,
+    "lon": -117.600998,
+    "elevation": 944,
+    "city": "Ontario",
+    "state": "CA"
+  },
+  {
+    "icao": "KORF",
+    "iata": "ORF",
+    "name": "Norfolk Intl",
+    "lat": 36.895341,
+    "lon": -76.201,
+    "elevation": 26,
+    "city": "Norfolk",
+    "state": "VA"
+  },
+  {
+    "icao": "KPVD",
+    "iata": "PVD",
+    "name": "Rhode Island T.F. Green Intl",
+    "lat": 41.725038,
+    "lon": -71.425668,
+    "elevation": 55,
+    "city": "Providence",
+    "state": "RI"
+  },
+  {
+    "icao": "KRNO",
+    "iata": "RNO",
+    "name": "Reno-Tahoe Intl",
+    "lat": 39.4991,
+    "lon": -119.767998,
+    "elevation": 4415,
+    "city": "Reno",
+    "state": "NV"
+  },
+  {
+    "icao": "KROC",
+    "iata": "ROC",
+    "name": "Frederick Douglass Greater Rochester Intl",
+    "lat": 43.1189,
+    "lon": -77.672401,
+    "elevation": 559,
+    "city": "Rochester",
+    "state": "NY"
+  },
+  {
+    "icao": "KSAT",
+    "iata": "SAT",
+    "name": "San Antonio Intl",
+    "lat": 29.533701,
+    "lon": -98.469803,
+    "elevation": 809,
+    "city": "San Antonio",
+    "state": "TX"
+  },
+  {
+    "icao": "KSAV",
+    "iata": "SAV",
+    "name": "Savannah/Hilton Head Intl",
+    "lat": 32.126591,
+    "lon": -81.19998,
+    "elevation": 50,
+    "city": "Savannah",
+    "state": "GA"
+  },
+  {
+    "icao": "KSBN",
+    "iata": "SBN",
+    "name": "South Bend Intl",
+    "lat": 41.708304,
+    "lon": -86.316922,
+    "elevation": 799,
+    "city": "South Bend",
+    "state": "IN"
+  },
+  {
+    "icao": "KSDL",
+    "iata": "SCF",
+    "name": "Scottsdale",
+    "lat": 33.622898101807,
+    "lon": -111.91100311279,
+    "elevation": 1510,
+    "city": "Scottsdale",
+    "state": "AZ"
+  },
+  {
+    "icao": "KSNA",
+    "iata": "SNA",
+    "name": "John Wayne Airport-Orange County",
+    "lat": 33.675063,
+    "lon": -117.869281,
+    "elevation": 56,
+    "city": "Santa Ana",
+    "state": "CA"
+  },
+  {
+    "icao": "KSPB",
+    "iata": "SPB",
+    "name": "Scappoose Industrial Airpark",
+    "lat": 45.771,
+    "lon": -122.862,
+    "elevation": 58,
+    "city": "Scappoose",
+    "state": "OR"
+  },
+  {
+    "icao": "KSTL",
+    "iata": "STL",
+    "name": "St Louis Lambert Intl",
+    "lat": 38.748697,
+    "lon": -90.370003,
+    "elevation": 618,
+    "city": "St. Louis",
+    "state": "MO"
+  },
+  {
+    "icao": "KSYR",
+    "iata": "SYR",
+    "name": "Syracuse Hancock Intl",
+    "lat": 43.11119842529297,
+    "lon": -76.1063003540039,
+    "elevation": 421,
+    "city": "Syracuse",
+    "state": "NY"
+  },
+  {
+    "icao": "KTUL",
+    "iata": "TUL",
+    "name": "Tulsa Intl",
+    "lat": 36.197084,
+    "lon": -95.886225,
+    "elevation": 677,
+    "city": "Tulsa",
+    "state": "OK"
+  },
+  {
+    "icao": "KTUS",
+    "iata": "TUS",
+    "name": "Tucson Intl",
+    "lat": 32.115004,
+    "lon": -110.938053,
+    "elevation": 2643,
+    "city": "Tucson",
+    "state": "AZ"
+  }
+]

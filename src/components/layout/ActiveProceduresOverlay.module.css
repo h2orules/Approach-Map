@@ -1,0 +1,52 @@
+.overlay {
+  position: absolute;
+  bottom: 48px;
+  left: 12px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(100, 116, 139, 0.35);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 160px;
+  backdrop-filter: blur(6px);
+  z-index: 10;
+}
+
+.title {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: 9px;
+  color: #64748b;
+  border: 1px solid #334155;
+  border-radius: 3px;
+  padding: 0 3px;
+}

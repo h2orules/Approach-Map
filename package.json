@@ -1,0 +1,45 @@
+{
+  "name": "approach-map",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "build-static-data": "tsx scripts/buildStaticData.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.51.1",
+    "@turf/turf": "^6.5.0",
+    "clsx": "^2.1.1",
+    "fflate": "^0.8.3",
+    "fuse.js": "^7.0.0",
+    "mapbox-gl": "^2.15.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-map-gl": "^7.1.7",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.0",
+    "@types/geojson": "^7946.0.14",
+    "@types/mapbox-gl": "^2.7.21",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "@vitest/ui": "^2.0.5",
+    "jsdom": "^25.0.1",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4",
+    "vitest": "^2.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true
+  }
+}

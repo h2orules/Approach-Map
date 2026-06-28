@@ -1,0 +1,36 @@
+.group {
+  border-bottom: 1px solid var(--border);
+}
+
+.groupHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+}
+
+.groupHeader:hover {
+  color: var(--text);
+}
+
+.count {
+  background: var(--input-bg);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 10px;
+}
+
+.chevron {
+  margin-left: auto;
+  font-size: 14px;
+}

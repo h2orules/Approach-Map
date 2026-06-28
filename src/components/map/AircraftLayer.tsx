@@ -30,7 +30,8 @@ interface Props {
 }
 
 export function AircraftLayer({ mapRef }: Props) {
-  const [selectedHex, setSelectedHex] = useState<string | null>(null)
+  const selectedHex = useAircraftStore((s) => s.selectedHex)
+  const setSelectedHex = useAircraftStore((s) => s.setSelectedHex)
   const [imageLoaded, setImageLoaded] = useState(false)
   const rafRef = useRef<number | null>(null)
 
@@ -104,7 +105,8 @@ export function AircraftLayer({ mapRef }: Props) {
 
       map.on('click', LAYER_ID, (e) => {
         const hex = e.features?.[0]?.properties?.hex as string | undefined
-        setSelectedHex((prev) => (prev === hex ? null : (hex ?? null)))
+        const prev = useAircraftStore.getState().selectedHex
+        setSelectedHex(prev === hex ? null : (hex ?? null))
       })
 
       map.on('click', (e) => {

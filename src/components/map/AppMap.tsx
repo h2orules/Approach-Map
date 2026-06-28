@@ -7,6 +7,7 @@ import { useMapStore } from '../../store/useMapStore'
 import { useAirportStore } from '../../store/useAirportStore'
 import { AircraftLayer } from './AircraftLayer'
 import { ProcedureLayer } from './ProcedureLayer'
+import { FlownSegmentLayer } from './FlownSegmentLayer'
 import { RunwayLayer } from './RunwayLayer'
 import { ExtendedCenterlineLayer } from './ExtendedCenterlineLayer'
 import { WaypointLayer } from './WaypointLayer'
@@ -77,6 +78,8 @@ export function AppMap() {
         {visibleProcedures.map((p) => (
           <ProcedureLayer key={p.id} procedure={p} />
         ))}
+
+        <FlownSegmentLayer procedures={visibleProcedures} />
 
         <WaypointLayer procedures={visibleProcedures} />
 

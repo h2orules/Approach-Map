@@ -1,16 +1,17 @@
 import { Source, Layer } from 'react-map-gl'
 import type { Procedure } from '../../types/procedure'
 import { useProcedureStore } from '../../store/useProcedureStore'
-import { ACTIVE_PROCEDURE_HIGHLIGHT } from '../../utils/colorScheme'
 
 interface Props {
   procedure: Procedure
 }
 
 export function ProcedureLayer({ procedure }: Props) {
+  // Auto-detected procedures keep their own type color but draw thicker than
+  // manually-toggled ones, so they stand out as "in use".
   const isAutoShown = useProcedureStore((s) => s.autoShownIds.has(procedure.id))
-  const lineColor = isAutoShown ? ACTIVE_PROCEDURE_HIGHLIGHT : procedure.color
-  const baseWidth = isAutoShown ? 2.5 : 1.5
+  const lineColor = procedure.color
+  const baseWidth = isAutoShown ? 3 : 1.5
 
   return (
     <Source id={`proc-${procedure.id}`} type="geojson" data={procedure.geojson}>

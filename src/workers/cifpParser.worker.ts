@@ -1,6 +1,7 @@
 import type { Procedure, ProcedureWaypoint, NavaidType, ProcedureType } from '../types/procedure'
 import { parseArinc424AltDescriptor } from '../utils/altitudeConstraint'
 import { nextProcedureColor, resetColorCounters } from '../utils/colorScheme'
+import { parseLatLon } from '../utils/arincCoords'
 import * as turf from '@turf/turf'
 
 export interface ParseRequest {
@@ -28,44 +29,6 @@ interface WaypointRecord {
   lat: number
   lon: number
   navaidType: NavaidType
-}
-
-function parseDegMinSec(raw: string, negative: boolean): number {
-  if (!raw || raw.trim() === '') return 0
-  const s = raw.trim()
-  let deg: number, min: number, sec: number
-
-  if (s.length === 9) {
-    // Latitude: DDMMSSSS (4 decimal seconds)
-    deg = parseInt(s.slice(0, 2))
-    min = parseInt(s.slice(2, 4))
-    sec = parseInt(s.slice(4, 8)) / 100
-  } else if (s.length === 10) {
-    // Longitude: DDDMMSSSS
-    deg = parseInt(s.slice(0, 3))
-    min = parseInt(s.slice(3, 5))
-    sec = parseInt(s.slice(5, 9)) / 100
-  } else {
-    return 0
-  }
-
-  const dec = deg + min / 60 + sec / 3600
-  return negative ? -dec : dec
-}
-
-function parseLatLon(latStr: string, lonStr: string): { lat: number; lon: number } | null {
-  if (!latStr || !lonStr) return null
-  const latRaw = latStr.trim()
-  const lonRaw = lonStr.trim()
-  if (!latRaw || !lonRaw) return null
-
-  const latNeg = latRaw[0] === 'S'
-  const lonNeg = lonRaw[0] === 'W'
-  const lat = parseDegMinSec(latRaw.slice(1), latNeg)
-  const lon = parseDegMinSec(lonRaw.slice(1), lonNeg)
-
-  if (isNaN(lat) || isNaN(lon) || (lat === 0 && lon === 0)) return null
-  return { lat, lon }
 }
 
 type SectionCode = 'P' | 'E' | 'D'
@@ -231,15 +194,14 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
 
       if (!rec.fixId) continue
 
-      // Try to get lat/lon from the record directly first
-      let coords = parseLatLon(rec.latStr, rec.lonStr)
-      if (!coords) {
-        const dbEntry = waypointDb.get(rec.fixId)
-        if (!dbEntry) continue
-        coords = dbEntry
-      }
+      // Procedure leg records reference a fix by name; they do NOT carry inline
+      // coordinates (cols 33–51 hold leg path/terminator data). Always resolve
+      // the position from the waypoint/navaid database built in pass 1.
+      const dbEntry = waypointDb.get(rec.fixId)
+      if (!dbEntry) continue
+      const coords = dbEntry
 
-      const navaidType: NavaidType = waypointDb.get(rec.fixId)?.navaidType ?? 'FIX'
+      const navaidType: NavaidType = dbEntry.navaidType ?? 'FIX'
       const altConstraint = parseArinc424AltDescriptor(rec.altDescriptor, rec.alt1, rec.alt2)
 
       const transitionKey = rec.transitionId || '(common)'

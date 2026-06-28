@@ -86,6 +86,19 @@ export function AircraftLayer({ mapRef }: Props) {
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
+          // Callsign (or tail number) tag, offset below the aircraft icon
+          'text-field': ['get', 'label'],
+          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+          'text-size': 11,
+          'text-offset': [0, 1.1],
+          'text-anchor': 'top',
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+        },
+        paint: {
+          'text-color': '#fbbf24',
+          'text-halo-color': '#0b0f14',
+          'text-halo-width': 1.6,
         },
       })
 
@@ -147,6 +160,7 @@ export function AircraftLayer({ mapRef }: Props) {
             hex: ac.hex,
             flight: ac.flight,
             track: ac.track,
+            label: (ac.flight && ac.flight.trim()) || ac.registration || ac.hex.toUpperCase(),
           },
         }))
 

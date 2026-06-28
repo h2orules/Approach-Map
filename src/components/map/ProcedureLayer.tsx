@@ -10,22 +10,34 @@ interface Props {
 export function ProcedureLayer({ procedure }: Props) {
   const isAutoShown = useProcedureStore((s) => s.autoShownIds.has(procedure.id))
   const lineColor = isAutoShown ? ACTIVE_PROCEDURE_HIGHLIGHT : procedure.color
-  const lineWidth = isAutoShown ? 2.5 : 1.5
+  const baseWidth = isAutoShown ? 2.5 : 1.5
 
   return (
     <Source id={`proc-${procedure.id}`} type="geojson" data={procedure.geojson}>
+      {/* Inbound path + holds-in-lieu + procedure turns: solid */}
       <Layer
         id={`proc-line-${procedure.id}`}
         type="line"
+        filter={['==', ['get', 'segment'], 'transition']}
         paint={{
           'line-color': lineColor,
-          'line-width': lineWidth,
+          'line-width': baseWidth,
           'line-opacity': 0.9,
         }}
-        layout={{
-          'line-join': 'round',
-          'line-cap': 'round',
+        layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+      />
+      {/* Missed approach + missed-approach hold: dash-dot-dash */}
+      <Layer
+        id={`proc-missed-${procedure.id}`}
+        type="line"
+        filter={['==', ['get', 'segment'], 'missed']}
+        paint={{
+          'line-color': lineColor,
+          'line-width': baseWidth,
+          'line-opacity': 0.85,
+          'line-dasharray': [3, 1.5, 0.5, 1.5],
         }}
+        layout={{ 'line-join': 'round', 'line-cap': 'round' }}
       />
     </Source>
   )

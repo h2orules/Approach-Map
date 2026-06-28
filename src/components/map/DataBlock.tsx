@@ -9,6 +9,7 @@ import {
   formatHeading,
   formatSquawk,
 } from '../../utils/formatters'
+import { decodeCallsign, airlineLogoUrl } from '../../utils/airlines'
 import styles from './DataBlock.module.css'
 
 interface Props {
@@ -18,6 +19,8 @@ interface Props {
 
 export function DataBlock({ aircraft, onClose }: Props) {
   const [expanded, setExpanded] = useState(false)
+  const [logoOk, setLogoOk] = useState(true)
+  const decoded = decodeCallsign(aircraft.flight)
 
   return (
     <Popup
@@ -40,6 +43,24 @@ export function DataBlock({ aircraft, onClose }: Props) {
 
         {expanded && (
           <div className={styles.expanded}>
+            {decoded.airline && (
+              <div className={styles.airline}>
+                {logoOk && (
+                  <img
+                    className={styles.airlineLogo}
+                    src={airlineLogoUrl(decoded.airline.iata)}
+                    alt={decoded.airline.name}
+                    onError={() => setLogoOk(false)}
+                  />
+                )}
+                <div>
+                  <div className={styles.airlineName}>{decoded.airline.name}</div>
+                  {decoded.flightNumber && (
+                    <div className={styles.flightNo}>Flight {decoded.flightNumber}</div>
+                  )}
+                </div>
+              </div>
+            )}
             <div className={styles.expandRow}>
               <span className={styles.label}>REG</span>
               <span>{aircraft.registration || '---'}</span>

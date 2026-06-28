@@ -23,6 +23,18 @@ export function parseAltConstraint(raw: string | null | undefined): AltConstrain
   return null
 }
 
+/** Compact chart-style label, e.g. "5000", "≥5000", "≤4000", "3000–5000". */
+export function formatAltConstraint(c: AltConstraint | null): string | null {
+  if (!c) return null
+  const f = (n: number) => n.toLocaleString('en-US')
+  switch (c.type) {
+    case 'AT': return f(c.low)
+    case 'AT_OR_ABOVE': return `≥${f(c.low)}`
+    case 'AT_OR_BELOW': return `≤${f(c.high ?? c.low)}`
+    case 'BETWEEN': return `${f(c.low)}–${f(c.high ?? c.low)}`
+  }
+}
+
 export function resolveAltConstraint(c: AltConstraint | null): number | null {
   if (!c) return null
   switch (c.type) {
@@ -38,8 +50,9 @@ export function parseArinc424AltDescriptor(
   alt1Str: string,
   alt2Str: string,
 ): AltConstraint | null {
-  const alt1 = parseInt(alt1Str.trim()) * 10
-  const alt2 = parseInt(alt2Str.trim()) * 10
+  // FAA CIFP stores these altitude fields directly in feet (e.g. "05000").
+  const alt1 = parseInt(alt1Str.trim())
+  const alt2 = parseInt(alt2Str.trim())
   const valid1 = !isNaN(alt1) && alt1 > 0
   const valid2 = !isNaN(alt2) && alt2 > 0
 

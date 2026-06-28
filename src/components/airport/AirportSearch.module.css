@@ -52,8 +52,13 @@
   color: var(--text);
 }
 
-.option:hover {
+.option:hover,
+.optionActive {
   background: var(--hover);
+}
+
+.optionActive {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .icao {

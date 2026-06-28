@@ -1,8 +1,8 @@
-import type { Procedure, ProcedureWaypoint, NavaidType, ProcedureType } from '../types/procedure'
-import { parseArinc424AltDescriptor } from '../utils/altitudeConstraint'
+import type { Procedure, ProcedureWaypoint, NavaidType, ProcedureType, WaypointRole, WaypointSymbol, AltConstraint } from '../types/procedure'
+import { parseArinc424AltDescriptor, formatAltConstraint } from '../utils/altitudeConstraint'
 import { nextProcedureColor, resetColorCounters } from '../utils/colorScheme'
 import { parseLatLon } from '../utils/arincCoords'
-import * as turf from '@turf/turf'
+import { holdTrack, procedureTurn } from '../geo/procedureShapes'
 
 export interface ParseRequest {
   type: 'parse'
@@ -42,13 +42,14 @@ interface Record424 {
   transitionId: string
   sequenceNumber: number
   fixId: string
-  latStr: string
-  lonStr: string
   altDescriptor: string
   alt1: string
   alt2: string
-  speedLimit: string
-  routeType: string
+  pathTerm: string // path & terminator, cols 48-49 (e.g. CF, TF, HM, HF, PI)
+  descCode4: string // waypoint description code position 4, col 43 (A/F/M/H)
+  turnDir: string // col 44 (L/R)
+  magCourse: string // cols 71-74 (tenths of a degree)
+  legLen: string // cols 75-78 (route distance / holding leg)
 }
 
 function parseProcRecord(line: string): Record424 | null {
@@ -72,14 +73,48 @@ function parseProcRecord(line: string): Record424 | null {
     transitionId: line.slice(20, 25).trim(),
     sequenceNumber: parseInt(line.slice(26, 29).trim()) || 0,
     fixId: line.slice(29, 34).trim(),
-    latStr: line.slice(32, 41).trim(),
-    lonStr: line.slice(41, 51).trim(),
     altDescriptor: line.slice(82, 83),
     alt1: line.slice(84, 89).trim(),
     alt2: line.slice(89, 94).trim(),
-    speedLimit: line.slice(99, 102).trim(),
-    routeType: line.slice(19, 20),
+    pathTerm: line.slice(47, 49).trim(),
+    descCode4: line[42] ?? ' ',
+    turnDir: line[43] ?? ' ',
+    magCourse: line.slice(70, 74).trim(),
+    legLen: line.slice(74, 78).trim(),
   }
+}
+
+/** One parsed leg of a transition, carrying everything geometry/render needs. */
+interface Leg {
+  seq: number
+  fixId: string
+  lat: number
+  lon: number
+  navaidType: NavaidType
+  altConstraint: AltConstraint | null
+  pathTerm: string
+  role: WaypointRole
+  turnRight: boolean
+  course: number // degrees (from magCourse / 10)
+  legNm: number // straight-leg length, nm (time legs approximated)
+}
+
+function legRole(descCode4: string, pathTerm: string): WaypointRole {
+  if (descCode4 === 'A') return 'iaf'
+  if (descCode4 === 'F') return 'faf'
+  if (descCode4 === 'M') return 'map'
+  if (descCode4 === 'H' || pathTerm === 'HM' || pathTerm === 'HF' || pathTerm === 'HA') return 'hold'
+  return 'normal'
+}
+
+/** Parse the holding/PT leg length: "T010" = 1.0 min (→ ~4nm), "0040" = 4.0nm. */
+function parseLegLen(legLen: string): number {
+  if (!legLen) return 0
+  if (legLen[0] === 'T') {
+    const minutes = (parseInt(legLen.slice(1)) || 0) / 10
+    return minutes * 4 // ~4nm per minute at holding speed
+  }
+  return (parseInt(legLen) || 0) / 10
 }
 
 function classifyProcedure(subSection: string): ProcedureType | null {
@@ -89,12 +124,53 @@ function classifyProcedure(subSection: string): ProcedureType | null {
   return null
 }
 
-function buildGeoJson(transitions: ProcedureWaypoint[][]) {
-  const features = transitions
-    .filter((wpts) => wpts.length >= 2)
-    .map((wpts) => turf.lineString(wpts.map((w) => [w.lon, w.lat] as [number, number])))
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return turf.featureCollection(features) as any
+type Coord = [number, number]
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyFeature = any
+
+function lineFeature(coords: Coord[], props: Record<string, unknown>): AnyFeature {
+  return { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: props }
+}
+
+/**
+ * Build all renderable line features for a procedure from its transitions.
+ * Each transition's legs are split at the missed-approach point (MAP): legs up
+ * to and including the MAP are the inbound path (solid); legs after it are the
+ * missed approach (dash-dot). Holds (HM/HF/HA) and procedure turns (PI) are
+ * emitted as their own racetrack/barb features tagged with the same segment.
+ */
+function buildProcedureFeatures(transitions: Leg[][]): AnyFeature[] {
+  const features: AnyFeature[] = []
+
+  for (const legs of transitions) {
+    const mapIdx = legs.findIndex((l) => l.role === 'map')
+    const inboundEnd = mapIdx >= 0 ? mapIdx + 1 : legs.length
+
+    const inbound = legs.slice(0, inboundEnd)
+    const missed = mapIdx >= 0 ? legs.slice(mapIdx) : [] // start missed at the MAP for continuity
+
+    if (inbound.length >= 2) {
+      features.push(lineFeature(inbound.map((l) => [l.lon, l.lat]), { kind: 'path', segment: 'transition' }))
+    }
+    if (missed.length >= 2) {
+      features.push(lineFeature(missed.map((l) => [l.lon, l.lat]), { kind: 'path', segment: 'missed' }))
+    }
+
+    // Holds and procedure turns as their own shapes
+    for (let i = 0; i < legs.length; i++) {
+      const l = legs[i]
+      const segment = mapIdx >= 0 && i > mapIdx ? 'missed' : 'transition'
+      if (l.pathTerm === 'HM' || l.pathTerm === 'HF' || l.pathTerm === 'HA') {
+        const track = holdTrack(l.lat, l.lon, l.course, l.turnRight, l.legNm)
+        features.push(lineFeature(track, { kind: 'hold', segment }))
+      } else if (l.pathTerm === 'PI') {
+        const barb = procedureTurn(l.lat, l.lon, l.course, l.turnRight, l.legNm)
+        features.push(lineFeature(barb, { kind: 'pt', segment }))
+      }
+    }
+  }
+
+  return features
 }
 
 self.onmessage = function (e: MessageEvent<ParseRequest>) {
@@ -169,7 +245,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
     // transitions that each restart their sequence numbers at 010, so merging
     // them into one sequence map would overwrite legs and tangle the path.
     type ProcKey = string
-    type TransitionMap = Map<string, Map<number, ProcedureWaypoint>>
+    type TransitionMap = Map<string, Map<number, Leg>>
     const procGroups = new Map<string, Map<ProcKey, { type: ProcedureType; transitions: TransitionMap; runways: Set<string> }>>()
 
     for (let i = 0; i < lines.length; i++) {
@@ -226,12 +302,17 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
       }
 
       transition.set(rec.sequenceNumber, {
-        id: rec.fixId,
+        seq: rec.sequenceNumber,
+        fixId: rec.fixId,
         lat: coords.lat,
         lon: coords.lon,
         navaidType,
         altConstraint,
-        sequenceNumber: rec.sequenceNumber,
+        pathTerm: rec.pathTerm,
+        role: legRole(rec.descCode4, rec.pathTerm),
+        turnRight: rec.turnDir !== 'L',
+        course: (parseInt(rec.magCourse) || 0) / 10,
+        legNm: parseLegLen(rec.legLen),
       })
     }
 
@@ -241,6 +322,15 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
     resetColorCounters()
     const result: Record<string, Procedure[]> = {}
 
+    const legToWaypoint = (l: Leg): ProcedureWaypoint => ({
+      id: l.fixId,
+      lat: l.lat,
+      lon: l.lon,
+      navaidType: l.navaidType,
+      altConstraint: l.altConstraint,
+      sequenceNumber: l.seq,
+    })
+
     for (const [icao, airportMap] of procGroups) {
       const procedures: Procedure[] = []
       for (const [procKey, group] of airportMap) {
@@ -248,16 +338,36 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
 
         // Each transition becomes its own ordered leg list.
         const transitionLegs = Array.from(group.transitions.values())
-          .map((seqMap) =>
-            Array.from(seqMap.values()).sort((a, b) => a.sequenceNumber - b.sequenceNumber),
-          )
+          .map((seqMap) => Array.from(seqMap.values()).sort((a, b) => a.seq - b.seq))
           .filter((legs) => legs.length >= 2)
 
         if (transitionLegs.length === 0) continue
 
-        // Representative path for labels + auto-detection: the longest transition
+        // Representative path for auto-detection: the longest transition
         // (usually the procedure's core trunk shared across runways).
         const representative = transitionLegs.reduce((a, b) => (b.length > a.length ? b : a))
+
+        // Deduped waypoint symbols across all transitions, preferring the most
+        // significant role for any fix that appears more than once.
+        const ROLE_RANK: Record<WaypointRole, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
+        const symbolMap = new Map<string, WaypointSymbol>()
+        for (const legs of transitionLegs) {
+          for (const l of legs) {
+            const key = `${l.fixId}:${l.lat.toFixed(4)}:${l.lon.toFixed(4)}`
+            const existing = symbolMap.get(key)
+            // The MAP/runway altitude is the threshold elevation, not a crossing
+            // restriction — don't render it as one.
+            const altText = l.role === 'map' || l.navaidType === 'RUNWAY' ? null : formatAltConstraint(l.altConstraint)
+            if (!existing) {
+              symbolMap.set(key, { id: l.fixId, lat: l.lat, lon: l.lon, navaidType: l.navaidType, role: l.role, altText })
+            } else {
+              if (ROLE_RANK[l.role] > ROLE_RANK[existing.role]) existing.role = l.role
+              if (!existing.altText && altText) existing.altText = altText
+            }
+          }
+        }
+
+        const features = buildProcedureFeatures(transitionLegs)
 
         procedures.push({
           id: `${icao}-${group.type}-${name}`,
@@ -265,8 +375,10 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
           name,
           type: group.type,
           runways: Array.from(group.runways),
-          waypoints: representative,
-          geojson: buildGeoJson(transitionLegs),
+          waypoints: representative.map(legToWaypoint),
+          symbols: Array.from(symbolMap.values()),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          geojson: { type: 'FeatureCollection', features } as any,
           hasGeometry: true,
           color: nextProcedureColor(group.type),
         })

@@ -19,6 +19,18 @@ export interface ProcedureWaypoint {
   sequenceNumber: number
 }
 
+export type WaypointRole = 'iaf' | 'faf' | 'map' | 'hold' | 'normal'
+
+/** A renderable waypoint symbol (deduped across a procedure's transitions). */
+export interface WaypointSymbol {
+  id: string
+  lat: number
+  lon: number
+  navaidType: NavaidType
+  role: WaypointRole
+  altText: string | null
+}
+
 export interface Procedure {
   id: string
   icao: string
@@ -26,6 +38,7 @@ export interface Procedure {
   type: ProcedureType
   runways: string[]
   waypoints: ProcedureWaypoint[]
+  symbols: WaypointSymbol[]
   geojson: FeatureCollection
   hasGeometry: boolean
   color: string

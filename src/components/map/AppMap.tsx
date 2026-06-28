@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import Map, { type MapRef, NavigationControl } from 'react-map-gl'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore — mapbox-gl CSS import, types not needed
@@ -33,6 +33,16 @@ export function AppMap() {
   useProcedures()
   useProcedureDetection()
   useRunways()
+
+  // On reload, center the map on the airport restored from the last session.
+  useEffect(() => {
+    const restored = useAirportStore.getState().selectedAirport
+    if (restored) {
+      setViewport({ longitude: restored.lon, latitude: restored.lat, zoom: 11 })
+    }
+    // Run once on mount; subsequent selections set the viewport via AirportSearch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleMove = useCallback(
     (evt: { viewState: { longitude: number; latitude: number; zoom: number } }) => {

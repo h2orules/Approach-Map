@@ -30,6 +30,14 @@
   letter-spacing: 0.02em;
 }
 
+/* Altitude and speed sit side by side (with ~1ch gap) under the name. */
+.restrictions {
+  display: flex;
+  align-items: flex-start;
+  gap: 1ch;
+  margin-top: 1px;
+}
+
 .alt {
   font-size: 12px;
   font-weight: 600;
@@ -37,14 +45,12 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  margin-top: 1px;
 }
 
 .spd {
   font-size: 12px;
   font-weight: 600;
   color: #67e8f9;
-  margin-top: 1px;
 }
 
 /* FAA-style restriction bars, exactly the width of the number they wrap. */
@@ -62,15 +68,10 @@
   line-height: 1.1;
 }
 
-/* Glideslope-intercept block: bolt with the intercept altitude at its tail. */
-.gsBlock {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
+/* Hand-drawn glideslope-intercept bolt, absolutely placed in the marker. */
 .bolt {
-  display: block;
-  margin-left: 2px;
+  position: absolute;
+  overflow: visible;
+  pointer-events: none;
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
 }

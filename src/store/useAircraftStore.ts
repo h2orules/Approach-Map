@@ -6,6 +6,8 @@ interface AircraftStore {
   aircraftMap: Map<string, InterpolatedAircraft>
   lastPollMs: number
   selectedHex: string | null
+  /** Bumped only when the aircraft *set* changes (poll), not on interpolation. */
+  revision: number
 
   updateFromPoll: (raw: AdsbAircraft[], pollTimeMs: number) => void
   updateInterpolated: (hex: string, lat: number, lon: number) => void
@@ -43,6 +45,7 @@ export const useAircraftStore = create<AircraftStore>((set, get) => ({
   aircraftMap: new Map(),
   lastPollMs: 0,
   selectedHex: null,
+  revision: 0,
 
   updateFromPoll: (raw, pollTimeMs) =>
     set((s) => {
@@ -62,7 +65,7 @@ export const useAircraftStore = create<AircraftStore>((set, get) => ({
         }
       }
 
-      return { aircraftMap: next, lastPollMs: pollTimeMs }
+      return { aircraftMap: next, lastPollMs: pollTimeMs, revision: s.revision + 1 }
     }),
 
   updateInterpolated: (hex, lat, lon) =>

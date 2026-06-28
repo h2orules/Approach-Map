@@ -5,7 +5,8 @@ import Map, { type MapRef, NavigationControl } from 'react-map-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { useMapStore } from '../../store/useMapStore'
 import { useAirportStore } from '../../store/useAirportStore'
-import { AircraftLayer } from './AircraftLayer'
+import { AircraftOverlay } from './AircraftOverlay'
+import { SelectedAircraftDataBlock } from './SelectedAircraftDataBlock'
 import { ProcedureLayer } from './ProcedureLayer'
 import { FlownSegmentLayer } from './FlownSegmentLayer'
 import { RunwayLayer } from './RunwayLayer'
@@ -83,8 +84,11 @@ export function AppMap() {
 
         <WaypointMarkers procedures={visibleProcedures} />
 
-        <AircraftLayer mapRef={mapRef} />
+        <SelectedAircraftDataBlock />
       </Map>
+
+      {/* DOM overlay so aircraft render above the waypoint markers and stay crisp */}
+      <AircraftOverlay mapRef={mapRef} />
 
       <ActiveProceduresOverlay />
     </div>

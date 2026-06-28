@@ -7,6 +7,8 @@ interface Props {
   procedures: Procedure[]
 }
 
+const RESTRICTION_COLOR = '#fde68a'
+
 // Below this zoom, labels that can't find a clear spot are dropped. At/above it
 // every on-screen label is shown (overlapping only as a last resort).
 const DROP_ZOOM = 8
@@ -82,19 +84,65 @@ function AltLabel({ c }: { c: AltConstraint }) {
 }
 
 function SpeedLabel({ kt }: { kt: number }) {
+  // Procedure speeds are maxima → bar above, spanning the whole "###Kt".
   return (
     <div className={styles.spd}>
-      <span className={styles.barAbove}>{kt}</span>Kt
+      <span className={styles.barAbove}>{kt}Kt</span>
     </div>
   )
 }
 
-// Lightning bolt pointing up-right toward the FAF (glideslope intercept).
-function GsBolt() {
+interface Pt { x: number; y: number }
+
+// Hand-drawn zig-zag lightning arrow: starts (no tail) near `from`, kinks toward
+// `to`, and ends in a filled triangle pointing at the fix. Container px coords.
+function BoltArrow({ from, to }: { from: Pt; to: Pt }) {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len
+  const uy = dy / len
+  const px = -uy
+  const py = ux
+  const amp = Math.min(Math.max(len * 0.16, 3), 7)
+  const headLen = 9
+  const headW = 5
+
+  const p0 = from
+  const p1 = { x: from.x + ux * len * 0.35 + px * amp, y: from.y + uy * len * 0.35 + py * amp }
+  const p2 = { x: from.x + ux * len * 0.7 - px * amp, y: from.y + uy * len * 0.7 - py * amp }
+  const base = { x: to.x - ux * headLen, y: to.y - uy * headLen }
+
+  const pad = 4
+  const xs = [p0.x, p1.x, p2.x, to.x, base.x + px * headW, base.x - px * headW]
+  const ys = [p0.y, p1.y, p2.y, to.y, base.y + py * headW, base.y - py * headW]
+  const minX = Math.min(...xs) - pad
+  const minY = Math.min(...ys) - pad
+  const w = Math.max(...xs) - minX + pad
+  const h = Math.max(...ys) - minY + pad
+  const L = (p: Pt) => `${p.x - minX},${p.y - minY}`
+
   return (
-    <svg width={30} height={26} viewBox="0 0 30 26" className={styles.bolt}>
-      <path d="M2 24 L14 12 L10 12 L20 2 L16 9 L21 9 L9 22 L12 16 Z"
-        fill="#fcd34d" stroke="#0b0f14" strokeWidth={1.4} strokeLinejoin="round" />
+    <svg
+      className={styles.bolt}
+      style={{ left: minX, top: minY, width: w, height: h }}
+      width={w}
+      height={h}
+    >
+      <polyline
+        points={`${L(p0)} ${L(p1)} ${L(p2)} ${L(base)}`}
+        fill="none"
+        stroke={RESTRICTION_COLOR}
+        strokeWidth={2}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <polygon
+        points={`${L(to)} ${L({ x: base.x + px * headW, y: base.y + py * headW })} ${L({ x: base.x - px * headW, y: base.y - py * headW })}`}
+        fill={RESTRICTION_COLOR}
+        stroke="#0b0f14"
+        strokeWidth={0.6}
+      />
     </svg>
   )
 }
@@ -104,6 +152,8 @@ interface Placement {
   s: WaypointSymbol
   dx: number
   dy: number
+  w: number
+  h: number
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -112,18 +162,25 @@ const hit = (a: Rect, b: Rect) =>
 
 // Rough label box estimate (px), good enough to drive collision avoidance.
 function estimateSize(s: WaypointSymbol): { w: number; h: number } {
-  if (s.gsFaf) return { w: 46, h: 34 } // bolt + intercept altitude
-  let lines = 1 // name
-  let maxChars = s.id.length
-  if (s.alt) {
-    lines += s.alt.type === 'BETWEEN' ? 2 : 1
-    maxChars = Math.max(maxChars, 6)
-  }
-  if (s.speedKt) {
-    lines += 1
-    maxChars = Math.max(maxChars, 5)
-  }
-  return { w: maxChars * 8.4 + 6, h: lines * 14 + 6 }
+  if (s.gsFaf) return { w: 52, h: 22 } // intercept altitude (bolt drawn separately)
+  const between = s.alt?.type === 'BETWEEN'
+  const altChars = s.alt ? 6 : 0
+  const spdChars = s.speedKt ? 5 : 0
+  const rowChars = altChars + (s.speedKt ? 1 + spdChars : 0)
+  const maxChars = Math.max(s.id.length, rowChars)
+  const rowLines = between ? 2 : s.alt || s.speedKt ? 1 : 0
+  return { w: maxChars * 8.4 + 6, h: (1 + rowLines) * 15 + 6 }
+}
+
+// Pick the corner of a label box closest to the fix at the origin.
+function nearestCorner(dx: number, dy: number, w: number, h: number): Pt {
+  const corners = [
+    { x: dx, y: dy },
+    { x: dx + w, y: dy },
+    { x: dx, y: dy + h },
+    { x: dx + w, y: dy + h },
+  ]
+  return corners.reduce((a, b) => (a.x * a.x + a.y * a.y <= b.x * b.x + b.y * b.y ? a : b))
 }
 
 export function WaypointMarkers({ procedures }: Props) {
@@ -155,7 +212,6 @@ export function WaypointMarkers({ procedures }: Props) {
       const vh = container.clientHeight
       const gap = 16
 
-      // Place important symbols first so they win the prime positions.
       const ordered = [...symbols].sort((a, b) => (ROLE_RANK[b.role] ?? 0) - (ROLE_RANK[a.role] ?? 0))
 
       const occupied: Rect[] = []
@@ -170,8 +226,6 @@ export function WaypointMarkers({ procedures }: Props) {
       const next: Placement[] = []
       for (const { s, sx, sy } of onScreen) {
         const { w, h } = estimateSize(s)
-        // Candidate label corners relative to the fix. gsFaf prefers lower-left
-        // (bolt rises toward the fix); others prefer the right side.
         const cands = s.gsFaf
           ? [
               { x: -gap - w, y: gap }, { x: -gap - w, y: -h / 2 }, { x: -gap - w, y: -gap - h },
@@ -193,11 +247,11 @@ export function WaypointMarkers({ procedures }: Props) {
           break
         }
         if (!chosen) {
-          if (zoom < DROP_ZOOM) continue // drop only when zoomed way out
-          chosen = cands[0] // show anyway, accepting overlap
+          if (zoom < DROP_ZOOM) continue
+          chosen = cands[0]
         }
         occupied.push({ x: sx + chosen.x, y: sy + chosen.y, w, h })
-        next.push({ s, dx: chosen.x, dy: chosen.y })
+        next.push({ s, dx: chosen.x, dy: chosen.y, w, h })
       }
       setPlacements(next)
     }
@@ -210,8 +264,6 @@ export function WaypointMarkers({ procedures }: Props) {
       })
     }
 
-    // Recompute placements when the view settles (markers themselves follow the
-    // map continuously via their own projection, so per-frame work isn't needed).
     recompute()
     map.on('moveend', schedule)
     return () => {
@@ -222,29 +274,35 @@ export function WaypointMarkers({ procedures }: Props) {
 
   return (
     <>
-      {placements.map(({ s, dx, dy }) => (
-        <Marker key={symKey(s)} longitude={s.lon} latitude={s.lat} anchor="center">
-          <div className={styles.container}>
-            <div className={styles.icon}>
-              <WpIcon s={s} />
+      {placements.map(({ s, dx, dy, w, h }) => {
+        const gsAlt: AltConstraint | null = s.gsFaf && s.alt ? { type: 'AT_OR_ABOVE', low: s.alt.low } : null
+        const boltFrom = s.gsFaf ? nearestCorner(dx, dy, w, h) : null
+        return (
+          <Marker key={symKey(s)} longitude={s.lon} latitude={s.lat} anchor="center">
+            <div className={styles.container}>
+              <div className={styles.icon}>
+                <WpIcon s={s} />
+              </div>
+              {boltFrom && <BoltArrow from={boltFrom} to={{ x: 0, y: 0 }} />}
+              <div className={styles.label} style={{ transform: `translate(${dx}px, ${dy}px)` }}>
+                {s.gsFaf ? (
+                  gsAlt && <AltLabel c={gsAlt} />
+                ) : (
+                  <>
+                    <div className={styles.name}>{s.id}</div>
+                    {(s.alt || s.speedKt) && (
+                      <div className={styles.restrictions}>
+                        {s.alt && <AltLabel c={s.alt} />}
+                        {s.speedKt ? <SpeedLabel kt={s.speedKt} /> : null}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-            <div className={styles.label} style={{ transform: `translate(${dx}px, ${dy}px)` }}>
-              {s.gsFaf ? (
-                <div className={styles.gsBlock}>
-                  <GsBolt />
-                  {s.alt && <AltLabel c={s.alt} />}
-                </div>
-              ) : (
-                <>
-                  <div className={styles.name}>{s.id}</div>
-                  {s.alt && <AltLabel c={s.alt} />}
-                  {s.speedKt ? <SpeedLabel kt={s.speedKt} /> : null}
-                </>
-              )}
-            </div>
-          </div>
-        </Marker>
-      ))}
+          </Marker>
+        )
+      })}
     </>
   )
 }

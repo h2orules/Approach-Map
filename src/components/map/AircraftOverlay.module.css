@@ -1,0 +1,48 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 3; /* above the map's marker pane (waypoints) */
+}
+
+.ac {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  will-change: transform;
+}
+
+.iconWrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.icon {
+  display: block;
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.9));
+}
+
+.tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, 16px);
+  white-space: nowrap;
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
+}
+
+.selected .icon {
+  filter: drop-shadow(0 0 4px #ffffff) drop-shadow(0 0 2px #ffffff);
+}
+
+.selected .tag {
+  color: #ffffff;
+}

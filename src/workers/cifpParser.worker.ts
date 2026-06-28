@@ -1,5 +1,5 @@
 import type { Procedure, ProcedureWaypoint, NavaidType, ProcedureType, WaypointRole, WaypointSymbol, AltConstraint } from '../types/procedure'
-import { parseArinc424AltDescriptor, formatAltConstraint } from '../utils/altitudeConstraint'
+import { parseArinc424AltDescriptor } from '../utils/altitudeConstraint'
 import { nextProcedureColor, resetColorCounters } from '../utils/colorScheme'
 import { parseLatLon } from '../utils/arincCoords'
 import { holdTrack, procedureTurn } from '../geo/procedureShapes'
@@ -50,6 +50,7 @@ interface Record424 {
   turnDir: string // col 44 (L/R)
   magCourse: string // cols 71-74 (tenths of a degree)
   legLen: string // cols 75-78 (route distance / holding leg)
+  speedLimit: string // cols 100-102 (knots, a maximum)
 }
 
 function parseProcRecord(line: string): Record424 | null {
@@ -81,6 +82,7 @@ function parseProcRecord(line: string): Record424 | null {
     turnDir: line[43] ?? ' ',
     magCourse: line.slice(70, 74).trim(),
     legLen: line.slice(74, 78).trim(),
+    speedLimit: line.slice(99, 102).trim(),
   }
 }
 
@@ -97,6 +99,7 @@ interface Leg {
   turnRight: boolean
   course: number // degrees (from magCourse / 10)
   legNm: number // straight-leg length, nm (time legs approximated)
+  speedKt: number // speed restriction (knots, 0 = none)
 }
 
 function legRole(descCode4: string, pathTerm: string): WaypointRole {
@@ -313,6 +316,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         turnRight: rec.turnDir !== 'L',
         course: (parseInt(rec.magCourse) || 0) / 10,
         legNm: parseLegLen(rec.legLen),
+        speedKt: parseInt(rec.speedLimit) || 0,
       })
     }
 
@@ -349,6 +353,9 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
 
         // Deduped waypoint symbols across all transitions, preferring the most
         // significant role for any fix that appears more than once.
+        // Precision approaches (ILS, procedure id starting "I") mark the FAF as
+        // the glideslope intercept — drawn with a lightning bolt, not a cross.
+        const isPrecision = group.type === 'APPROACH' && name[0] === 'I'
         const ROLE_RANK: Record<WaypointRole, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
         const symbolMap = new Map<string, WaypointSymbol>()
         for (const legs of transitionLegs) {
@@ -357,12 +364,20 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
             const existing = symbolMap.get(key)
             // The MAP/runway altitude is the threshold elevation, not a crossing
             // restriction — don't render it as one.
-            const altText = l.role === 'map' || l.navaidType === 'RUNWAY' ? null : formatAltConstraint(l.altConstraint)
+            const noRestriction = l.role === 'map' || l.navaidType === 'RUNWAY'
+            const alt = noRestriction ? null : l.altConstraint
+            const speedKt = noRestriction || !l.speedKt ? null : l.speedKt
+            const gsFaf = l.role === 'faf' && isPrecision
             if (!existing) {
-              symbolMap.set(key, { id: l.fixId, lat: l.lat, lon: l.lon, navaidType: l.navaidType, role: l.role, altText })
+              symbolMap.set(key, {
+                id: l.fixId, lat: l.lat, lon: l.lon, navaidType: l.navaidType,
+                role: l.role, alt, speedKt, gsFaf,
+              })
             } else {
               if (ROLE_RANK[l.role] > ROLE_RANK[existing.role]) existing.role = l.role
-              if (!existing.altText && altText) existing.altText = altText
+              if (!existing.alt && alt) existing.alt = alt
+              if (!existing.speedKt && speedKt) existing.speedKt = speedKt
+              if (gsFaf) existing.gsFaf = true
             }
           }
         }

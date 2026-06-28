@@ -1,0 +1,76 @@
+/* Zero-size anchor at the fix; children are positioned relative to it. */
+.container {
+  position: relative;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.icon {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+
+.label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  line-height: 1.15;
+  text-shadow:
+    0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
+}
+
+.name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.02em;
+}
+
+.alt {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fde68a;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 1px;
+}
+
+.spd {
+  font-size: 12px;
+  font-weight: 600;
+  color: #67e8f9;
+  margin-top: 1px;
+}
+
+/* FAA-style restriction bars, exactly the width of the number they wrap. */
+.barAbove {
+  display: inline-block;
+  border-top: 1.5px solid currentColor;
+  padding-top: 0.5px;
+  line-height: 1.1;
+}
+
+.barBelow {
+  display: inline-block;
+  border-bottom: 1.5px solid currentColor;
+  padding-bottom: 0.5px;
+  line-height: 1.1;
+}
+
+/* Glideslope-intercept block: bolt with the intercept altitude at its tail. */
+.gsBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.bolt {
+  display: block;
+  margin-left: 2px;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}

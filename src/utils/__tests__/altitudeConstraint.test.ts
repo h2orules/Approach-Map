@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseAltConstraint, resolveAltConstraint, parseArinc424AltDescriptor, formatAltConstraint } from '../altitudeConstraint'
 
+
 describe('parseAltConstraint', () => {
   it('parses AT OR ABOVE', () => {
     const result = parseAltConstraint('AT OR ABOVE 3000')

@@ -28,7 +28,12 @@ export interface WaypointSymbol {
   lon: number
   navaidType: NavaidType
   role: WaypointRole
-  altText: string | null
+  /** Altitude restriction; rendered with FAA over/under bars in the DOM label. */
+  alt: AltConstraint | null
+  /** Speed restriction in knots (a maximum), or null. */
+  speedKt: number | null
+  /** FAF of a precision approach (glideslope intercept) — drawn with a bolt. */
+  gsFaf: boolean
 }
 
 export interface Procedure {

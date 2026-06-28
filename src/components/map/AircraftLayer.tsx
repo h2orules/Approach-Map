@@ -82,16 +82,17 @@ export function AircraftLayer({ mapRef }: Props) {
         source: SOURCE_ID,
         layout: {
           'icon-image': IMAGE_ID,
-          'icon-size': 1.2,
+          // Larger and zoom-scaled, matching the waypoint symbol treatment
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 1.4, 12, 2.0],
           'icon-rotate': ['get', 'track'],
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
           // Callsign (or tail number) tag, offset below the aircraft icon
           'text-field': ['get', 'label'],
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
-          'text-size': 11,
-          'text-offset': [0, 1.1],
+          'text-font': ['DIN Pro Bold', 'Arial Unicode MS Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 6, 12, 12, 15],
+          'text-offset': [0, 1.2],
           'text-anchor': 'top',
           'text-allow-overlap': true,
           'text-ignore-placement': true,

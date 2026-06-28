@@ -10,7 +10,7 @@ import { ProcedureLayer } from './ProcedureLayer'
 import { FlownSegmentLayer } from './FlownSegmentLayer'
 import { RunwayLayer } from './RunwayLayer'
 import { ExtendedCenterlineLayer } from './ExtendedCenterlineLayer'
-import { WaypointLayer } from './WaypointLayer'
+import { WaypointMarkers } from './WaypointMarkers'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftPoll } from '../../hooks/useAircraftPoll'
@@ -81,7 +81,7 @@ export function AppMap() {
 
         <FlownSegmentLayer procedures={visibleProcedures} />
 
-        <WaypointLayer procedures={visibleProcedures} />
+        <WaypointMarkers procedures={visibleProcedures} />
 
         <AircraftLayer mapRef={mapRef} />
       </Map>

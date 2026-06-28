@@ -27,14 +27,16 @@ export function ProcedureLayer({ procedure }: Props) {
         }}
         layout={{ 'line-join': 'round', 'line-cap': 'round' }}
       />
-      {/* Missed approach + missed-approach hold: dash-dot-dash */}
+      {/* Missed approach + missed-approach hold: dash-dot-dash, and always thin
+          (like a manually-selected route) regardless of auto-detection. The leg
+          actually being flown is emphasized separately by the magenta overlay. */}
       <Layer
         id={`proc-missed-${procedure.id}`}
         type="line"
         filter={['==', ['get', 'segment'], 'missed']}
         paint={{
           'line-color': lineColor,
-          'line-width': baseWidth,
+          'line-width': 1.5,
           'line-opacity': 0.85,
           'line-dasharray': [3, 1.5, 0.5, 1.5],
         }}

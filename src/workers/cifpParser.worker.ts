@@ -104,8 +104,12 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
     const lines = e.data.text.split('\n')
     const total = lines.length
 
-    // Pass 1: collect fix/navaid lat/lon from EA (enroute fix), D  (VOR), DB (NDB) records
+    // Pass 1: collect fix/navaid lat/lon.
+    // waypointDb is keyed by globally-unique fix name (terminal waypoints,
+    // enroute fixes, VOR/NDB). runwayDb is keyed by `${icao}:${RWxx}` because
+    // runway identifiers like RW34C repeat across airports and must not collide.
     const waypointDb = new Map<string, WaypointRecord>()
+    const runwayDb = new Map<string, WaypointRecord>()
 
     self.postMessage({ type: 'progress', percent: 0, message: 'Building navaid database…' } satisfies ParseProgress)
 
@@ -124,6 +128,15 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         const fixId = line.slice(13, 18).trim()
         const coords = parseLatLon(line.slice(32, 41).trim(), line.slice(41, 51).trim())
         if (fixId && coords) waypointDb.set(fixId, { ...coords, navaidType: 'FIX' })
+      } else if (sc === 'P' && line[12] === 'G') {
+        // Runway threshold (airport section P, subsection G). Approach final
+        // segments terminate at the runway (e.g. RW34C); without these the line
+        // jumps from the last fix straight to the missed-approach point. Keyed
+        // by airport because RWxx repeats across airports.
+        const icao = line.slice(6, 10).trim()
+        const fixId = line.slice(13, 18).trim()
+        const coords = parseLatLon(line.slice(32, 41).trim(), line.slice(41, 51).trim())
+        if (icao && fixId && coords) runwayDb.set(`${icao}:${fixId}`, { ...coords, navaidType: 'RUNWAY' })
       } else if (sc === 'E' && ss === 'A') {
         // Enroute waypoint
         const fixId = line.slice(13, 18).trim()
@@ -195,9 +208,10 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
       if (!rec.fixId) continue
 
       // Procedure leg records reference a fix by name; they do NOT carry inline
-      // coordinates (cols 33–51 hold leg path/terminator data). Always resolve
-      // the position from the waypoint/navaid database built in pass 1.
-      const dbEntry = waypointDb.get(rec.fixId)
+      // coordinates (cols 33–51 hold leg path/terminator data). Resolve the
+      // position from the waypoint/navaid database, falling back to this
+      // airport's runway thresholds for RWxx fixes.
+      const dbEntry = waypointDb.get(rec.fixId) ?? runwayDb.get(`${rec.airportIcao}:${rec.fixId}`)
       if (!dbEntry) continue
       const coords = dbEntry
 

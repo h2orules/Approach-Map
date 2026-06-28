@@ -10,7 +10,7 @@ const STORE_NAME = 'cifp'
 // Bump whenever the ARINC 424 parser logic changes, so previously cached
 // parse results (which may have been produced by buggy parser code) are
 // discarded and the CIFP is re-parsed even within the same AIRAC cycle.
-const PARSER_VERSION = 3
+const PARSER_VERSION = 4
 
 export type CifpStatus = 'idle' | 'fetching' | 'parsing' | 'ready' | 'error'
 

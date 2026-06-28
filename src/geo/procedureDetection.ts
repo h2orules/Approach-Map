@@ -7,7 +7,13 @@ import {
   ALT_THRESHOLD_NEAR_FT,
   ALT_THRESHOLD_FAR_FT,
   NEAR_AIRPORT_DISTANCE_NM,
+  DIRECTION_TOLERANCE_DEG,
 } from '../config/constants'
+
+/** Smallest absolute angle between two bearings, 0–180°. */
+function bearingDelta(a: number, b: number): number {
+  return Math.abs(((a - b + 540) % 360) - 180)
+}
 
 function altitudePlausibleForType(type: ProcedureType, agl: number): boolean {
   switch (type) {
@@ -76,6 +82,18 @@ export function detectProceduresInUse(
       const wptBefore = proc.waypoints[segIdx]
       const wptAfter = proc.waypoints[Math.min(segIdx + 1, proc.waypoints.length - 1)]
       const fraction = nearest.properties.location ?? 0
+
+      // Direction check: procedure waypoints are ordered in the direction of
+      // flight, so the local segment bearing is the expected ground track. An
+      // aircraft flying the reciprocal (e.g. landing rwy 16 while sitting on the
+      // rwy 34 approach's shared centerline) must not match.
+      if (wptBefore !== wptAfter && (wptBefore.lat !== wptAfter.lat || wptBefore.lon !== wptAfter.lon)) {
+        const segBearing = turf.bearing(
+          turf.point([wptBefore.lon, wptBefore.lat]),
+          turf.point([wptAfter.lon, wptAfter.lat]),
+        )
+        if (bearingDelta(ac.track, segBearing) > DIRECTION_TOLERANCE_DEG) continue
+      }
 
       const expectedAlt = interpolateExpectedAlt(wptBefore, wptAfter, fraction)
 

@@ -4,6 +4,12 @@ export const DEFAULT_POLL_INTERVAL_MS = 5_000
 export const STALE_AIRCRAFT_THRESHOLD_S = 60
 
 export const CROSS_TRACK_THRESHOLD_NM = 0.5
+// Max angle between an aircraft's track and the procedure's local direction for
+// it to count as "flying" that procedure. Rejects reciprocal-runway matches
+// (e.g. a rwy-16 arrival sitting on the shared rwy-34 approach centerline).
+// 45° covers the FAA's 30° ground-based navaid approach coverage plus a buffer
+// for wind correction.
+export const DIRECTION_TOLERANCE_DEG = 45
 export const ALT_THRESHOLD_NEAR_FT = 250
 export const ALT_THRESHOLD_FAR_FT = 500
 export const NEAR_AIRPORT_DISTANCE_NM = 5

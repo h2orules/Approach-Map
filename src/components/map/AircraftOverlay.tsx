@@ -9,7 +9,7 @@ interface Props {
 
 function AircraftIcon() {
   return (
-    <svg width={30} height={30} viewBox="0 0 24 24" className={styles.icon}>
+    <svg width={42} height={42} viewBox="0 0 24 24" className={styles.icon}>
       <path fill="#f59e0b" stroke="#0b0f14" strokeWidth={0.6} d="M12 2L8 18l4-2 4 2L12 2Z" />
       <path fill="#f59e0b" stroke="#0b0f14" strokeWidth={0.6} d="M5 12L2 14l10-2 10 2-3-2H5Z" />
     </svg>

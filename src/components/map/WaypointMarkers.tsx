@@ -22,7 +22,9 @@ const ROLE_RANK: Record<string, number> = { map: 5, faf: 4, iaf: 3, hold: 2, nor
 // ---- icons ---------------------------------------------------------------
 function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   const halo = { stroke: '#0b0f14', strokeWidth: 1.6, strokeLinejoin: 'round' as const }
-  if (s.role === 'faf' && !s.gsFaf) {
+  if (s.role === 'faf') {
+    // All FAFs (precision or not) get the Maltese cross; precision FAFs also get
+    // the glideslope bolt drawn separately.
     return (
       <svg width={size} height={size} viewBox="0 0 26 26">
         <path d="M13 2 L15.6 8 L13 10.2 L10.4 8 Z M13 24 L15.6 18 L13 15.8 L10.4 18 Z M2 13 L8 10.4 L10.2 13 L8 15.6 Z M24 13 L18 10.4 L15.8 13 L18 15.6 Z" fill="#f0abfc" {...halo} />
@@ -61,13 +63,14 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
 }
 
 // ---- restriction labels --------------------------------------------------
+const fNum = (n: number) => n.toLocaleString('en-US')
+
 function AltLabel({ c }: { c: AltConstraint }) {
-  const f = (n: number) => n.toLocaleString('en-US')
   if (c.type === 'BETWEEN') {
     return (
       <div className={styles.alt}>
-        <span className={styles.barAbove}>{f(c.high ?? c.low)}</span>
-        <span className={styles.barBelow}>{f(c.low)}</span>
+        <span className={styles.barAbove}>{fNum(c.high ?? c.low)}</span>
+        <span className={styles.barBelow}>{fNum(c.low)}</span>
       </div>
     )
   }
@@ -78,7 +81,7 @@ function AltLabel({ c }: { c: AltConstraint }) {
   const val = c.type === 'AT_OR_BELOW' ? (c.high ?? c.low) : c.low
   return (
     <div className={styles.alt}>
-      <span className={cls}>{f(val)}</span>
+      <span className={cls}>{fNum(val)}</span>
     </div>
   )
 }
@@ -94,8 +97,9 @@ function SpeedLabel({ kt }: { kt: number }) {
 
 interface Pt { x: number; y: number }
 
-// Hand-drawn zig-zag lightning arrow: starts (no tail) near `from`, kinks toward
-// `to`, and ends in a filled triangle pointing at the fix. Container px coords.
+// Hand-drawn zig-zag lightning arrow: starts (no tail) at `from` near the
+// altitude, makes several direction changes, and ends in a filled triangle
+// pointing at the fix. Container px coords.
 function BoltArrow({ from, to }: { from: Pt; to: Pt }) {
   const dx = to.x - from.x
   const dy = to.y - from.y
@@ -104,45 +108,49 @@ function BoltArrow({ from, to }: { from: Pt; to: Pt }) {
   const uy = dy / len
   const px = -uy
   const py = ux
-  const amp = Math.min(Math.max(len * 0.16, 3), 7)
-  const headLen = 9
+  const lineW = 2
+  const amp = lineW * 3.5 // small lateral width across the vector (~3-4× line width)
+  const headLen = 7
   const headW = 5
 
+  // Tip lands right at the fix point so the arrow clearly points at it.
+  const tipGap = 7
+  const seg = len - tipGap
+  const tip = { x: from.x + ux * seg, y: from.y + uy * seg }
+
+  // Travel mostly ALONG the vector with one sharp double-back: forward, then a
+  // short step that reverses along the vector (and offsets laterally), then on
+  // to the tip. Minimal transverse movement, clear lightning kink.
+  const along = (t: number, side: number): Pt => ({
+    x: from.x + ux * seg * t + px * amp * side,
+    y: from.y + uy * seg * t + py * amp * side,
+  })
   const p0 = from
-  const p1 = { x: from.x + ux * len * 0.35 + px * amp, y: from.y + uy * len * 0.35 + py * amp }
-  const p2 = { x: from.x + ux * len * 0.7 - px * amp, y: from.y + uy * len * 0.7 - py * amp }
-  const base = { x: to.x - ux * headLen, y: to.y - uy * headLen }
+  const p1 = along(0.62, 0) // forward along the vector
+  const p2 = along(0.4, 1) // double back along the vector and step laterally
+  const base = { x: tip.x - ux * headLen, y: tip.y - uy * headLen }
 
   const pad = 4
-  const xs = [p0.x, p1.x, p2.x, to.x, base.x + px * headW, base.x - px * headW]
-  const ys = [p0.y, p1.y, p2.y, to.y, base.y + py * headW, base.y - py * headW]
-  const minX = Math.min(...xs) - pad
-  const minY = Math.min(...ys) - pad
-  const w = Math.max(...xs) - minX + pad
-  const h = Math.max(...ys) - minY + pad
+  const wing1 = { x: base.x + px * headW, y: base.y + py * headW }
+  const wing2 = { x: base.x - px * headW, y: base.y - py * headW }
+  const all = [p0, p1, p2, base, tip, wing1, wing2]
+  const minX = Math.min(...all.map((p) => p.x)) - pad
+  const minY = Math.min(...all.map((p) => p.y)) - pad
+  const w = Math.max(...all.map((p) => p.x)) - minX + pad
+  const h = Math.max(...all.map((p) => p.y)) - minY + pad
   const L = (p: Pt) => `${p.x - minX},${p.y - minY}`
 
   return (
-    <svg
-      className={styles.bolt}
-      style={{ left: minX, top: minY, width: w, height: h }}
-      width={w}
-      height={h}
-    >
+    <svg className={styles.bolt} style={{ left: minX, top: minY, width: w, height: h }} width={w} height={h}>
       <polyline
         points={`${L(p0)} ${L(p1)} ${L(p2)} ${L(base)}`}
         fill="none"
         stroke={RESTRICTION_COLOR}
-        strokeWidth={2}
+        strokeWidth={lineW}
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-      <polygon
-        points={`${L(to)} ${L({ x: base.x + px * headW, y: base.y + py * headW })} ${L({ x: base.x - px * headW, y: base.y - py * headW })}`}
-        fill={RESTRICTION_COLOR}
-        stroke="#0b0f14"
-        strokeWidth={0.6}
-      />
+      <polygon points={`${L(tip)} ${L(wing1)} ${L(wing2)}`} fill={RESTRICTION_COLOR} stroke="#0b0f14" strokeWidth={0.6} />
     </svg>
   )
 }
@@ -154,33 +162,62 @@ interface Placement {
   dy: number
   w: number
   h: number
+  placed: boolean
 }
 
 interface Rect { x: number; y: number; w: number; h: number }
-const hit = (a: Rect, b: Rect) =>
-  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+const inView = (r: Rect, vw: number, vh: number) =>
+  r.x >= 2 && r.y >= 2 && r.x + r.w <= vw - 2 && r.y + r.h <= vh - 2
 
-// Rough label box estimate (px), good enough to drive collision avoidance.
-function estimateSize(s: WaypointSymbol): { w: number; h: number } {
-  if (s.gsFaf) return { w: 52, h: 22 } // intercept altitude (bolt drawn separately)
-  const between = s.alt?.type === 'BETWEEN'
-  const altChars = s.alt ? 6 : 0
+function overlapArea(a: Rect, rects: Rect[]): number {
+  let sum = 0
+  for (const b of rects) {
+    const ox = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x))
+    const oy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y))
+    sum += ox * oy
+  }
+  return sum
+}
+
+// Choose a label offset: first candidate clear of both icons and other labels;
+// otherwise (only when zoomed in) the least-bad, weighting icon overlap heavily
+// so a label never covers another fix's symbol.
+function place(
+  sx: number, sy: number, cands: Pt[], w: number, h: number,
+  iconRects: Rect[], labelRects: Rect[], vw: number, vh: number, allowOverlap: boolean,
+): Pt | null {
+  let best: Pt | null = null
+  let bestScore = Infinity
+  for (const c of cands) {
+    const r: Rect = { x: sx + c.x, y: sy + c.y, w, h }
+    if (!inView(r, vw, vh)) continue
+    const ic = overlapArea(r, iconRects)
+    const lc = overlapArea(r, labelRects)
+    if (ic === 0 && lc === 0) return c
+    const score = ic * 1000 + lc
+    if (score < bestScore) { bestScore = score; best = c }
+  }
+  if (!allowOverlap) return null
+  return best ?? cands[0]
+}
+
+// Name + restriction label box (px). The name and (for a precision FAF) the
+// glideslope-intercept altitude live in the same block.
+function labelBoxSize(s: WaypointSymbol): { w: number; h: number } {
+  const showAlt = !!s.alt
+  const between = showAlt && !s.gsFaf && s.alt!.type === 'BETWEEN'
+  const altChars = showAlt ? 6 : 0
   const spdChars = s.speedKt ? 5 : 0
   const rowChars = altChars + (s.speedKt ? 1 + spdChars : 0)
   const maxChars = Math.max(s.id.length, rowChars)
-  const rowLines = between ? 2 : s.alt || s.speedKt ? 1 : 0
+  const rowLines = between ? 2 : showAlt || s.speedKt ? 1 : 0
   return { w: maxChars * 8.4 + 6, h: (1 + rowLines) * 15 + 6 }
 }
 
-// Pick the corner of a label box closest to the fix at the origin.
-function nearestCorner(dx: number, dy: number, w: number, h: number): Pt {
-  const corners = [
-    { x: dx, y: dy },
-    { x: dx + w, y: dy },
-    { x: dx, y: dy + h },
-    { x: dx + w, y: dy + h },
-  ]
-  return corners.reduce((a, b) => (a.x * a.x + a.y * a.y <= b.x * b.x + b.y * b.y ? a : b))
+// Closest point on a label rect (offset dx,dy, size w,h) to the fix at origin.
+function nearestPointToFix(dx: number, dy: number, w: number, h: number): Pt {
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+  return { x: clamp(0, dx, dx + w), y: clamp(0, dy, dy + h) }
 }
 
 export function WaypointMarkers({ procedures }: Props) {
@@ -210,48 +247,35 @@ export function WaypointMarkers({ procedures }: Props) {
       const container = map.getContainer()
       const vw = container.clientWidth
       const vh = container.clientHeight
-      const gap = 16
+      const allowOverlap = zoom >= DROP_ZOOM
 
       const ordered = [...symbols].sort((a, b) => (ROLE_RANK[b.role] ?? 0) - (ROLE_RANK[a.role] ?? 0))
 
-      const occupied: Rect[] = []
+      const iconRects: Rect[] = []
       const onScreen: { s: WaypointSymbol; sx: number; sy: number }[] = []
       for (const s of ordered) {
         const p = map.project([s.lon, s.lat])
         if (p.x < -40 || p.y < -40 || p.x > vw + 40 || p.y > vh + 40) continue
         onScreen.push({ s, sx: p.x, sy: p.y })
-        occupied.push({ x: p.x - 13, y: p.y - 13, w: 26, h: 26 }) // reserve the icon
+        iconRects.push({ x: p.x - 14, y: p.y - 14, w: 28, h: 28 }) // reserve the icon
       }
 
+      const labelRects: Rect[] = []
       const next: Placement[] = []
       for (const { s, sx, sy } of onScreen) {
-        const { w, h } = estimateSize(s)
-        const cands = s.gsFaf
-          ? [
-              { x: -gap - w, y: gap }, { x: -gap - w, y: -h / 2 }, { x: -gap - w, y: -gap - h },
-              { x: gap, y: gap }, { x: -w / 2, y: gap },
-            ]
-          : [
-              { x: gap, y: -h / 2 }, { x: -gap - w, y: -h / 2 },
-              { x: gap, y: -gap - h }, { x: -gap - w, y: -gap - h },
-              { x: gap, y: gap }, { x: -gap - w, y: gap },
-              { x: -w / 2, y: -gap - h }, { x: -w / 2, y: gap },
-            ]
-
-        let chosen: { x: number; y: number } | null = null
-        for (const c of cands) {
-          const r: Rect = { x: sx + c.x, y: sy + c.y, w, h }
-          if (r.x < 2 || r.y < 2 || r.x + r.w > vw - 2 || r.y + r.h > vh - 2) continue
-          if (occupied.some((o) => hit(o, r))) continue
-          chosen = c
-          break
-        }
-        if (!chosen) {
-          if (zoom < DROP_ZOOM) continue
-          chosen = cands[0]
-        }
-        occupied.push({ x: sx + chosen.x, y: sy + chosen.y, w, h })
-        next.push({ s, dx: chosen.x, dy: chosen.y, w, h })
+        // A precision FAF sits further out to leave room for a long bolt.
+        const gap = s.gsFaf ? 44 : 16
+        const { w, h } = labelBoxSize(s)
+        const cands: Pt[] = [
+          { x: gap, y: -h / 2 }, { x: -gap - w, y: -h / 2 },
+          { x: gap, y: -gap - h }, { x: -gap - w, y: -gap - h },
+          { x: gap, y: gap }, { x: -gap - w, y: gap },
+          { x: -w / 2, y: -gap - h }, { x: -w / 2, y: gap },
+        ]
+        const c = place(sx, sy, cands, w, h, iconRects, labelRects, vw, vh, allowOverlap)
+        if (!c) continue
+        labelRects.push({ x: sx + c.x, y: sy + c.y, w, h })
+        next.push({ s, dx: c.x, dy: c.y, w, h, placed: true })
       }
       setPlacements(next)
     }
@@ -274,29 +298,33 @@ export function WaypointMarkers({ procedures }: Props) {
 
   return (
     <>
-      {placements.map(({ s, dx, dy, w, h }) => {
-        const gsAlt: AltConstraint | null = s.gsFaf && s.alt ? { type: 'AT_OR_ABOVE', low: s.alt.low } : null
-        const boltFrom = s.gsFaf ? nearestCorner(dx, dy, w, h) : null
+      {placements.map((pl) => {
+        const { s, dx, dy, w, h } = pl
+        // Precision FAF shows its glideslope-intercept altitude as "at or above".
+        const altC: AltConstraint | null = !s.alt
+          ? null
+          : s.gsFaf
+            ? { type: 'AT_OR_ABOVE', low: s.alt.low }
+            : s.alt
+        // Bolt runs from the block edge nearest the fix, pointing at the fix.
+        const boltFrom = s.gsFaf ? nearestPointToFix(dx, dy, w, h) : null
+
         return (
           <Marker key={symKey(s)} longitude={s.lon} latitude={s.lat} anchor="center">
             <div className={styles.container}>
               <div className={styles.icon}>
                 <WpIcon s={s} />
               </div>
+
               {boltFrom && <BoltArrow from={boltFrom} to={{ x: 0, y: 0 }} />}
+
               <div className={styles.label} style={{ transform: `translate(${dx}px, ${dy}px)` }}>
-                {s.gsFaf ? (
-                  gsAlt && <AltLabel c={gsAlt} />
-                ) : (
-                  <>
-                    <div className={styles.name}>{s.id}</div>
-                    {(s.alt || s.speedKt) && (
-                      <div className={styles.restrictions}>
-                        {s.alt && <AltLabel c={s.alt} />}
-                        {s.speedKt ? <SpeedLabel kt={s.speedKt} /> : null}
-                      </div>
-                    )}
-                  </>
+                <div className={styles.name}>{s.id}</div>
+                {(altC || s.speedKt) && (
+                  <div className={styles.restrictions}>
+                    {altC && <AltLabel c={altC} />}
+                    {s.speedKt ? <SpeedLabel kt={s.speedKt} /> : null}
+                  </div>
                 )}
               </div>
             </div>

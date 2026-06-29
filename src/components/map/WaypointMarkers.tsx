@@ -118,16 +118,16 @@ function BoltArrow({ from, to }: { from: Pt; to: Pt }) {
   const seg = len - tipGap
   const tip = { x: from.x + ux * seg, y: from.y + uy * seg }
 
-  // Travel mostly ALONG the vector with one sharp double-back: forward, then a
-  // short step that reverses along the vector (and offsets laterally), then on
-  // to the tip. Minimal transverse movement, clear lightning kink.
+  // Travel mostly ALONG the vector with one sharp double-back. The kink happens
+  // early (~40% of length). Lateral displacement is split ±half on each side of
+  // the main axis so the bolt is symmetric about the arrow centerline.
   const along = (t: number, side: number): Pt => ({
     x: from.x + ux * seg * t + px * amp * side,
     y: from.y + uy * seg * t + py * amp * side,
   })
   const p0 = from
-  const p1 = along(0.62, 0) // forward along the vector
-  const p2 = along(0.4, 1) // double back along the vector and step laterally
+  const p1 = along(0.40, 0.5)  // forward to 40%, half-step to one side
+  const p2 = along(0.22, -0.5) // double back to 22%, half-step other side
   const base = { x: tip.x - ux * headLen, y: tip.y - uy * headLen }
 
   const pad = 4

@@ -20,6 +20,16 @@ import { useProcedureDetection } from '../../hooks/useProcedureDetection'
 import { useRunways } from '../../hooks/useRunways'
 import { useProcedureStore } from '../../store/useProcedureStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
+import type { Procedure } from '../../types/procedure'
+
+// Render order: lowest value drawn first (bottom), highest last (top).
+// Approaches are ordered I > R > H > L so precision ILS sits on top.
+const APPROACH_RENDER_PRIORITY: Record<string, number> = { L: 2, H: 3, R: 4, I: 5 }
+function approachRenderOrder(p: Procedure): number {
+  if (p.type === 'SID') return 0
+  if (p.type === 'STAR') return 1
+  return APPROACH_RENDER_PRIORITY[p.name[0]?.toUpperCase()] ?? 2
+}
 
 export function AppMap() {
   const mapRef = useRef<MapRef | null>(null)
@@ -53,9 +63,9 @@ export function AppMap() {
     [setViewport],
   )
 
-  const visibleProcedures = procedures.filter(
-    (p) => p.hasGeometry && (userToggles[p.id] ?? autoVisible[p.id] ?? false),
-  )
+  const visibleProcedures = procedures
+    .filter((p) => p.hasGeometry && (userToggles[p.id] ?? autoVisible[p.id] ?? false))
+    .sort((a, b) => approachRenderOrder(a) - approachRenderOrder(b))
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>

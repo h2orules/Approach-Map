@@ -34,6 +34,8 @@ export interface WaypointSymbol {
   speedKt: number | null
   /** FAF of a precision approach (glideslope intercept) — drawn with a bolt. */
   gsFaf: boolean
+  /** True when ARINC 424 waypoint description code position 2 is 'Y' (flyover). */
+  flyover: boolean
 }
 
 export interface Procedure {

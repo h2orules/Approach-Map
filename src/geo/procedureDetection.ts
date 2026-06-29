@@ -39,6 +39,8 @@ function interpolateExpectedAlt(
 export interface DetectionResult {
   detected: Record<string, boolean>
   lastSeen: Record<string, number>
+  /** Hex codes of aircraft that matched each procedure (approaches only). */
+  detectedHexes: Record<string, string[]>
 }
 
 export function detectProceduresInUse(
@@ -51,6 +53,7 @@ export function detectProceduresInUse(
 ): DetectionResult {
   const detected: Record<string, boolean> = {}
   const lastSeen: Record<string, number> = {}
+  const detectedHexes: Record<string, string[]> = {}
 
   const airportPt = turf.point([airportLon, airportLat])
 
@@ -106,14 +109,23 @@ export function detectProceduresInUse(
       }
 
       if (altOk) {
-        hit = true
-        lastSeen[proc.id] = nowMs
-        break
+        if (!hit) {
+          hit = true
+          lastSeen[proc.id] = nowMs
+        }
+        if (proc.type === 'APPROACH') {
+          // Collect ALL matching hexes so the dedup can compare sets across
+          // competing approach types and identify truly unique aircraft.
+          detectedHexes[proc.id] = detectedHexes[proc.id] ?? []
+          detectedHexes[proc.id].push(ac.hex)
+        } else {
+          break // Non-approach: first match is enough
+        }
       }
     }
 
     detected[proc.id] = hit
   }
 
-  return { detected, lastSeen }
+  return { detected, lastSeen, detectedHexes }
 }

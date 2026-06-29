@@ -47,6 +47,7 @@ interface Record424 {
   alt2: string
   pathTerm: string // path & terminator, cols 48-49 (e.g. CF, TF, HM, HF, PI)
   descCode4: string // waypoint description code position 4, col 43 (A/F/M/H)
+  flyover: boolean  // waypoint description code position 2, col 41 ('Y' = flyover)
   turnDir: string // col 44 (L/R)
   magCourse: string // cols 71-74 (tenths of a degree)
   legLen: string // cols 75-78 (route distance / holding leg)
@@ -79,6 +80,7 @@ function parseProcRecord(line: string): Record424 | null {
     alt2: line.slice(89, 94).trim(),
     pathTerm: line.slice(47, 49).trim(),
     descCode4: line[42] ?? ' ',
+    flyover: (line[40] ?? ' ') === 'Y',
     turnDir: line[43] ?? ' ',
     magCourse: line.slice(70, 74).trim(),
     legLen: line.slice(74, 78).trim(),
@@ -96,6 +98,7 @@ interface Leg {
   altConstraint: AltConstraint | null
   pathTerm: string
   role: WaypointRole
+  flyover: boolean
   turnRight: boolean
   course: number // degrees (from magCourse / 10)
   legNm: number // straight-leg length, nm (time legs approximated)
@@ -313,6 +316,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         altConstraint,
         pathTerm: rec.pathTerm,
         role: legRole(rec.descCode4, rec.pathTerm),
+        flyover: rec.flyover,
         turnRight: rec.turnDir !== 'L',
         course: (parseInt(rec.magCourse) || 0) / 10,
         legNm: parseLegLen(rec.legLen),
@@ -371,13 +375,14 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
             if (!existing) {
               symbolMap.set(key, {
                 id: l.fixId, lat: l.lat, lon: l.lon, navaidType: l.navaidType,
-                role: l.role, alt, speedKt, gsFaf,
+                role: l.role, alt, speedKt, gsFaf, flyover: l.flyover,
               })
             } else {
               if (ROLE_RANK[l.role] > ROLE_RANK[existing.role]) existing.role = l.role
               if (!existing.alt && alt) existing.alt = alt
               if (!existing.speedKt && speedKt) existing.speedKt = speedKt
               if (gsFaf) existing.gsFaf = true
+              if (l.flyover) existing.flyover = true
             }
           }
         }

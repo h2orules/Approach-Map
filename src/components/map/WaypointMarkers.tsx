@@ -20,13 +20,20 @@ function symKey(s: WaypointSymbol): string {
 const ROLE_RANK: Record<string, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
 
 // ---- icons ---------------------------------------------------------------
+function Ring({ cx, cy, r, color }: { cx: number; cy: number; r: number; color: string }) {
+  return <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={1.4} opacity={0.85} />
+}
+
 function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   const halo = { stroke: '#0b0f14', strokeWidth: 1.6, strokeLinejoin: 'round' as const }
+  const fo = s.flyover
+
   if (s.role === 'faf') {
     // All FAFs (precision or not) get the Maltese cross; precision FAFs also get
     // the glideslope bolt drawn separately.
     return (
       <svg width={size} height={size} viewBox="0 0 26 26">
+        {fo && <Ring cx={13} cy={13} r={12} color="#f0abfc" />}
         <path d="M13 2 L15.6 8 L13 10.2 L10.4 8 Z M13 24 L15.6 18 L13 15.8 L10.4 18 Z M2 13 L8 10.4 L10.2 13 L8 15.6 Z M24 13 L18 10.4 L15.8 13 L18 15.6 Z" fill="#f0abfc" {...halo} />
       </svg>
     )
@@ -34,6 +41,7 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   if (s.role === 'map' || s.navaidType === 'RUNWAY') {
     return (
       <svg width={size} height={size} viewBox="0 0 20 20">
+        {fo && <Ring cx={10} cy={10} r={8.5} color="#86efac" />}
         <rect x="5" y="5" width="10" height="10" fill="#86efac" {...halo} />
       </svg>
     )
@@ -41,6 +49,7 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   if (s.navaidType === 'VOR' || s.navaidType === 'VORTAC') {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24">
+        {fo && <Ring cx={12} cy={12} r={11} color="#7dd3fc" />}
         <path d="M12 3 L20 7.5 L20 16.5 L12 21 L4 16.5 L4 7.5 Z" fill="none" stroke="#7dd3fc" strokeWidth={2.2} />
         <circle cx="12" cy="12" r="2" fill="#7dd3fc" />
       </svg>
@@ -49,6 +58,7 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   if (s.navaidType === 'NDB') {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24">
+        {fo && <Ring cx={12} cy={12} r={11} color="#fbbf24" />}
         <circle cx="12" cy="12" r="9" fill="none" stroke="#fbbf24" strokeWidth={1.6} strokeDasharray="1.5 2.2" />
         <circle cx="12" cy="12" r="2.4" fill="#fbbf24" {...halo} />
       </svg>
@@ -57,6 +67,7 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   // default fix — solid triangle
   return (
     <svg width={size} height={size} viewBox="0 0 22 22">
+      {fo && <Ring cx={11} cy={11} r={10} color="#cbd5e1" />}
       <path d="M11 4 L18 17 L4 17 Z" fill="#cbd5e1" {...halo} />
     </svg>
   )

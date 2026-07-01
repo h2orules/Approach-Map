@@ -20,10 +20,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/faa-cifp/, '/Upload_313-d/cifp'),
       },
-      '/api/opensky': {
-        target: 'https://opensky-network.org',
+      '/api/adsbdb': {
+        target: 'https://api.adsbdb.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/opensky/, '/api'),
+        rewrite: (path) => path.replace(/^\/api\/adsbdb/, '/v0'),
       },
     },
   },

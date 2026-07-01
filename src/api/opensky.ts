@@ -1,12 +1,16 @@
 /**
- * OpenSky Network route lookup — maps a callsign to [origin, destination] ICAO.
- * Free, no API key. Results are cached for the session so each callsign is
- * queried at most once.
+ * adsbdb.com callsign route lookup — maps an ICAO callsign to [origin, destination].
+ * Free public API, no key required. Results are cached for the session so each
+ * callsign is queried at most once.
  */
 
-interface OpenSkyRoute {
-  callsign: string
-  route: string[]
+interface AdsbdbResponse {
+  response: {
+    flightroute?: {
+      origin?: { icao_code?: string }
+      destination?: { icao_code?: string }
+    } | null
+  }
 }
 
 // Resolved results (null = confirmed no route data for this callsign)
@@ -21,17 +25,17 @@ export async function fetchRoute(callsign: string): Promise<[string, string] | n
 
   pending.add(cs)
   try {
-    const resp = await fetch(`/api/opensky/routes?callsign=${encodeURIComponent(cs)}`)
+    const resp = await fetch(`/api/adsbdb/callsign/${encodeURIComponent(cs)}`)
     if (!resp.ok) {
       cache.set(cs, null)
       return null
     }
-    const data = (await resp.json()) as OpenSkyRoute
-    const route = data.route
+    const data = (await resp.json()) as AdsbdbResponse
+    const route = data?.response?.flightroute
+    const origin = route?.origin?.icao_code
+    const destination = route?.destination?.icao_code
     const result: [string, string] | null =
-      Array.isArray(route) && route.length >= 2
-        ? [route[0], route[route.length - 1]]
-        : null
+      origin && destination ? [origin, destination] : null
     cache.set(cs, result)
     return result
   } catch {

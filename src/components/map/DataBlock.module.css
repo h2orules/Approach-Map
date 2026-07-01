@@ -47,6 +47,26 @@
   color: #94a3b8;
 }
 
+.route {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.routeLabel {
+  color: #64748b;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.routeCode {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-right: 4px;
+}
+
 .expanded {
   margin-top: 5px;
   border-top: 1px solid rgba(100, 116, 139, 0.3);

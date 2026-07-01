@@ -144,11 +144,13 @@ function lineFeature(coords: Coord[], props: Record<string, unknown>): AnyFeatur
  * to and including the MAP are the inbound path (solid); legs after it are the
  * missed approach (dash-dot). Holds (HM/HF/HA) and procedure turns (PI) are
  * emitted as their own racetrack/barb features tagged with the same segment.
+ * Every feature gets a `transitionId` property so the renderer can style
+ * opposite-direction SID runway transitions as dotted lines.
  */
-function buildProcedureFeatures(transitions: Leg[][]): AnyFeature[] {
+function buildProcedureFeatures(transitions: Array<{ id: string; legs: Leg[] }>): AnyFeature[] {
   const features: AnyFeature[] = []
 
-  for (const legs of transitions) {
+  for (const { id: transitionId, legs } of transitions) {
     const mapIdx = legs.findIndex((l) => l.role === 'map')
     const inboundEnd = mapIdx >= 0 ? mapIdx + 1 : legs.length
 
@@ -156,10 +158,10 @@ function buildProcedureFeatures(transitions: Leg[][]): AnyFeature[] {
     const missed = mapIdx >= 0 ? legs.slice(mapIdx) : [] // start missed at the MAP for continuity
 
     if (inbound.length >= 2) {
-      features.push(lineFeature(inbound.map((l) => [l.lon, l.lat]), { kind: 'path', segment: 'transition' }))
+      features.push(lineFeature(inbound.map((l) => [l.lon, l.lat]), { kind: 'path', segment: 'transition', transitionId }))
     }
     if (missed.length >= 2) {
-      features.push(lineFeature(missed.map((l) => [l.lon, l.lat]), { kind: 'path', segment: 'missed' }))
+      features.push(lineFeature(missed.map((l) => [l.lon, l.lat]), { kind: 'path', segment: 'missed', transitionId }))
     }
 
     // Holds and procedure turns as their own shapes
@@ -168,10 +170,10 @@ function buildProcedureFeatures(transitions: Leg[][]): AnyFeature[] {
       const segment = mapIdx >= 0 && i > mapIdx ? 'missed' : 'transition'
       if (l.pathTerm === 'HM' || l.pathTerm === 'HF' || l.pathTerm === 'HA') {
         const track = holdTrack(l.lat, l.lon, l.course, l.turnRight, l.legNm)
-        features.push(lineFeature(track, { kind: 'hold', segment }))
+        features.push(lineFeature(track, { kind: 'hold', segment, transitionId }))
       } else if (l.pathTerm === 'PI') {
         const barb = procedureTurn(l.lat, l.lon, l.course, l.turnRight, l.legNm)
-        features.push(lineFeature(barb, { kind: 'pt', segment }))
+        features.push(lineFeature(barb, { kind: 'pt', segment, transitionId }))
       }
     }
   }
@@ -344,16 +346,17 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
       for (const [procKey, group] of airportMap) {
         const [, name] = procKey.split(':')
 
-        // Each transition becomes its own ordered leg list.
-        const transitionLegs = Array.from(group.transitions.values())
-          .map((seqMap) => Array.from(seqMap.values()).sort((a, b) => a.seq - b.seq))
-          .filter((legs) => legs.length >= 2)
+        // Each transition becomes its own ordered leg list, keyed by its id so
+        // the GeoJSON builder can tag features for opposite-direction SID dashing.
+        const transitionEntries = Array.from(group.transitions.entries())
+          .map(([id, seqMap]) => ({ id, legs: Array.from(seqMap.values()).sort((a, b) => a.seq - b.seq) }))
+          .filter(({ legs }) => legs.length >= 2)
 
-        if (transitionLegs.length === 0) continue
+        if (transitionEntries.length === 0) continue
 
         // Representative path for auto-detection: the longest transition
         // (usually the procedure's core trunk shared across runways).
-        const representative = transitionLegs.reduce((a, b) => (b.length > a.length ? b : a))
+        const representative = transitionEntries.reduce((a, b) => (b.legs.length > a.legs.length ? b : a)).legs
 
         // Deduped waypoint symbols across all transitions, preferring the most
         // significant role for any fix that appears more than once.
@@ -362,7 +365,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         const isPrecision = group.type === 'APPROACH' && name[0] === 'I'
         const ROLE_RANK: Record<WaypointRole, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
         const symbolMap = new Map<string, WaypointSymbol>()
-        for (const legs of transitionLegs) {
+        for (const { legs } of transitionEntries) {
           for (const l of legs) {
             const key = `${l.fixId}:${l.lat.toFixed(4)}:${l.lon.toFixed(4)}`
             const existing = symbolMap.get(key)
@@ -387,7 +390,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
           }
         }
 
-        const features = buildProcedureFeatures(transitionLegs)
+        const features = buildProcedureFeatures(transitionEntries)
 
         procedures.push({
           id: `${icao}-${group.type}-${name}`,

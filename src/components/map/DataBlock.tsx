@@ -10,6 +10,8 @@ import {
   formatSquawk,
 } from '../../utils/formatters'
 import { decodeCallsign, airlineLogoUrl } from '../../utils/airlines'
+import { decodeAircraftType } from '../../utils/aircraftTypes'
+import { getAirportByIcao } from '../../hooks/useAirportSearch'
 import styles from './DataBlock.module.css'
 
 interface Props {
@@ -21,6 +23,10 @@ export function DataBlock({ aircraft, onClose }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [logoOk, setLogoOk] = useState(true)
   const decoded = decodeCallsign(aircraft.flight)
+
+  const originAirport = aircraft.origin ? getAirportByIcao(aircraft.origin) : undefined
+  const destAirport = aircraft.destination ? getAirportByIcao(aircraft.destination) : undefined
+  const friendlyType = decodeAircraftType(aircraft.typeCode)
 
   return (
     <Popup
@@ -40,6 +46,23 @@ export function DataBlock({ aircraft, onClose }: Props) {
           <span className={styles.speed}>{formatSpeed(aircraft.groundspeed)}</span>
           <span className={styles.type}>{aircraft.typeCode || '???'}</span>
         </div>
+
+        {(aircraft.origin || aircraft.destination) && (
+          <div className={styles.route}>
+            {aircraft.origin && (
+              <>
+                <span className={styles.routeLabel}>FROM</span>
+                <span className={styles.routeCode}>{aircraft.origin}</span>
+              </>
+            )}
+            {aircraft.destination && (
+              <>
+                <span className={styles.routeLabel}>TO</span>
+                <span className={styles.routeCode}>{aircraft.destination}</span>
+              </>
+            )}
+          </div>
+        )}
 
         {expanded && (
           <div className={styles.expanded}>
@@ -62,6 +85,10 @@ export function DataBlock({ aircraft, onClose }: Props) {
               </div>
             )}
             <div className={styles.expandRow}>
+              <span className={styles.label}>TYPE</span>
+              <span>{friendlyType || aircraft.typeCode || '---'}</span>
+            </div>
+            <div className={styles.expandRow}>
               <span className={styles.label}>REG</span>
               <span>{aircraft.registration || '---'}</span>
             </div>
@@ -82,13 +109,19 @@ export function DataBlock({ aircraft, onClose }: Props) {
             {aircraft.origin && (
               <div className={styles.expandRow}>
                 <span className={styles.label}>FROM</span>
-                <span>{aircraft.origin}</span>
+                <span>
+                  {aircraft.origin}
+                  {originAirport ? ` · ${originAirport.name}` : ''}
+                </span>
               </div>
             )}
             {aircraft.destination && (
               <div className={styles.expandRow}>
                 <span className={styles.label}>TO</span>
-                <span>{aircraft.destination}</span>
+                <span>
+                  {aircraft.destination}
+                  {destAirport ? ` · ${destAirport.name}` : ''}
+                </span>
               </div>
             )}
           </div>

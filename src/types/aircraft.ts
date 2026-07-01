@@ -16,6 +16,8 @@ export interface AdsbAircraft {
   seen_pos?: number
   mlat?: string[]
   tisb?: string[]
+  from?: string
+  to?: string
 }
 
 export interface AdsbResponse {

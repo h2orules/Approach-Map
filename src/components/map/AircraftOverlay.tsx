@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { MapRef } from 'react-map-gl'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { formatAltitude, formatSpeed, formatHeading } from '../../utils/formatters'
 import styles from './AircraftOverlay.module.css'
 
 interface Props {
@@ -86,6 +87,12 @@ export function AircraftOverlay({ mapRef }: Props) {
               <AircraftIcon />
             </div>
             <div className={styles.tag}>{label}</div>
+            <div className={styles.info}>
+              {formatAltitude(ac.altBaro)}
+              {ac.altBaro !== 'ground' && ac.baroRate > 100 ? '↑' : ac.altBaro !== 'ground' && ac.baroRate < -100 ? '↓' : ''}
+              {' '}{formatSpeed(ac.groundspeed)}<br />
+              {formatHeading(ac.track)}{ac.typeCode ? ` ${ac.typeCode}` : ''}
+            </div>
           </div>
         )
       })}

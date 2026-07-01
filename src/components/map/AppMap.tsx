@@ -9,6 +9,7 @@ import { AircraftOverlay } from './AircraftOverlay'
 import { SelectedAircraftDataBlock } from './SelectedAircraftDataBlock'
 import { ProcedureLayer } from './ProcedureLayer'
 import { FlownSegmentLayer } from './FlownSegmentLayer'
+import { AutoActiveSegmentsLayer } from './AutoActiveSegmentsLayer'
 import { RunwayLayer } from './RunwayLayer'
 import { ExtendedCenterlineLayer } from './ExtendedCenterlineLayer'
 import { WaypointMarkers } from './WaypointMarkers'
@@ -17,6 +18,7 @@ import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftPoll } from '../../hooks/useAircraftPoll'
 import { useProcedures } from '../../hooks/useProcedures'
 import { useProcedureDetection } from '../../hooks/useProcedureDetection'
+import { useRouteEnrichment } from '../../hooks/useRouteEnrichment'
 import { useRunways } from '../../hooks/useRunways'
 import { useProcedureStore } from '../../store/useProcedureStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
@@ -44,6 +46,7 @@ export function AppMap() {
   useAircraftPoll()
   useProcedures()
   useProcedureDetection()
+  useRouteEnrichment()
   useRunways()
 
   // On reload, center the map on the airport restored from the last session.
@@ -89,6 +92,8 @@ export function AppMap() {
         {visibleProcedures.map((p) => (
           <ProcedureLayer key={p.id} procedure={p} />
         ))}
+
+        <AutoActiveSegmentsLayer procedures={visibleProcedures} />
 
         <FlownSegmentLayer procedures={visibleProcedures} />
 

@@ -38,6 +38,7 @@ export const AIRLINES: Record<string, Airline> = {
   AAY: { name: 'Allegiant Air', iata: 'G4' },
   SCX: { name: 'Sun Country Airlines', iata: 'SY' },
   VOI: { name: 'Volaris', iata: 'Y4' },
+  RFS: { name: 'Rainier Sky', iata: 'RFS' },
   // International common at US gateways
   ACA: { name: 'Air Canada', iata: 'AC' },
   WJA: { name: 'WestJet', iata: 'WS' },
@@ -93,5 +94,6 @@ export function decodeCallsign(raw: string | null | undefined): DecodedCallsign 
 
 /** Best-effort airline logo URL (avs.io free CDN), keyed by IATA code. */
 export function airlineLogoUrl(iata: string): string {
+  if (iata === 'RFS') return 'https://www.rainierflightservice.com/images/logo/logo.png'
   return `https://pics.avs.io/120/40/${iata}.png`
 }

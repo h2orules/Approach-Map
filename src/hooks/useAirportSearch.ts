@@ -17,6 +17,11 @@ function loadAirports(): Promise<Airport[]> {
   return loadPromise
 }
 
+/** Synchronous lookup by ICAO code. Returns undefined if the list isn't loaded yet. */
+export function getAirportByIcao(icao: string): Airport | undefined {
+  return airportList?.find((a) => a.icao === icao.toUpperCase())
+}
+
 export function useAirportSearch(query: string) {
   const [airports, setAirports] = useState<Airport[]>([])
   const [results, setResults] = useState<Airport[]>([])

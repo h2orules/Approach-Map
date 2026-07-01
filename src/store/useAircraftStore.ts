@@ -11,6 +11,7 @@ interface AircraftStore {
 
   updateFromPoll: (raw: AdsbAircraft[], pollTimeMs: number) => void
   updateInterpolated: (hex: string, lat: number, lon: number) => void
+  setRouteData: (hex: string, origin: string, destination: string) => void
   getAll: () => InterpolatedAircraft[]
   setSelectedHex: (hex: string | null) => void
 }
@@ -38,6 +39,9 @@ function mapRawToInterpolated(
     lastPollMs: pollMs,
     interpLat: lat,
     interpLon: lon,
+    // Preserve previously resolved route; ADS-B Exchange supplies from/to on some aircraft
+    origin: raw.from?.trim() || prev?.origin,
+    destination: raw.to?.trim() || prev?.destination,
   }
 }
 
@@ -74,6 +78,15 @@ export const useAircraftStore = create<AircraftStore>((set, get) => ({
       if (!ac) return s
       const next = new Map(s.aircraftMap)
       next.set(hex, { ...ac, interpLat: lat, interpLon: lon })
+      return { aircraftMap: next }
+    }),
+
+  setRouteData: (hex, origin, destination) =>
+    set((s) => {
+      const ac = s.aircraftMap.get(hex)
+      if (!ac || (ac.origin && ac.destination)) return s
+      const next = new Map(s.aircraftMap)
+      next.set(hex, { ...ac, origin: ac.origin || origin, destination: ac.destination || destination })
       return { aircraftMap: next }
     }),
 

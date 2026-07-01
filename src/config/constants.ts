@@ -3,7 +3,12 @@ export const ADSBX_SEARCH_RADIUS_NM = 50
 export const DEFAULT_POLL_INTERVAL_MS = 5_000
 export const STALE_AIRCRAFT_THRESHOLD_S = 60
 
+// SID/STAR cross-track tolerance: wider to catch traffic still navigating to the route.
 export const CROSS_TRACK_THRESHOLD_NM = 0.5
+// Approach cross-track tolerance: tighter so parallel runways are disambiguated by
+// lateral position. At KSEA 16L/16C spacing is ~0.13 nm; 0.25 nm keeps a comfortable
+// margin while still being well inside the closest pair.
+export const CROSS_TRACK_APPROACH_NM = 0.25
 // Max angle between an aircraft's track and the procedure's local direction for
 // it to count as "flying" that procedure. Rejects reciprocal-runway matches
 // (e.g. a rwy-16 arrival sitting on the shared rwy-34 approach centerline).
@@ -12,7 +17,15 @@ export const CROSS_TRACK_THRESHOLD_NM = 0.5
 export const DIRECTION_TOLERANCE_DEG = 45
 export const ALT_THRESHOLD_NEAR_FT = 250
 export const ALT_THRESHOLD_FAR_FT = 500
+// Tight altitude tolerance used when both bracketing waypoints have exact (AT or
+// BETWEEN) altitude constraints, or when on a precision GS segment.  Linear
+// interpolation / GS geometry is accurate to ~50 ft in those cases, so 100 ft
+// gives a comfortable margin without admitting adjacent-runway traffic.
+export const ALT_THRESHOLD_CONSTRAINED_FT = 100
 export const NEAR_AIRPORT_DISTANCE_NM = 5
+// 3° glide slope: sin(3°) × 6076 ft/nm ≈ 318 ft/nm.  Used to project expected
+// altitude on the GS segment of precision approaches.
+export const GS_FEET_PER_NM = 318
 
 export const AUTO_HIDE_DELAY_MS = 5 * 60 * 1_000
 

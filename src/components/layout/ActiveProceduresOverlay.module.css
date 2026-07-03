@@ -12,11 +12,24 @@
 }
 
 .title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 9px;
   letter-spacing: 0.12em;
   color: #64748b;
   text-transform: uppercase;
   margin-bottom: 6px;
+}
+
+.atisBadge {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  border-radius: 3px;
+  padding: 0 4px;
+  text-transform: uppercase;
 }
 
 .item {

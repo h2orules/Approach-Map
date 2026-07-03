@@ -19,6 +19,7 @@ import { useAircraftPoll } from '../../hooks/useAircraftPoll'
 import { useProcedures } from '../../hooks/useProcedures'
 import { useProcedureDetection } from '../../hooks/useProcedureDetection'
 import { useRouteEnrichment } from '../../hooks/useRouteEnrichment'
+import { useDatis } from '../../hooks/useDatis'
 import { useRunways } from '../../hooks/useRunways'
 import { useProcedureStore } from '../../store/useProcedureStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
@@ -47,6 +48,7 @@ export function AppMap() {
   useProcedures()
   useProcedureDetection()
   useRouteEnrichment()
+  useDatis()
   useRunways()
 
   // On reload, center the map on the airport restored from the last session.

@@ -4,19 +4,16 @@ import { useProcedureStore } from '../store/useProcedureStore'
 import { useAirportStore } from '../store/useAirportStore'
 import { detectProceduresInUse } from '../geo/procedureDetection'
 import type { Procedure } from '../types/procedure'
+import type { AtisInfo } from '../api/datis'
 
-// Approach type prefix → display priority (higher = preferred, shown on top).
-const APPROACH_TYPE_PRIORITY: Record<string, number> = { I: 4, R: 3, H: 2, L: 1 }
-
-function approachPriority(proc: Procedure): number {
-  if (proc.type !== 'APPROACH') return -1
-  return APPROACH_TYPE_PRIORITY[proc.name[0]?.toUpperCase()] ?? 0
-}
+// Static fallback priority when ATIS is unavailable or doesn't list the type.
+// Higher = preferred.
+const STATIC_PRIORITY: Record<string, number> = { I: 4, R: 3, H: 2, L: 1 }
 
 /**
  * Extract the runway designator from an approach procedure name.
- * CIFP names are like I34L, R34C, H16R, L28, VDME-A.
- * Returns e.g. "34L", "16R", or "" for non-runway-specific approaches.
+ * CIFP names: I34L, R34C, H16R, L28, VDME-A.
+ * Returns e.g. "34L", "16R", or all runways joined for non-specific approaches.
  */
 function approachRunwayKey(proc: Procedure): string {
   const m = proc.name.match(/^[A-Z](\d{2}[LRC]?)/)
@@ -25,14 +22,32 @@ function approachRunwayKey(proc: Procedure): string {
 }
 
 /**
+ * Priority score for a procedure, incorporating D-ATIS preferences when available.
+ *
+ * ATIS-listed types receive a boosted score (100 − position) so they always
+ * outrank types not mentioned in the ATIS.  Within ATIS entries the original
+ * text order is preserved (ILS before LOC when ATIS says "ILS OR LOC").
+ * Non-ATIS types fall back to static I > R > H > L ordering.
+ */
+function priority(proc: Procedure, rwyKey: string, atisInfo: AtisInfo | null): number {
+  const prefix = proc.name[0]?.toUpperCase() ?? ''
+  const prefs = atisInfo?.runwayPrefs[rwyKey] ?? []
+  const atisIdx = prefs.indexOf(prefix)
+  if (atisIdx >= 0) return 100 - atisIdx
+  return STATIC_PRIORITY[prefix] ?? 0
+}
+
+/**
  * Pass 1 — same runway, competing types (I vs R vs H vs L on the same runway).
- * Suppress lower-priority approaches unless they have at least one aircraft not
- * already accounted for by a higher-priority approach.
+ *
+ * Strict: keep exactly the ONE highest-priority detected approach per runway.
+ * All others are suppressed unconditionally, regardless of which aircraft they
+ * matched.  D-ATIS preferences override the static I > R > H > L order.
  */
 function deduplicateApproaches(
   detected: Record<string, boolean>,
-  detectedHexes: Record<string, string[]>,
   procedures: Procedure[],
+  atisInfo: AtisInfo | null,
 ): Record<string, boolean> {
   const result = { ...detected }
 
@@ -46,23 +61,12 @@ function deduplicateApproaches(
     byRunway.set(key, group)
   }
 
-  for (const group of byRunway.values()) {
+  for (const [rwyKey, group] of byRunway) {
     if (group.length <= 1) continue
-    group.sort((a, b) => approachPriority(b) - approachPriority(a))
-
-    const claimed = new Set<string>()
-    for (const proc of group) {
-      const myHexes = detectedHexes[proc.id] ?? []
-      if (claimed.size === 0) {
-        for (const h of myHexes) claimed.add(h)
-      } else {
-        const uniqueHexes = myHexes.filter((h) => !claimed.has(h))
-        if (uniqueHexes.length > 0) {
-          for (const h of myHexes) claimed.add(h)
-        } else {
-          result[proc.id] = false
-        }
-      }
+    group.sort((a, b) => priority(b, rwyKey, atisInfo) - priority(a, rwyKey, atisInfo))
+    // Keep only the top-priority approach; suppress everything else.
+    for (let i = 1; i < group.length; i++) {
+      result[group[i].id] = false
     }
   }
 
@@ -130,6 +134,7 @@ function deduplicateParallelApproaches(
 export function useProcedureDetection() {
   const lastPollMs = useAircraftStore((s) => s.lastPollMs)
   const selectedAirport = useAirportStore((s) => s.selectedAirport)
+  const atisInfo = useAirportStore((s) => s.atisInfo)
   const procedures = useProcedureStore((s) => s.procedures)
   const updateAutoDetection = useProcedureStore((s) => s.updateAutoDetection)
 
@@ -148,11 +153,11 @@ export function useProcedureDetection() {
       now,
     )
 
-    // Pass 1: same runway, competing types (I vs R vs H vs L)
-    const deduped1 = deduplicateApproaches(result.detected, result.detectedHexes, procedures)
-    // Pass 2: parallel runways — assign each aircraft to the nearest procedure
+    // Pass 1: same runway, competing types — keep only highest-priority (ATIS-informed)
+    const deduped1 = deduplicateApproaches(result.detected, procedures, atisInfo)
+    // Pass 2: parallel runways — assign each aircraft to the nearest centreline
     const deduped2 = deduplicateParallelApproaches(deduped1, result.detectedHexes, result.crossTrackNm, procedures)
 
     updateAutoDetection(deduped2, now)
-  }, [lastPollMs, selectedAirport, procedures, updateAutoDetection])
+  }, [lastPollMs, selectedAirport, procedures, atisInfo, updateAutoDetection])
 }

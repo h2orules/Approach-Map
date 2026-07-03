@@ -49,6 +49,7 @@ interface Record424 {
   descCode4: string // waypoint description code position 4, col 43 (A/F/M/H)
   flyover: boolean  // waypoint description code position 2, col 41 ('Y' = flyover)
   turnDir: string // col 44 (L/R)
+  recNav: string // cols 51-54 (recommended navaid — the DME reference)
   rho: string    // cols 67-70 (DME distance to fix from navaid, tenths of nm)
   magCourse: string // cols 71-74 (tenths of a degree)
   legLen: string // cols 75-78 (route distance / holding leg)
@@ -83,6 +84,7 @@ function parseProcRecord(line: string): Record424 | null {
     descCode4: line[42] ?? ' ',
     flyover: (line[40] ?? ' ') === 'Y',
     turnDir: line[43] ?? ' ',
+    recNav: line.slice(50, 54).trim(),
     rho: line.slice(66, 70).trim(),
     magCourse: line.slice(70, 74).trim(),
     legLen: line.slice(74, 78).trim(),
@@ -106,6 +108,7 @@ interface Leg {
   legNm: number // straight-leg length, nm (time legs approximated)
   speedKt: number // speed restriction (knots, 0 = none)
   dmeNm: number | null // Rho: DME distance from navaid to this fix (nm), null if absent
+  recNavId: string // recommended navaid id (the DME reference), '' if absent
 }
 
 function legRole(descCode4: string, pathTerm: string): WaypointRole {
@@ -197,6 +200,9 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
     // runway identifiers like RW34C repeat across airports and must not collide.
     const waypointDb = new Map<string, WaypointRecord>()
     const runwayDb = new Map<string, WaypointRecord>()
+    // ILS localizer positions, keyed by `${icao}:${locId}`. Localizer ids (e.g.
+    // IPAE) repeat across airports and serve as the DME reference for ILS legs.
+    const localizerDb = new Map<string, WaypointRecord>()
 
     self.postMessage({ type: 'progress', percent: 0, message: 'Building navaid database…' } satisfies ParseProgress)
 
@@ -224,6 +230,17 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         const fixId = line.slice(13, 18).trim()
         const coords = parseLatLon(line.slice(32, 41).trim(), line.slice(41, 51).trim())
         if (icao && fixId && coords) runwayDb.set(`${icao}:${fixId}`, { ...coords, navaidType: 'RUNWAY' })
+      } else if (sc === 'P' && line[12] === 'I') {
+        // ILS localizer (airport section P, subsection I). Carries the localizer
+        // antenna position in the standard lat/lon columns — this is the DME
+        // reference for ILS approach legs (recommended navaid e.g. IPAE). Keyed
+        // by airport because localizer ids repeat across airports.
+        const icao = line.slice(6, 10).trim()
+        const locId = line.slice(13, 17).trim()
+        const coords = parseLatLon(line.slice(32, 41).trim(), line.slice(41, 51).trim())
+        if (icao && locId && coords && !localizerDb.has(`${icao}:${locId}`)) {
+          localizerDb.set(`${icao}:${locId}`, { ...coords, navaidType: 'LOC' })
+        }
       } else if (sc === 'E' && ss === 'A') {
         // Enroute waypoint
         const fixId = line.slice(13, 18).trim()
@@ -328,6 +345,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         legNm: parseLegLen(rec.legLen),
         speedKt: parseInt(rec.speedLimit) || 0,
         dmeNm: rhoRaw > 0 ? rhoRaw / 10 : null,
+        recNavId: rec.recNav,
       })
     }
 
@@ -370,6 +388,9 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         const isPrecision = group.type === 'APPROACH' && name[0] === 'I'
         const ROLE_RANK: Record<WaypointRole, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
         const symbolMap = new Map<string, WaypointSymbol>()
+        // Recommended-navaid ids referenced by DME fixes; each is emitted as its
+        // own symbol below so the DME reference point is visible on the map.
+        const dmeNavaidIds = new Set<string>()
         for (const { legs } of transitionEntries) {
           for (const l of legs) {
             const key = `${l.fixId}:${l.lat.toFixed(4)}:${l.lon.toFixed(4)}`
@@ -380,11 +401,13 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
             const alt = noRestriction ? null : l.altConstraint
             const speedKt = noRestriction || !l.speedKt ? null : l.speedKt
             const gsFaf = l.role === 'faf' && isPrecision
+            const dmeNavaid = l.dmeNm != null && l.recNavId ? l.recNavId : null
+            if (dmeNavaid) dmeNavaidIds.add(dmeNavaid)
             if (!existing) {
               symbolMap.set(key, {
                 id: l.fixId, lat: l.lat, lon: l.lon, navaidType: l.navaidType,
                 role: l.role, alt, speedKt, gsFaf, flyover: l.flyover,
-                dmeNm: l.dmeNm,
+                dmeNm: l.dmeNm, dmeNavaid,
               })
             } else {
               if (ROLE_RANK[l.role] > ROLE_RANK[existing.role]) existing.role = l.role
@@ -392,9 +415,28 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
               if (!existing.speedKt && speedKt) existing.speedKt = speedKt
               if (gsFaf) existing.gsFaf = true
               if (l.flyover) existing.flyover = true
-              if (existing.dmeNm == null && l.dmeNm != null) existing.dmeNm = l.dmeNm
+              if (existing.dmeNm == null && l.dmeNm != null) {
+                existing.dmeNm = l.dmeNm
+                existing.dmeNavaid = dmeNavaid
+              }
             }
           }
+        }
+
+        // Emit each DME reference navaid as its own symbol so the point the DME
+        // distance is measured from is shown. Localizers live in localizerDb
+        // (keyed by airport); VOR/VORTAC/NDB are in the global waypointDb. Skip
+        // any navaid already present as a fix symbol (same id + position).
+        for (const navId of dmeNavaidIds) {
+          const nav = waypointDb.get(navId) ?? localizerDb.get(`${icao}:${navId}`)
+          if (!nav) continue
+          const key = `${navId}:${nav.lat.toFixed(4)}:${nav.lon.toFixed(4)}`
+          if (symbolMap.has(key)) continue
+          symbolMap.set(key, {
+            id: navId, lat: nav.lat, lon: nav.lon, navaidType: nav.navaidType,
+            role: 'normal', alt: null, speedKt: null, gsFaf: false,
+            flyover: false, dmeNm: null, dmeNavaid: null, isDmeSource: true,
+          })
         }
 
         const features = buildProcedureFeatures(transitionEntries)

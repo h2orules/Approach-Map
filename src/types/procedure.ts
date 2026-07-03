@@ -2,7 +2,7 @@ import type { FeatureCollection } from 'geojson'
 
 export type ProcedureType = 'SID' | 'STAR' | 'APPROACH'
 
-export type NavaidType = 'VOR' | 'VORTAC' | 'NDB' | 'FIX' | 'RUNWAY' | 'AIRPORT' | null
+export type NavaidType = 'VOR' | 'VORTAC' | 'NDB' | 'FIX' | 'RUNWAY' | 'AIRPORT' | 'LOC' | null
 
 export interface AltConstraint {
   type: 'AT' | 'AT_OR_ABOVE' | 'AT_OR_BELOW' | 'BETWEEN'
@@ -42,6 +42,17 @@ export interface WaypointSymbol {
    * Optional for backwards compatibility with pre-parsed IndexedDB cache entries.
    */
   dmeNm?: number | null
+  /**
+   * Identifier of the recommended navaid the DME distance is measured from
+   * (ARINC 424 Recommended NAVAID, cols 51-54). Null when this fix has no DME.
+   * The navaid itself is emitted as its own symbol (isDmeSource) so it renders.
+   */
+  dmeNavaid?: string | null
+  /**
+   * True when this symbol is a navaid emitted solely because it is the DME
+   * reference for another fix on the procedure. Rendered with a DME ring.
+   */
+  isDmeSource?: boolean
 }
 
 export interface Procedure {

@@ -75,6 +75,18 @@
   gap: 4px;
 }
 
+/* Amber dashed ring marking a navaid that is the DME reference for a fix. */
+.dmeRing {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 30px;
+  border: 1.5px dashed #fde68a;
+  border-radius: 50%;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 /* Hand-drawn glideslope-intercept bolt, absolutely placed in the marker. */
 .bolt {
   position: absolute;

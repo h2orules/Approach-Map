@@ -66,6 +66,16 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
       </svg>
     )
   }
+  if (s.navaidType === 'LOC') {
+    // Localizer (ILS DME reference) — narrow diamond with a center dot.
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24">
+        {fo && <Ring cx={12} cy={12} r={11} color="#c4b5fd" />}
+        <path d="M12 3 L16 12 L12 21 L8 12 Z" fill="none" stroke="#c4b5fd" strokeWidth={2} strokeLinejoin="round" />
+        <circle cx="12" cy="12" r="1.8" fill="#c4b5fd" />
+      </svg>
+    )
+  }
   // default fix — solid triangle
   return (
     <svg width={size} height={size} viewBox="0 0 22 22">
@@ -356,18 +366,10 @@ export function WaypointMarkers({ procedures }: Props) {
       for (const proc of procedures) {
         if (proc.type !== 'APPROACH') continue
 
-        // Build set of fix IDs that carry a DME annotation — those segments are
-        // handled by the D-badge at the fix, so no midpoint label is needed.
-        const dmeFixIds = new Set(
-          proc.symbols.filter((s) => (s.dmeNm ?? null) !== null).map((s) => s.id),
-        )
-
         const wpts = proc.waypoints
         for (let i = 0; i < wpts.length - 1; i++) {
           const a = wpts[i]
           const b = wpts[i + 1]
-          // Skip when either endpoint already has a DME badge.
-          if (dmeFixIds.has(a.id) || dmeFixIds.has(b.id)) continue
 
           const pt1 = turf.point([a.lon, a.lat])
           const pt2 = turf.point([b.lon, b.lat])
@@ -428,6 +430,7 @@ export function WaypointMarkers({ procedures }: Props) {
         return (
           <Marker key={symKey(s)} longitude={s.lon} latitude={s.lat} anchor="center">
             <div className={styles.container}>
+              {s.isDmeSource && <div className={styles.dmeRing} />}
               <div className={styles.icon}>
                 <WpIcon s={s} />
               </div>

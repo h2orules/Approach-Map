@@ -43,15 +43,15 @@ export function RunwayLayer({ runways }: Props) {
         type="fill"
         paint={{
           'fill-color': RUNWAY_FILL_COLOR,
-          'fill-opacity': 0.9,
+          'fill-opacity': 1,
         }}
       />
       <Layer
         id="runway-outline"
         type="line"
         paint={{
-          'line-color': '#6b7280',
-          'line-width': 1,
+          'line-color': '#94a3b8',
+          'line-width': 1.5,
         }}
       />
     </Source>

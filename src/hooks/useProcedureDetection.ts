@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react'
 import { useAircraftStore } from '../store/useAircraftStore'
 import { useProcedureStore } from '../store/useProcedureStore'
 import { useAirportStore } from '../store/useAirportStore'
+import { useSettingsStore } from '../store/useSettingsStore'
 import { detectProceduresInUse } from '../geo/procedureDetection'
+import { positionToMinFt, positionToMaxFt } from '../utils/altitudeFilter'
 import type { Procedure } from '../types/procedure'
 import type { AtisInfo } from '../api/datis'
 
@@ -169,6 +171,8 @@ export function useProcedureDetection() {
   const atisInfo = useAirportStore((s) => s.atisInfo)
   const procedures = useProcedureStore((s) => s.procedures)
   const updateAutoDetection = useProcedureStore((s) => s.updateAutoDetection)
+  const altFilterMin = useSettingsStore((s) => s.altFilterMin)
+  const altFilterMax = useSettingsStore((s) => s.altFilterMax)
 
   // Persists across polls: hex → Set<procId> seen on a pre-MAP segment.
   // Cleared when an aircraft leaves the tracked set.
@@ -188,7 +192,14 @@ export function useProcedureDetection() {
   useEffect(() => {
     if (!selectedAirport || procedures.length === 0 || lastPollMs === 0) return
 
-    const aircraft = Array.from(useAircraftStore.getState().aircraftMap.values())
+    const minFt = positionToMinFt(altFilterMin)
+    const maxFt = positionToMaxFt(altFilterMax)
+    const aircraft = Array.from(useAircraftStore.getState().aircraftMap.values()).filter(
+      (ac) =>
+        ac.altBaro !== 'ground' &&
+        (ac.altBaro as number) >= minFt &&
+        (ac.altBaro as number) <= maxFt,
+    )
     const now = Date.now()
 
     const result = detectProceduresInUse(
@@ -295,5 +306,5 @@ export function useProcedureDetection() {
     }
 
     console.groupEnd()
-  }, [lastPollMs, selectedAirport, procedures, atisInfo, updateAutoDetection])
+  }, [lastPollMs, selectedAirport, procedures, atisInfo, updateAutoDetection, altFilterMin, altFilterMax])
 }

@@ -14,6 +14,7 @@ import { RunwayLayer } from './RunwayLayer'
 import { ExtendedCenterlineLayer } from './ExtendedCenterlineLayer'
 import { WaypointMarkers } from './WaypointMarkers'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
+import { AltitudeFilter } from './AltitudeFilter'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftPoll } from '../../hooks/useAircraftPoll'
 import { useProcedures } from '../../hooks/useProcedures'
@@ -106,6 +107,8 @@ export function AppMap() {
 
       {/* DOM overlay so aircraft render above the waypoint markers and stay crisp */}
       <AircraftOverlay mapRef={mapRef} />
+
+      <AltitudeFilter />
 
       <ActiveProceduresOverlay />
     </div>

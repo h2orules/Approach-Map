@@ -4,7 +4,6 @@
   pointer-events: none;
   overflow: hidden;
   z-index: 3;
-  /* above the map's marker pane (waypoints) */
 }
 
 .ac {
@@ -14,6 +13,7 @@
   pointer-events: auto;
   cursor: pointer;
   will-change: transform;
+  /* color is set imperatively in the RAF loop to encode altitude */
 }
 
 .iconWrap {
@@ -27,12 +27,30 @@
   filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.9));
 }
 
-.tag {
+/* ── Mini data label — three centered lines below the icon ───────────────── */
+
+.dataLabel {
   position: absolute;
   left: 0;
   top: 0;
   transform: translate(-50%, 22px);
   white-space: nowrap;
+  text-align: center;
+}
+
+.line {
+  display: block;
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* Tighter top gap — applied to line 3 to pull it closer to line 2 */
+.lineTight {
+  margin-top: -2px;
+}
+
+/* Line 1: callsign / tail number */
+.callsign {
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
   font-size: 14px;
   font-weight: 700;
@@ -40,28 +58,52 @@
   text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
 }
 
-.info {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform: translate(-50%, 36px);
-  white-space: nowrap;
+/* Line 2: altitude + speed */
+.altspd {
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
   font-size: 12px;
   font-weight: 500;
   color: #e8edff;
   text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
-  text-align: center;
 }
+
+/* Line 2: heading (after alt/spd) — same color as altspd */
+.heading {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: #e8edff;
+  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
+}
+
+/* Line 3: origin → destination */
+.route {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: #7dd3fc;
+  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14;
+}
+
+/* Line 3: aircraft type code */
+.type {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14;
+}
+
+/* ── Selected state ──────────────────────────────────────────────────────── */
 
 .selected .icon {
   filter: drop-shadow(0 0 4px #ffffff) drop-shadow(0 0 2px #ffffff);
 }
 
-.selected .tag {
+.selected .callsign {
   color: #ffffff;
 }
 
-.selected .info {
+.selected .altspd {
   color: #cbd5e1;
 }

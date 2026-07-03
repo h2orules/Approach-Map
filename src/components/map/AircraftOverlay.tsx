@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { MapRef } from 'react-map-gl'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { useSettingsStore } from '../../store/useSettingsStore'
 import { formatAltitude, formatSpeed, formatHeading } from '../../utils/formatters'
+import { altitudeColor } from '../../utils/colorScheme'
+import { positionToMinFt, positionToMaxFt } from '../../utils/altitudeFilter'
 import styles from './AircraftOverlay.module.css'
 
 interface Props {
@@ -11,8 +14,8 @@ interface Props {
 function AircraftIcon() {
   return (
     <svg width={42} height={42} viewBox="0 0 24 24" className={styles.icon}>
-      <path fill="#f59e0b" stroke="#0b0f14" strokeWidth={0.6} d="M12 2L8 18l4-2 4 2L12 2Z" />
-      <path fill="#f59e0b" stroke="#0b0f14" strokeWidth={0.6} d="M5 12L2 14l10-2 10 2-3-2H5Z" />
+      <path fill="currentColor" stroke="#0b0f14" strokeWidth={0.6} d="M12 2L8 18l4-2 4 2L12 2Z" />
+      <path fill="currentColor" stroke="#0b0f14" strokeWidth={0.6} d="M5 12L2 14l10-2 10 2-3-2H5Z" />
     </svg>
   )
 }
@@ -21,7 +24,8 @@ function AircraftIcon() {
  * Aircraft rendered as a DOM overlay (not a GL layer) so they sit above the
  * waypoint markers, stay crisp at any size, and update at 60fps. The marker
  * list re-renders only when the aircraft set changes (poll `revision`); per-
- * frame position updates are applied imperatively to avoid React churn.
+ * frame position, colour, z-index, and filter visibility updates are applied
+ * imperatively to avoid React churn.
  */
 export function AircraftOverlay({ mapRef }: Props) {
   const revision = useAircraftStore((s) => s.revision)
@@ -35,18 +39,37 @@ export function AircraftOverlay({ mapRef }: Props) {
     [revision],
   )
 
-  // Continuous reposition loop (also handles pan/zoom since it reprojects).
+  // Continuous reposition loop — also updates colour, z-index, and filter
+  // visibility so dragging the slider has immediate visual effect without
+  // triggering React re-renders.
   useEffect(() => {
     let raf = 0
     const frame = () => {
       const map = mapRef.current?.getMap()
       if (map) {
         const store = useAircraftStore.getState()
+        const { altFilterMin, altFilterMax } = useSettingsStore.getState()
+        const minFt = positionToMinFt(altFilterMin)
+        const maxFt = positionToMaxFt(altFilterMax)
+
         for (const [hex, node] of nodes.current) {
           const ac = store.aircraftMap.get(hex)
           if (!ac) continue
+
+          const alt = ac.altBaro as number
+          const inRange = alt >= minFt && alt <= maxFt
+
+          if (!inRange) {
+            node.style.display = 'none'
+            continue
+          }
+          node.style.display = ''
+
           const p = map.project([ac.interpLon, ac.interpLat])
           node.style.transform = `translate(${p.x}px, ${p.y}px)`
+          node.style.color = altitudeColor(ac.altBaro)
+          // Higher altitude = higher z-index = rendered on top.
+          node.style.zIndex = String(Math.max(1, Math.floor(alt / 100)))
         }
       }
       raf = requestAnimationFrame(frame)
@@ -70,6 +93,17 @@ export function AircraftOverlay({ mapRef }: Props) {
     <div className={styles.overlay}>
       {aircraft.map((ac) => {
         const label = (ac.flight && ac.flight.trim()) || ac.registration || ac.hex.toUpperCase()
+        const altStr = formatAltitude(ac.altBaro)
+        const vsi =
+          ac.altBaro !== 'ground' && ac.baroRate > 100
+            ? '↑'
+            : ac.altBaro !== 'ground' && ac.baroRate < -100
+              ? '↓'
+              : ''
+        const hasRoute = !!(ac.origin || ac.destination)
+        const origin = ac.origin || 'Unkwn'
+        const dest = ac.destination || 'Unkwn'
+
         return (
           <div
             key={ac.hex}
@@ -78,20 +112,44 @@ export function AircraftOverlay({ mapRef }: Props) {
               else nodes.current.delete(ac.hex)
             }}
             className={`${styles.ac} ${ac.hex === selectedHex ? styles.selected : ''}`}
+            style={{
+              color: altitudeColor(ac.altBaro),
+              zIndex: ac.altBaro !== 'ground' ? Math.max(1, Math.floor((ac.altBaro as number) / 100)) : 1,
+            }}
             onClick={(e) => {
               e.stopPropagation()
               setSelectedHex(ac.hex === selectedHex ? null : ac.hex)
             }}
           >
-            <div className={styles.iconWrap} style={{ transform: `translate(-50%, -50%) rotate(${ac.track}deg)` }}>
+            <div
+              className={styles.iconWrap}
+              style={{ transform: `translate(-50%, -50%) rotate(${ac.track}deg)` }}
+            >
               <AircraftIcon />
             </div>
-            <div className={styles.tag}>{label}</div>
-            <div className={styles.info}>
-              {formatAltitude(ac.altBaro)}
-              {ac.altBaro !== 'ground' && ac.baroRate > 100 ? '↑' : ac.altBaro !== 'ground' && ac.baroRate < -100 ? '↓' : ''}
-              {' '}{formatSpeed(ac.groundspeed)}<br />
-              {formatHeading(ac.track)}{ac.typeCode ? ` ${ac.typeCode}` : ''}
+
+            <div className={styles.dataLabel}>
+              {/* Line 1: callsign or tail number */}
+              <div className={styles.line}>
+                <span className={styles.callsign}>{label}</span>
+              </div>
+              {/* Line 2: ALT↑ SPD HDG° */}
+              <div className={styles.line}>
+                <span className={styles.altspd}>{altStr}{vsi} {formatSpeed(ac.groundspeed)}</span>
+                {' '}
+                <span className={styles.heading}>{formatHeading(ac.track)}</span>
+              </div>
+              {/* Line 3: ORIG→DEST TYPE (shown when either route or type is known) */}
+              {(hasRoute || ac.typeCode) && (
+                <div className={`${styles.line} ${styles.lineTight}`}>
+                  {hasRoute && (
+                    <span className={styles.route}>{origin}→{dest}{ac.typeCode ? ' ' : ''}</span>
+                  )}
+                  {ac.typeCode && (
+                    <span className={styles.type}>{ac.typeCode}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )

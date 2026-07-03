@@ -43,13 +43,16 @@ function priority(proc: Procedure, rwyKey: string, atisInfo: AtisInfo | null): n
  * Strict: keep exactly the ONE highest-priority detected approach per runway.
  * All others are suppressed unconditionally, regardless of which aircraft they
  * matched.  D-ATIS preferences override the static I > R > H > L order.
+ *
+ * Returns [result, log] where log records what was suppressed and why.
  */
 function deduplicateApproaches(
   detected: Record<string, boolean>,
   procedures: Procedure[],
   atisInfo: AtisInfo | null,
-): Record<string, boolean> {
+): [Record<string, boolean>, Array<{ kept: string; suppressed: string; reason: string }>] {
   const result = { ...detected }
+  const log: Array<{ kept: string; suppressed: string; reason: string }> = []
 
   const approachProcs = procedures.filter((p) => p.type === 'APPROACH' && result[p.id])
   const byRunway = new Map<string, Procedure[]>()
@@ -64,13 +67,20 @@ function deduplicateApproaches(
   for (const [rwyKey, group] of byRunway) {
     if (group.length <= 1) continue
     group.sort((a, b) => priority(b, rwyKey, atisInfo) - priority(a, rwyKey, atisInfo))
-    // Keep only the top-priority approach; suppress everything else.
+
+    const winner = group[0]
     for (let i = 1; i < group.length; i++) {
-      result[group[i].id] = false
+      const loser = group[i]
+      result[loser.id] = false
+      const winPri = priority(winner, rwyKey, atisInfo)
+      const reason = winPri >= 100
+        ? `ATIS prefers ${winner.name}`
+        : `priority ${winner.name}>${loser.name} (I>R>H>L)`
+      log.push({ kept: winner.name, suppressed: loser.name, reason })
     }
   }
 
-  return result
+  return [result, log]
 }
 
 /**
@@ -80,18 +90,20 @@ function deduplicateApproaches(
  * cross-track threshold overlaps adjacent parallel runways), assign each
  * aircraft to the procedure whose centreline it is physically closest to.
  * Procedures that end up with no remaining aircraft are suppressed.
+ *
+ * Returns [result, log].
  */
 function deduplicateParallelApproaches(
   detected: Record<string, boolean>,
   detectedHexes: Record<string, string[]>,
   crossTrackNm: Record<string, Record<string, number>>,
   procedures: Procedure[],
-): Record<string, boolean> {
+): [Record<string, boolean>, Array<{ suppressed: string; reason: string }>] {
   const result = { ...detected }
+  const log: Array<{ suppressed: string; reason: string }> = []
 
   const approachProcs = procedures.filter((p) => p.type === 'APPROACH' && result[p.id])
 
-  // Build hex → [procIds it matched] map.
   const hexProcIds = new Map<string, Set<string>>()
   for (const proc of approachProcs) {
     for (const hex of detectedHexes[proc.id] ?? []) {
@@ -100,9 +112,9 @@ function deduplicateParallelApproaches(
     }
   }
 
-  // For each hex that matched 2+ procedures, find the nearest and remove it
-  // from the others.
   const removedFromProc = new Map<string, Set<string>>()
+  const procById = new Map(procedures.map((p) => [p.id, p]))
+
   for (const [hex, procIds] of hexProcIds) {
     if (procIds.size <= 1) continue
 
@@ -120,15 +132,35 @@ function deduplicateParallelApproaches(
     }
   }
 
-  // Suppress any approach whose aircraft set is now entirely claimed by closer procedures.
   for (const proc of approachProcs) {
     const removed = removedFromProc.get(proc.id)
     if (!removed) continue
     const remaining = (detectedHexes[proc.id] ?? []).filter((h) => !removed.has(h))
-    if (remaining.length === 0) result[proc.id] = false
+    if (remaining.length === 0) {
+      result[proc.id] = false
+      // Find which procedure claimed the aircraft
+      const claimedBy = [...(detectedHexes[proc.id] ?? [])]
+        .map((h) => {
+          const nearestId = [...(hexProcIds.get(h) ?? [])]
+            .filter((id) => id !== proc.id)
+            .sort((a, b) => (crossTrackNm[a]?.[h] ?? Infinity) - (crossTrackNm[b]?.[h] ?? Infinity))[0]
+          return procById.get(nearestId ?? '')?.name ?? nearestId ?? '?'
+        })
+        .filter((v, i, a) => a.indexOf(v) === i)
+      log.push({
+        suppressed: proc.name,
+        reason: `parallel rwy — all aircraft closer to ${claimedBy.join('/')}`,
+      })
+    }
   }
 
-  return result
+  return [result, log]
+}
+
+/** Resolve an aircraft hex to a display label (callsign → registration → hex). */
+function acLabel(hex: string): string {
+  const ac = useAircraftStore.getState().aircraftMap.get(hex)
+  return ac ? (ac.flight?.trim() || ac.registration || hex.toUpperCase()) : hex.toUpperCase()
 }
 
 export function useProcedureDetection() {
@@ -154,10 +186,71 @@ export function useProcedureDetection() {
     )
 
     // Pass 1: same runway, competing types — keep only highest-priority (ATIS-informed)
-    const deduped1 = deduplicateApproaches(result.detected, procedures, atisInfo)
+    const [deduped1, dedupLog1] = deduplicateApproaches(result.detected, procedures, atisInfo)
     // Pass 2: parallel runways — assign each aircraft to the nearest centreline
-    const deduped2 = deduplicateParallelApproaches(deduped1, result.detectedHexes, result.crossTrackNm, procedures)
+    const [deduped2, dedupLog2] = deduplicateParallelApproaches(
+      deduped1, result.detectedHexes, result.crossTrackNm, procedures,
+    )
 
-    updateAutoDetection(deduped2, now)
+    // Hexes for the procedures that survived dedup (used for hover tooltips).
+    const keptHexes: Record<string, string[]> = {}
+    for (const [id, detected] of Object.entries(deduped2)) {
+      if (detected) keptHexes[id] = result.detectedHexes[id] ?? []
+    }
+
+    updateAutoDetection(deduped2, now, keptHexes)
+
+    // ── Debug logging ─────────────────────────────────────────────────────────
+    const rawDetected = Object.entries(result.detected).filter(([, v]) => v).map(([id]) => id)
+    if (rawDetected.length === 0) return
+
+    const finalShown = Object.keys(keptHexes).filter((id) => deduped2[id])
+    const totalSuppressed = dedupLog1.length + dedupLog2.length
+
+    console.groupCollapsed(
+      `[ProcDetect] ${selectedAirport.icao} — ${finalShown.length} shown, ${totalSuppressed} deduped`,
+    )
+
+    if (finalShown.length > 0) {
+      console.log('%cSHOWN', 'color:#4ade80;font-weight:bold')
+      for (const id of finalShown) {
+        const proc = procedures.find((p) => p.id === id)
+        const hexes = keptHexes[id] ?? []
+        const labels = hexes.map(acLabel)
+        console.log(
+          `  ${proc?.name ?? id}  [${proc?.type ?? '?'}]`,
+          hexes.length > 0 ? `← ${labels.join(', ')}` : '(timing out — no current traffic)',
+        )
+      }
+    }
+
+    // SID/STAR detections (no per-aircraft hex tracking)
+    const sidStarDetected = rawDetected.filter((id) => {
+      const p = procedures.find((q) => q.id === id)
+      return p && p.type !== 'APPROACH'
+    })
+    if (sidStarDetected.length > 0) {
+      console.log('%cSID/STAR detected', 'color:#94a3b8')
+      for (const id of sidStarDetected) {
+        const proc = procedures.find((p) => p.id === id)
+        console.log(`  ${proc?.name ?? id}  [${proc?.type ?? '?'}]`)
+      }
+    }
+
+    if (dedupLog1.length > 0) {
+      console.log('%cPass 1 dedup (same runway, competing types)', 'color:#fb923c;font-weight:bold')
+      for (const entry of dedupLog1) {
+        console.log(`  ✗ ${entry.suppressed}  →  ${entry.reason}`)
+      }
+    }
+
+    if (dedupLog2.length > 0) {
+      console.log('%cPass 2 dedup (parallel runways)', 'color:#fb923c;font-weight:bold')
+      for (const entry of dedupLog2) {
+        console.log(`  ✗ ${entry.suppressed}  →  ${entry.reason}`)
+      }
+    }
+
+    console.groupEnd()
   }, [lastPollMs, selectedAirport, procedures, atisInfo, updateAutoDetection])
 }

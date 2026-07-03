@@ -14,13 +14,19 @@ interface ProcedureStore {
   autoShownIds: Set<string>
   // epoch ms of last detected aircraft per procedure
   lastDetectedAt: Record<string, number>
+  // hex codes of aircraft currently matching each auto-detected approach
+  detectedHexes: Record<string, string[]>
 
   setProcedures: (procedures: Procedure[]) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   setUserToggle: (id: string, visible: boolean) => void
   revertToAuto: (id: string) => void
-  updateAutoDetection: (detected: Record<string, boolean>, nowMs: number) => void
+  updateAutoDetection: (
+    detected: Record<string, boolean>,
+    nowMs: number,
+    hexes?: Record<string, string[]>,
+  ) => void
   isVisible: (id: string) => boolean
 }
 
@@ -32,6 +38,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
   autoVisible: {},
   autoShownIds: new Set(),
   lastDetectedAt: {},
+  detectedHexes: {},
 
   setProcedures: (procedures) =>
     set({
@@ -40,6 +47,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
       autoVisible: {},
       autoShownIds: new Set(),
       lastDetectedAt: {},
+      detectedHexes: {},
     }),
 
   setLoading: (loading) => set({ loading }),
@@ -55,7 +63,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
       return { userToggles: next }
     }),
 
-  updateAutoDetection: (detected, nowMs) =>
+  updateAutoDetection: (detected, nowMs, hexes = {}) =>
     set((s) => {
       const autoVisible = { ...s.autoVisible }
       const lastDetectedAt = { ...s.lastDetectedAt }
@@ -77,7 +85,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
           }
         }
       }
-      return { autoVisible, lastDetectedAt, autoShownIds }
+      return { autoVisible, lastDetectedAt, autoShownIds, detectedHexes: hexes }
     }),
 
   isVisible: (id) => {

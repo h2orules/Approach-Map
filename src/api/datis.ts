@@ -7,6 +7,8 @@ export interface AtisInfo {
    * Values are CIFP approach name prefixes in preference order (e.g. ["I", "L"]).
    */
   runwayPrefs: Record<string, string[]>
+  /** Departure runways mentioned in the ATIS (e.g. ["16L"]). */
+  depRunways: string[]
   raw: string
 }
 
@@ -28,47 +30,73 @@ const APPROACH_TYPE_MAP: Array<{ re: RegExp; prefix: string }> = [
   { re: /\bNDB\b/, prefix: 'N' },
 ]
 
+/** Human-readable labels for CIFP approach type prefixes. */
+export const PREFIX_READABLE: Record<string, string> = {
+  I: 'ILS', L: 'LOC', R: 'RNAV', H: 'LDA', V: 'VOR', N: 'NDB',
+}
+
 const RWY_KEYWORD = /\b(?:RUNWAY|RWY)S?\b/
+const DEP_KEYWORD = /\bDEP(?:G|ARTING|ARTURE)?\b/
+
+/** Extract runway designators (01–36 + optional L/C/R) from a string. */
+function extractRunways(s: string): string[] {
+  return [...s.matchAll(/\b(\d{2}[LCR]?)\b/g)]
+    .map((m) => m[1])
+    .filter((r) => {
+      const n = parseInt(r.slice(0, 2), 10)
+      return n >= 1 && n <= 36
+    })
+}
 
 export function parseAtisText(text: string): AtisInfo {
   const upper = text.toUpperCase()
   const code = upper.match(/\bINFO\s+([A-Z])\b/)?.[1] ?? '?'
   const runwayPrefs: Record<string, string[]> = {}
+  const depRunways: string[] = []
 
-  // Sentence-level parse: split on periods, examine each sentence for
-  // approach type keywords + RWY/RUNWAY references.
   for (const rawSentence of upper.split('.')) {
     const s = rawSentence.trim()
 
-    // Collect approach types mentioned in this sentence.
+    // ── Approach-in-use sentences ────────────────────────────────────────────
     const prefixes: string[] = []
     for (const { re, prefix } of APPROACH_TYPE_MAP) {
       if (re.test(s) && !prefixes.includes(prefix)) prefixes.push(prefix)
     }
-    if (prefixes.length === 0) continue
+    if (prefixes.length > 0 && RWY_KEYWORD.test(s)) {
+      for (const rwy of extractRunways(s)) {
+        if (!runwayPrefs[rwy]) runwayPrefs[rwy] = []
+        for (const p of prefixes) {
+          if (!runwayPrefs[rwy].includes(p)) runwayPrefs[rwy].push(p)
+        }
+      }
+    }
 
-    // Only process sentences that also mention a runway.
-    if (!RWY_KEYWORD.test(s)) continue
-
-    // Extract all runway designators (01–36, optional L/C/R suffix) from this
-    // sentence.  Using word-boundary anchors prevents partial matches inside
-    // larger numbers (e.g. "BKN070", "A3007", "19006KT").
-    const rwys = [...s.matchAll(/\b(\d{2}[LCR]?)\b/g)]
-      .map((m) => m[1])
-      .filter((r) => {
-        const n = parseInt(r.slice(0, 2), 10)
-        return n >= 1 && n <= 36
-      })
-
-    for (const rwy of rwys) {
-      if (!runwayPrefs[rwy]) runwayPrefs[rwy] = []
-      for (const p of prefixes) {
-        if (!runwayPrefs[rwy].includes(p)) runwayPrefs[rwy].push(p)
+    // ── Departure-runway sentences ────────────────────────────────────────────
+    if (DEP_KEYWORD.test(s) && RWY_KEYWORD.test(s)) {
+      for (const rwy of extractRunways(s)) {
+        if (!depRunways.includes(rwy)) depRunways.push(rwy)
       }
     }
   }
 
-  return { code, runwayPrefs, raw: text }
+  return { code, runwayPrefs, depRunways, raw: text }
+}
+
+/**
+ * Build a compact arrival summary string from ATIS info.
+ * e.g. { "16R": ["I"], "16L": ["I"] } → "ILS 16R 16L"
+ *      { "28R": ["I"], "28L": ["R"] } → "ILS 28R · RNAV 28L"
+ */
+export function arrivalSummary(info: AtisInfo): string {
+  const byType: Record<string, string[]> = {}
+  for (const [rwy, types] of Object.entries(info.runwayPrefs)) {
+    const t = types[0]
+    if (!byType[t]) byType[t] = []
+    byType[t].push(rwy)
+  }
+  return Object.entries(byType)
+    .map(([t, rwys]) => `${PREFIX_READABLE[t] ?? t} ${rwys.join(' ')}`)
+    .join(' · ')
 }
 
 export async function fetchDatis(icao: string): Promise<AtisInfo | null> {

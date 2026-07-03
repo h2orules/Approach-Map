@@ -65,7 +65,12 @@
 }
 
 .atisFullText {
+  position: absolute;
+  left: calc(100% + 10px);
+  bottom: 0;
   width: 340px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
   background: rgba(15, 23, 42, 0.97);
   border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: 6px;
@@ -75,7 +80,7 @@
   color: #94a3b8;
   white-space: pre-wrap;
   word-break: break-word;
-  z-index: 200;
+  z-index: 100;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 

@@ -70,17 +70,6 @@ export function ActiveProceduresOverlay() {
   const setViewport = useMapStore((s) => s.setViewport)
 
   const atisHover = useHoverDelay()
-  const overlayRef = useRef<HTMLDivElement>(null)
-  const [atisPanelStyle, setAtisPanelStyle] = useState<{ left: number; top: number; maxH: number } | null>(null)
-
-  const showAtis = useCallback(() => {
-    if (overlayRef.current) {
-      const rect = overlayRef.current.getBoundingClientRect()
-      const top = Math.max(8, rect.top - 8)
-      setAtisPanelStyle({ left: rect.right + 10, top, maxH: window.innerHeight - top - 8 })
-    }
-    atisHover.show()
-  }, [atisHover.show])
 
   const [hoveredProcId, setHoveredProcId] = useState<string | null>(null)
   const procHideTimer = useRef<ReturnType<typeof setTimeout>>()
@@ -114,14 +103,14 @@ export function ActiveProceduresOverlay() {
     : ''
 
   return (
-    <div ref={overlayRef} className={styles.overlay}>
+    <div className={styles.overlay}>
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div className={styles.title}>
         IN USE
         {hasAtis && (
           <span
             className={styles.atisBadge}
-            onMouseEnter={showAtis}
+            onMouseEnter={atisHover.show}
             onMouseLeave={atisHover.hide}
           >
             ATIS {atisInfo.code}
@@ -133,7 +122,7 @@ export function ActiveProceduresOverlay() {
       {hasAtis && (arrSummary || depSummary) && (
         <div
           className={styles.atisSection}
-          onMouseEnter={showAtis}
+          onMouseEnter={atisHover.show}
           onMouseLeave={atisHover.hide}
         >
           {arrSummary && (
@@ -146,6 +135,15 @@ export function ActiveProceduresOverlay() {
             <div className={styles.atisSummaryRow}>
               <span className={styles.atisLabel}>DEP</span>
               <span className={styles.atisValue}>{depSummary}</span>
+            </div>
+          )}
+          {atisHover.open && (
+            <div
+              className={styles.atisFullText}
+              onMouseEnter={atisHover.show}
+              onMouseLeave={atisHover.hide}
+            >
+              {atisInfo.raw}
             </div>
           )}
         </div>
@@ -179,23 +177,6 @@ export function ActiveProceduresOverlay() {
         )
       })}
 
-      {/* ── ATIS full text — fixed-position so it never clips at viewport edge ── */}
-      {atisHover.open && atisPanelStyle && hasAtis && (
-        <div
-          className={styles.atisFullText}
-          style={{
-            position: 'fixed',
-            left: atisPanelStyle.left,
-            top: atisPanelStyle.top,
-            maxHeight: atisPanelStyle.maxH,
-            overflowY: 'auto',
-          }}
-          onMouseEnter={showAtis}
-          onMouseLeave={atisHover.hide}
-        >
-          {atisInfo.raw}
-        </div>
-      )}
     </div>
   )
 }

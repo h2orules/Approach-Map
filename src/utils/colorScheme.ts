@@ -49,12 +49,21 @@ function lerp3(a: RGB, b: RGB, t: number): RGB {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 }
 
-/** Heatmap stops below Class A: orange at SFC → green near 18 000 ft. */
+/**
+ * Heatmap stops below Class A: orange at SFC → green near 18 000 ft.
+ *
+ * Stops are spaced at 3 000 ft in the approach/terminal range (0–9 000 ft)
+ * so a 500 ft altitude change covers ~17% of a segment and is clearly
+ * perceptible.  Above 9 000 ft the spacing widens because en-route
+ * altitude discrimination matters less.
+ */
 const HEATMAP: Array<[number, RGB]> = [
-  [0,     hexToRgb('#fb923c')],  // orange-400  — bright, high contrast
+  [0,     hexToRgb('#fb923c')],  // orange-400
+  [3000,  hexToRgb('#fbbf24')],  // amber-400
   [6000,  hexToRgb('#facc15')],  // yellow-400
-  [12000, hexToRgb('#a3e635')],  // lime-400
-  [18000, hexToRgb('#4ade80')],  // green-400   — no red used here
+  [9000,  hexToRgb('#bef264')],  // lime-300
+  [13000, hexToRgb('#4ade80')],  // green-400
+  [18000, hexToRgb('#4ade80')],  // green-400   — hold at green before Class A
 ]
 
 /**

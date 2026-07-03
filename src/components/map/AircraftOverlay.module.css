@@ -49,13 +49,25 @@
   margin-top: -2px;
 }
 
-/* Line 1: callsign / tail number */
+/* Shared outline mixin: 4-corner hard shadows create a crisp 1px border,
+   the blur adds depth behind the letterforms. */
+
+/* Line 1: callsign / tail number — 8-direction outline for maximum legibility */
 .callsign {
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
   font-size: 14px;
   font-weight: 700;
   color: #fbbf24;
-  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
+  text-shadow:
+    -1px -1px 0 #0b0f14,
+     0   -1px 0 #0b0f14,
+     1px -1px 0 #0b0f14,
+    -1px  0   0 #0b0f14,
+     1px  0   0 #0b0f14,
+    -1px  1px 0 #0b0f14,
+     0    1px 0 #0b0f14,
+     1px  1px 0 #0b0f14,
+    0 0 4px #0b0f14;
 }
 
 /* Line 2: altitude + speed */
@@ -64,16 +76,26 @@
   font-size: 12px;
   font-weight: 500;
   color: #e8edff;
-  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
+  text-shadow:
+    -1px -1px 0 #0b0f14,
+     1px -1px 0 #0b0f14,
+    -1px  1px 0 #0b0f14,
+     1px  1px 0 #0b0f14,
+    0 0 3px #0b0f14;
 }
 
-/* Line 2: heading (after alt/spd) — same color as altspd */
+/* Line 2: heading — same color as altspd */
 .heading {
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
   font-size: 12px;
   font-weight: 500;
   color: #e8edff;
-  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
+  text-shadow:
+    -1px -1px 0 #0b0f14,
+     1px -1px 0 #0b0f14,
+    -1px  1px 0 #0b0f14,
+     1px  1px 0 #0b0f14,
+    0 0 3px #0b0f14;
 }
 
 /* Line 3: origin → destination */
@@ -82,16 +104,26 @@
   font-size: 12px;
   font-weight: 500;
   color: #7dd3fc;
-  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14;
+  text-shadow:
+    -1px -1px 0 #0b0f14,
+     1px -1px 0 #0b0f14,
+    -1px  1px 0 #0b0f14,
+     1px  1px 0 #0b0f14,
+    0 0 3px #0b0f14;
 }
 
-/* Line 3: aircraft type code */
+/* Line 3: aircraft type code — same color as heading */
 .type {
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
   font-size: 12px;
   font-weight: 500;
-  color: #94a3b8;
-  text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14;
+  color: #e8edff;
+  text-shadow:
+    -1px -1px 0 #0b0f14,
+     1px -1px 0 #0b0f14,
+    -1px  1px 0 #0b0f14,
+     1px  1px 0 #0b0f14,
+    0 0 3px #0b0f14;
 }
 
 /* ── Selected state ──────────────────────────────────────────────────────── */

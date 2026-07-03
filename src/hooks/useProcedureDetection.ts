@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useAircraftStore } from '../store/useAircraftStore'
 import { useProcedureStore } from '../store/useProcedureStore'
 import { useAirportStore } from '../store/useAirportStore'
@@ -170,6 +170,21 @@ export function useProcedureDetection() {
   const procedures = useProcedureStore((s) => s.procedures)
   const updateAutoDetection = useProcedureStore((s) => s.updateAutoDetection)
 
+  // Persists across polls: hex → Set<procId> seen on a pre-MAP segment.
+  // Cleared when an aircraft leaves the tracked set.
+  const preMapSeen = useRef<Map<string, Set<string>>>(new Map())
+
+  // Reset when airport changes — stale pre-MAP state from a different airport
+  // would allow departures to masquerade as missed approaches.
+  const prevAirportRef = useRef<string | null>(null)
+  useEffect(() => {
+    const icao = selectedAirport?.icao ?? null
+    if (icao !== prevAirportRef.current) {
+      preMapSeen.current.clear()
+      prevAirportRef.current = icao
+    }
+  }, [selectedAirport])
+
   useEffect(() => {
     if (!selectedAirport || procedures.length === 0 || lastPollMs === 0) return
 
@@ -183,7 +198,14 @@ export function useProcedureDetection() {
       selectedAirport.lon,
       selectedAirport.elevation,
       now,
+      preMapSeen.current,
     )
+
+    // Prune pre-MAP entries for aircraft that have left the tracked area.
+    const currentHexes = new Set(aircraft.map((ac) => ac.hex))
+    for (const hex of preMapSeen.current.keys()) {
+      if (!currentHexes.has(hex)) preMapSeen.current.delete(hex)
+    }
 
     // Pass 1: same runway, competing types — keep only highest-priority (ATIS-informed)
     const [deduped1, dedupLog1] = deduplicateApproaches(result.detected, procedures, atisInfo)

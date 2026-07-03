@@ -34,7 +34,7 @@
   transform: translate(-50%, 22px);
   white-space: nowrap;
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: #fbbf24;
   text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
@@ -47,7 +47,7 @@
   transform: translate(-50%, 36px);
   white-space: nowrap;
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: #e8edff;
   text-shadow: 0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;

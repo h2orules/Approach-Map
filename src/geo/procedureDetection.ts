@@ -57,6 +57,16 @@ interface GsInfo {
 }
 
 /**
+ * Index of the MAP waypoint in proc.waypoints, or -1 if not found.
+ * ARINC 424 description code 4 = 'M' is parsed as role 'map'.
+ */
+function findMapWptIdx(proc: Procedure): number {
+  const mapSym = proc.symbols.find((s) => s.role === 'map')
+  if (!mapSym) return -1
+  return proc.waypoints.findIndex((w) => w.id === mapSym.id)
+}
+
+/**
  * Locate the GS FAF waypoint for ILS approaches.  Returns null for all other
  * procedure types or when the FAF altitude constraint is absent.
  */
@@ -88,6 +98,12 @@ export function detectProceduresInUse(
   airportLon: number,
   airportElevationFt: number,
   nowMs: number,
+  /**
+   * Persistent across polls (useRef in hook).
+   * hex → Set<procId> where the aircraft was seen on a segment BEFORE the MAP.
+   * Lets us distinguish missed-approach traffic from departing aircraft.
+   */
+  preMapSeen: Map<string, Set<string>>,
 ): DetectionResult {
   const detected: Record<string, boolean> = {}
   const lastSeen: Record<string, number> = {}
@@ -107,6 +123,8 @@ export function detectProceduresInUse(
     const xtThreshold = proc.type === 'APPROACH' ? CROSS_TRACK_APPROACH_NM : CROSS_TRACK_THRESHOLD_NM
     // Precompute GS info once per approach (null for SID/STAR and non-GS approaches)
     const gsInfo = findGsInfo(proc)
+    // MAP waypoint index for departure/missed-approach gating (-1 = unknown → gate disabled)
+    const mapWptIdx = proc.type === 'APPROACH' ? findMapWptIdx(proc) : -1
 
     let hit = false
 
@@ -134,6 +152,21 @@ export function detectProceduresInUse(
           turf.point([wptAfter.lon, wptAfter.lat]),
         )
         if (bearingDelta(ac.track, segBearing) > DIRECTION_TOLERANCE_DEG) continue
+      }
+
+      // ── Departure / missed-approach gate ────────────────────────────────────
+      // For approaches with a known MAP waypoint: segments at or after the MAP
+      // are only valid for aircraft that previously flew a segment BEFORE the MAP
+      // (missed approach). Aircraft first seen at/past the MAP are departures.
+      if (mapWptIdx >= 0) {
+        if (segIdx < mapWptIdx) {
+          // Pre-MAP segment — record that this aircraft has been on approach.
+          if (!preMapSeen.has(ac.hex)) preMapSeen.set(ac.hex, new Set())
+          preMapSeen.get(ac.hex)!.add(proc.id)
+        } else {
+          // At or past the MAP — require prior pre-MAP detection.
+          if (!preMapSeen.get(ac.hex)?.has(proc.id)) continue
+        }
       }
 
       // ── Altitude check ──────────────────────────────────────────────────────

@@ -117,3 +117,22 @@
   background: rgba(56, 189, 248, 0.15);
   color: #e0f2fe;
 }
+
+/* ── No active planes state ─────────────────────────────────────── */
+.noPlanes {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: #94a3b8;
+  padding: 2px 5px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.noPlanesSub {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 9px;
+  color: #64748b;
+  padding: 1px 5px 2px;
+  white-space: nowrap;
+  line-height: 1.4;
+}

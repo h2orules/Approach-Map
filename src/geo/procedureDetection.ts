@@ -206,15 +206,13 @@ export function detectProceduresInUse(
 
       if (altOk) {
         if (!hit) { hit = true; lastSeen[proc.id] = nowMs }
+        detectedHexes[proc.id] = detectedHexes[proc.id] ?? []
+        detectedHexes[proc.id].push(ac.hex)
         if (proc.type === 'APPROACH') {
-          detectedHexes[proc.id] = detectedHexes[proc.id] ?? []
-          detectedHexes[proc.id].push(ac.hex)
           if (!crossTrackNm[proc.id]) crossTrackNm[proc.id] = {}
           // Keep the minimum cross-track if the same hex somehow appears twice.
           const prev = crossTrackNm[proc.id][ac.hex] ?? Infinity
           crossTrackNm[proc.id][ac.hex] = Math.min(prev, crossTrack)
-        } else {
-          break
         }
       }
     }

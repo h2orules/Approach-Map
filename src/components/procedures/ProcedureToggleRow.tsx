@@ -9,11 +9,23 @@ interface Props {
   procedure: Procedure
 }
 
+function formatRemaining(lastSeenMs: number | undefined): string | null {
+  if (!lastSeenMs) return null
+  const remainingMs = lastSeenMs + 5 * 60 * 1000 - Date.now()
+  if (remainingMs <= 0) return null
+  const roundedMs = Math.ceil(remainingMs / 15000) * 15000
+  const totalS = Math.round(roundedMs / 1000)
+  const m = Math.floor(totalS / 60)
+  const s = totalS % 60
+  return m > 0 ? `~${m}m ${s}s` : `~${s}s`
+}
+
 export function ProcedureToggleRow({ procedure }: Props) {
   const isVisible = useProcedureStore((s) => s.isVisible(procedure.id))
   const userToggle = useProcedureStore((s) => s.userToggles[procedure.id])
   const autoShown = useProcedureStore((s) => s.autoShownIds.has(procedure.id))
   const detectedHexes = useProcedureStore((s) => s.detectedHexes[procedure.id] ?? [])
+  const lastDetectedAt = useProcedureStore((s) => s.lastDetectedAt[procedure.id])
   const setUserToggle = useProcedureStore((s) => s.setUserToggle)
   const revertToAuto = useProcedureStore((s) => s.revertToAuto)
   const aircraftMap = useAircraftStore((s) => s.aircraftMap)
@@ -26,13 +38,15 @@ export function ProcedureToggleRow({ procedure }: Props) {
   const hideTimer = useRef<ReturnType<typeof setTimeout>>()
 
   const showTooltip = useCallback(() => {
-    if (detectedHexes.length === 0) return
     clearTimeout(hideTimer.current)
     if (badgeRef.current) {
       const rect = badgeRef.current.getBoundingClientRect()
-      setTooltipPos({ x: rect.right + 8, y: rect.top - 2 })
+      const x = rect.right + 8
+      // Clamp y so the tooltip doesn't slip off the bottom of the viewport.
+      const y = Math.min(rect.top - 2, window.innerHeight - 120)
+      setTooltipPos({ x, y })
     }
-  }, [detectedHexes.length])
+  }, [])
 
   const hideTooltip = useCallback(() => {
     hideTimer.current = setTimeout(() => setTooltipPos(null), 150)
@@ -47,6 +61,8 @@ export function ProcedureToggleRow({ procedure }: Props) {
     setViewport({ longitude: ac.interpLon, latitude: ac.interpLat, zoom: 13 })
     setTooltipPos(null)
   }, [setSelectedHex, setViewport])
+
+  const remaining = formatRemaining(lastDetectedAt)
 
   return (
     <div className={`${styles.row} ${!procedure.hasGeometry ? styles.noGeom : ''}`}>
@@ -69,7 +85,6 @@ export function ProcedureToggleRow({ procedure }: Props) {
           <span
             ref={badgeRef}
             className={styles.autoBadge}
-            title={detectedHexes.length > 0 ? undefined : 'Auto-detected in use'}
             onMouseEnter={showTooltip}
             onMouseLeave={hideTooltip}
           >
@@ -91,24 +106,31 @@ export function ProcedureToggleRow({ procedure }: Props) {
       </div>
 
       {/* Fixed-position tooltip so it escapes the sidebar overflow:hidden */}
-      {tooltipPos && detectedHexes.length > 0 && (
+      {tooltipPos && (
         <div
           className={styles.tooltip}
           style={{ left: tooltipPos.x, top: tooltipPos.y }}
           onMouseEnter={keepTooltip}
           onMouseLeave={hideTooltip}
         >
-          {detectedHexes.map((hex) => {
-            const ac = aircraftMap.get(hex)
-            const label = ac
-              ? (ac.flight?.trim() || ac.registration || hex.toUpperCase())
-              : hex.toUpperCase()
-            return (
-              <button key={hex} className={styles.callsign} onClick={() => selectAircraft(hex)}>
-                {label}
-              </button>
-            )
-          })}
+          {detectedHexes.length > 0 ? (
+            detectedHexes.map((hex) => {
+              const ac = aircraftMap.get(hex)
+              const label = ac
+                ? (ac.flight?.trim() || ac.registration || hex.toUpperCase())
+                : hex.toUpperCase()
+              return (
+                <button key={hex} className={styles.callsign} onClick={() => selectAircraft(hex)}>
+                  {label}
+                </button>
+              )
+            })
+          ) : (
+            <>
+              <span className={styles.noPlanes}>No active planes.</span>
+              {remaining && <span className={styles.noPlanesSub}>Hides in {remaining}</span>}
+            </>
+          )}
         </div>
       )}
     </div>

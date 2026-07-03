@@ -42,18 +42,18 @@ function aircraft(track: number): InterpolatedAircraft {
 
 describe('detectProceduresInUse direction matching', () => {
   it('detects an aircraft flying the procedure direction (southbound)', () => {
-    const { detected } = detectProceduresInUse([aircraft(180)], [southboundApproach], 47.4, -122.31, 0, 1000)
+    const { detected } = detectProceduresInUse([aircraft(180)], [southboundApproach], 47.4, -122.31, 0, 1000, new Map())
     expect(detected['KSEA-APPROACH-I16C']).toBe(true)
   })
 
   it('rejects an aircraft on the same centerline flying the reciprocal (northbound)', () => {
-    const { detected } = detectProceduresInUse([aircraft(0)], [southboundApproach], 47.4, -122.31, 0, 1000)
+    const { detected } = detectProceduresInUse([aircraft(0)], [southboundApproach], 47.4, -122.31, 0, 1000, new Map())
     expect(detected['KSEA-APPROACH-I16C']).toBe(false)
   })
 
   it('rejects an aircraft tracking well off the procedure direction (>90°)', () => {
     // 300° vs the 180° approach course is 120° off — clearly not flying it
-    const { detected } = detectProceduresInUse([aircraft(300)], [southboundApproach], 47.4, -122.31, 0, 1000)
+    const { detected } = detectProceduresInUse([aircraft(300)], [southboundApproach], 47.4, -122.31, 0, 1000, new Map())
     expect(detected['KSEA-APPROACH-I16C']).toBe(false)
   })
 })

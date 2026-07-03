@@ -270,7 +270,7 @@ export function useProcedureDetection() {
       }
     }
 
-    // SID/STAR detections (no per-aircraft hex tracking)
+    // SID/STAR detections
     const sidStarDetected = rawDetected.filter((id) => {
       const p = procedures.find((q) => q.id === id)
       return p && p.type !== 'APPROACH'
@@ -279,7 +279,12 @@ export function useProcedureDetection() {
       console.log('%cSID/STAR detected', 'color:#94a3b8')
       for (const id of sidStarDetected) {
         const proc = procedures.find((p) => p.id === id)
-        console.log(`  ${proc?.name ?? id}  [${proc?.type ?? '?'}]`)
+        const hexes = result.detectedHexes[id] ?? []
+        const labels = hexes.map(acLabel)
+        console.log(
+          `  ${proc?.name ?? id}  [${proc?.type ?? '?'}]`,
+          labels.length > 0 ? `← ${labels.join(', ')}` : '',
+        )
       }
     }
 

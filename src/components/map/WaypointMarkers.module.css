@@ -10,6 +10,14 @@
   position: absolute;
   transform: translate(-50%, -50%);
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+  line-height: 0;
+}
+
+/* Block layout removes the inline baseline/descender gap so the .icon box is
+   exactly the svg size — otherwise translate(-50%) centers a too-tall box and
+   the glyph sits low (visible once the DME ring gives a reference circle). */
+.icon svg {
+  display: block;
 }
 
 .label {

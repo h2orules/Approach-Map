@@ -26,6 +26,7 @@ interface ProcedureStore {
     detected: Record<string, boolean>,
     nowMs: number,
     hexes?: Record<string, string[]>,
+    immediateSuppress?: ReadonlySet<string>,
   ) => void
   isVisible: (id: string) => boolean
 }
@@ -63,7 +64,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
       return { userToggles: next }
     }),
 
-  updateAutoDetection: (detected, nowMs, hexes = {}) =>
+  updateAutoDetection: (detected, nowMs, hexes = {}, immediateSuppress = new Set()) =>
     set((s) => {
       const autoVisible = { ...s.autoVisible }
       const lastDetectedAt = { ...s.lastDetectedAt }
@@ -78,10 +79,17 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
             autoShownIds.add(id)
           }
         } else if (autoShownIds.has(id) && !userSet) {
-          const timeSinceSeen = nowMs - (lastDetectedAt[id] ?? 0)
-          if (timeSinceSeen > 5 * 60 * 1000) {
+          if (immediateSuppress.has(id)) {
+            // A winning approach is already active on this runway — hide now,
+            // don't wait for the grace period.
             autoVisible[id] = false
             autoShownIds.delete(id)
+          } else {
+            const timeSinceSeen = nowMs - (lastDetectedAt[id] ?? 0)
+            if (timeSinceSeen > 5 * 60 * 1000) {
+              autoVisible[id] = false
+              autoShownIds.delete(id)
+            }
           }
         }
       }

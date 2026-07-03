@@ -198,7 +198,20 @@ export function useProcedureDetection() {
       if (detected) keptHexes[id] = result.detectedHexes[id] ?? []
     }
 
-    updateAutoDetection(deduped2, now, keptHexes)
+    // Any approach on the same runway as a current winner should be immediately
+    // hidden — don't let it linger for the 5-minute grace period.
+    const winnerRunways = new Set(
+      procedures
+        .filter((p) => p.type === 'APPROACH' && deduped2[p.id])
+        .map(approachRunwayKey),
+    )
+    const immediateSuppress = new Set(
+      procedures
+        .filter((p) => p.type === 'APPROACH' && !deduped2[p.id] && winnerRunways.has(approachRunwayKey(p)))
+        .map((p) => p.id),
+    )
+
+    updateAutoDetection(deduped2, now, keptHexes, immediateSuppress)
 
     // ── Debug logging ─────────────────────────────────────────────────────────
     const rawDetected = Object.entries(result.detected).filter(([, v]) => v).map(([id]) => id)
@@ -208,7 +221,7 @@ export function useProcedureDetection() {
     const totalSuppressed = dedupLog1.length + dedupLog2.length
 
     console.groupCollapsed(
-      `[ProcDetect] ${selectedAirport.icao} — ${finalShown.length} shown, ${totalSuppressed} deduped`,
+      `[ProcDetect] ${selectedAirport.icao} — ${finalShown.length} shown, ${totalSuppressed} deduped, ${immediateSuppress.size} immediately hidden`,
     )
 
     if (finalShown.length > 0) {
@@ -248,6 +261,14 @@ export function useProcedureDetection() {
       console.log('%cPass 2 dedup (parallel runways)', 'color:#fb923c;font-weight:bold')
       for (const entry of dedupLog2) {
         console.log(`  ✗ ${entry.suppressed}  →  ${entry.reason}`)
+      }
+    }
+
+    if (immediateSuppress.size > 0) {
+      console.log('%cImmediately hidden (loser on runway with active winner)', 'color:#f87171;font-weight:bold')
+      for (const id of immediateSuppress) {
+        const proc = procedures.find((p) => p.id === id)
+        console.log(`  → ${proc?.name ?? id}`)
       }
     }
 

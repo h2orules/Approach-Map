@@ -49,6 +49,7 @@ interface Record424 {
   descCode4: string // waypoint description code position 4, col 43 (A/F/M/H)
   flyover: boolean  // waypoint description code position 2, col 41 ('Y' = flyover)
   turnDir: string // col 44 (L/R)
+  rho: string    // cols 67-70 (DME distance to fix from navaid, tenths of nm)
   magCourse: string // cols 71-74 (tenths of a degree)
   legLen: string // cols 75-78 (route distance / holding leg)
   speedLimit: string // cols 100-102 (knots, a maximum)
@@ -82,6 +83,7 @@ function parseProcRecord(line: string): Record424 | null {
     descCode4: line[42] ?? ' ',
     flyover: (line[40] ?? ' ') === 'Y',
     turnDir: line[43] ?? ' ',
+    rho: line.slice(66, 70).trim(),
     magCourse: line.slice(70, 74).trim(),
     legLen: line.slice(74, 78).trim(),
     speedLimit: line.slice(99, 102).trim(),
@@ -103,6 +105,7 @@ interface Leg {
   course: number // degrees (from magCourse / 10)
   legNm: number // straight-leg length, nm (time legs approximated)
   speedKt: number // speed restriction (knots, 0 = none)
+  dmeNm: number | null // Rho: DME distance from navaid to this fix (nm), null if absent
 }
 
 function legRole(descCode4: string, pathTerm: string): WaypointRole {
@@ -309,6 +312,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         proc.transitions.set(transitionKey, transition)
       }
 
+      const rhoRaw = parseInt(rec.rho) || 0
       transition.set(rec.sequenceNumber, {
         seq: rec.sequenceNumber,
         fixId: rec.fixId,
@@ -323,6 +327,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         course: (parseInt(rec.magCourse) || 0) / 10,
         legNm: parseLegLen(rec.legLen),
         speedKt: parseInt(rec.speedLimit) || 0,
+        dmeNm: rhoRaw > 0 ? rhoRaw / 10 : null,
       })
     }
 
@@ -379,6 +384,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
               symbolMap.set(key, {
                 id: l.fixId, lat: l.lat, lon: l.lon, navaidType: l.navaidType,
                 role: l.role, alt, speedKt, gsFaf, flyover: l.flyover,
+                dmeNm: l.dmeNm,
               })
             } else {
               if (ROLE_RANK[l.role] > ROLE_RANK[existing.role]) existing.role = l.role
@@ -386,6 +392,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
               if (!existing.speedKt && speedKt) existing.speedKt = speedKt
               if (gsFaf) existing.gsFaf = true
               if (l.flyover) existing.flyover = true
+              if (existing.dmeNm == null && l.dmeNm != null) existing.dmeNm = l.dmeNm
             }
           }
         }

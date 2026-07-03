@@ -36,6 +36,12 @@ export interface WaypointSymbol {
   gsFaf: boolean
   /** True when ARINC 424 waypoint description code position 2 is 'Y' (flyover). */
   flyover: boolean
+  /**
+   * DME distance (nm) from the recommended navaid to this fix (ARINC 424 Rho,
+   * cols 67-70, tenths of nm).  Null when not specified or zero.
+   * Optional for backwards compatibility with pre-parsed IndexedDB cache entries.
+   */
+  dmeNm?: number | null
 }
 
 export interface Procedure {

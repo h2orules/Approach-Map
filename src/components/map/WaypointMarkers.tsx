@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import * as turf from '@turf/turf'
 import { Marker, useMap } from 'react-map-gl'
 import type { Procedure, WaypointSymbol, AltConstraint } from '../../types/procedure'
 import styles from './WaypointMarkers.module.css'
@@ -12,6 +13,9 @@ const RESTRICTION_COLOR = '#fde68a'
 // Below this zoom, labels that can't find a clear spot are dropped. At/above it
 // every on-screen label is shown (overlapping only as a last resort).
 const DROP_ZOOM = 8
+const SEG_LABEL_MIN_ZOOM = 9
+const SEG_LABEL_MIN_NM = 0.3   // segments shorter than this aren't labeled
+const SEG_OFFSET_NM = 0.25     // perpendicular offset for midpoint labels
 
 function symKey(s: WaypointSymbol): string {
   return `${s.id}:${s.lat.toFixed(4)}:${s.lon.toFixed(4)}`
@@ -29,8 +33,6 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   const fo = s.flyover
 
   if (s.role === 'faf') {
-    // All FAFs (precision or not) get the Maltese cross; precision FAFs also get
-    // the glideslope bolt drawn separately.
     return (
       <svg width={size} height={size} viewBox="0 0 26 26">
         {fo && <Ring cx={13} cy={13} r={12} color="#f0abfc" />}
@@ -73,6 +75,58 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   )
 }
 
+// ---- DME badge -----------------------------------------------------------
+// FAA-standard DME distance indicator: numbers circumscribed inside a D shape.
+// The D is formed by a vertical bar on the left, two horizontal lines, and a
+// right-side semicircular arc whose radius equals half the badge height.
+const DME_H = 14        // px — badge height (fits 10px font with 2px pad each side)
+const DME_R = DME_H / 2 // px — right-arc radius
+const DME_CHAR_W = 6.5  // px — approx char width at 10px monospace
+const DME_PAD_X = 3     // px — horizontal padding inside the D
+
+function formatDme(nm: number): string {
+  return nm % 1 === 0 ? String(nm) : nm.toFixed(1)
+}
+
+function dmeBadgeWidth(nm: number): number {
+  return formatDme(nm).length * DME_CHAR_W + DME_PAD_X * 2 + DME_R
+}
+
+function DmeBadge({ nm }: { nm: number }) {
+  const text = formatDme(nm)
+  const contentW = text.length * DME_CHAR_W + DME_PAD_X * 2
+  const svgW = contentW + DME_R
+  return (
+    <svg
+      width={svgW}
+      height={DME_H}
+      viewBox={`0 0 ${svgW} ${DME_H}`}
+      style={{ display: 'block', flexShrink: 0 }}
+      aria-label={`DME ${text}`}
+    >
+      {/* D shape: top line → right arc → bottom line → left bar (Z closes it) */}
+      <path
+        d={`M 0 0 H ${contentW} A ${DME_R} ${DME_R} 0 0 1 ${contentW} ${DME_H} H 0 Z`}
+        fill="none"
+        stroke={RESTRICTION_COLOR}
+        strokeWidth={1.3}
+        strokeLinejoin="round"
+      />
+      <text
+        x={contentW / 2}
+        y={DME_H / 2}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={10}
+        fontFamily="'Roboto Mono', monospace"
+        fill={RESTRICTION_COLOR}
+      >
+        {text}
+      </text>
+    </svg>
+  )
+}
+
 // ---- restriction labels --------------------------------------------------
 const fNum = (n: number) => n.toLocaleString('en-US')
 
@@ -98,7 +152,6 @@ function AltLabel({ c }: { c: AltConstraint }) {
 }
 
 function SpeedLabel({ kt }: { kt: number }) {
-  // Procedure speeds are maxima → bar above, spanning the whole "###Kt".
   return (
     <div className={styles.spd}>
       <span className={styles.barAbove}>{kt}Kt</span>
@@ -108,9 +161,6 @@ function SpeedLabel({ kt }: { kt: number }) {
 
 interface Pt { x: number; y: number }
 
-// Hand-drawn zig-zag lightning arrow: starts (no tail) at `from` near the
-// altitude, makes several direction changes, and ends in a filled triangle
-// pointing at the fix. Container px coords.
 function BoltArrow({ from, to }: { from: Pt; to: Pt }) {
   const dx = to.x - from.x
   const dy = to.y - from.y
@@ -120,25 +170,21 @@ function BoltArrow({ from, to }: { from: Pt; to: Pt }) {
   const px = -uy
   const py = ux
   const lineW = 2
-  const amp = lineW * 3.5 // small lateral width across the vector (~3-4× line width)
+  const amp = lineW * 3.5
   const headLen = 7
   const headW = 5
 
-  // Tip lands right at the fix point so the arrow clearly points at it.
   const tipGap = 7
   const seg = len - tipGap
   const tip = { x: from.x + ux * seg, y: from.y + uy * seg }
 
-  // Travel mostly ALONG the vector with one sharp double-back. The kink happens
-  // early (~40% of length). Lateral displacement is split ±half on each side of
-  // the main axis so the bolt is symmetric about the arrow centerline.
   const along = (t: number, side: number): Pt => ({
     x: from.x + ux * seg * t + px * amp * side,
     y: from.y + uy * seg * t + py * amp * side,
   })
   const p0 = from
-  const p1 = along(0.40, 0.5)  // forward to 40%, half-step to one side
-  const p2 = along(0.22, -0.5) // double back to 22%, half-step other side
+  const p1 = along(0.40, 0.5)
+  const p2 = along(0.22, -0.5)
   const base = { x: tip.x - ux * headLen, y: tip.y - uy * headLen }
 
   const pad = 4
@@ -190,9 +236,6 @@ function overlapArea(a: Rect, rects: Rect[]): number {
   return sum
 }
 
-// Choose a label offset: first candidate clear of both icons and other labels;
-// otherwise (only when zoomed in) the least-bad, weighting icon overlap heavily
-// so a label never covers another fix's symbol.
 function place(
   sx: number, sy: number, cands: Pt[], w: number, h: number,
   iconRects: Rect[], labelRects: Rect[], vw: number, vh: number, allowOverlap: boolean,
@@ -212,28 +255,41 @@ function place(
   return best ?? cands[0]
 }
 
-// Name + restriction label box (px). The name and (for a precision FAF) the
-// glideslope-intercept altitude live in the same block.
+// Name row width = fix name + optional gap + DME badge.
+// Restriction row width = (alt chars + speed chars) * char width.
 function labelBoxSize(s: WaypointSymbol): { w: number; h: number } {
   const showAlt = !!s.alt
   const between = showAlt && !s.gsFaf && s.alt!.type === 'BETWEEN'
   const altChars = showAlt ? 6 : 0
   const spdChars = s.speedKt ? 5 : 0
   const rowChars = altChars + (s.speedKt ? 1 + spdChars : 0)
-  const maxChars = Math.max(s.id.length, rowChars)
+
+  const dme = s.dmeNm ?? null
+  const dmeExtra = dme !== null ? 4 + dmeBadgeWidth(dme) : 0 // 4px gap before badge
+  const nameLineW = s.id.length * 8.4 + dmeExtra
+  const maxW = Math.max(nameLineW, rowChars * 8.4)
   const rowLines = between ? 2 : showAlt || s.speedKt ? 1 : 0
-  return { w: maxChars * 8.4 + 6, h: (1 + rowLines) * 15 + 6 }
+  return { w: maxW + 6, h: (1 + rowLines) * 15 + 6 }
 }
 
-// Closest point on a label rect (offset dx,dy, size w,h) to the fix at origin.
 function nearestPointToFix(dx: number, dy: number, w: number, h: number): Pt {
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
   return { x: clamp(0, dx, dx + w), y: clamp(0, dy, dy + h) }
 }
 
+// ---- segment distance labels --------------------------------------------
+interface SegLabel {
+  key: string
+  lon: number
+  lat: number
+  text: string
+  color: string
+}
+
 export function WaypointMarkers({ procedures }: Props) {
   const { current: mapRef } = useMap()
   const [placements, setPlacements] = useState<Placement[]>([])
+  const [segmentLabels, setSegmentLabels] = useState<SegLabel[]>([])
   const rafRef = useRef<number | null>(null)
 
   const symbols = useMemo(() => {
@@ -260,6 +316,7 @@ export function WaypointMarkers({ procedures }: Props) {
       const vh = container.clientHeight
       const allowOverlap = zoom >= DROP_ZOOM
 
+      // ── Waypoint label placement ──────────────────────────────────────────
       const ordered = [...symbols].sort((a, b) => (ROLE_RANK[b.role] ?? 0) - (ROLE_RANK[a.role] ?? 0))
 
       const iconRects: Rect[] = []
@@ -268,13 +325,12 @@ export function WaypointMarkers({ procedures }: Props) {
         const p = map.project([s.lon, s.lat])
         if (p.x < -40 || p.y < -40 || p.x > vw + 40 || p.y > vh + 40) continue
         onScreen.push({ s, sx: p.x, sy: p.y })
-        iconRects.push({ x: p.x - 14, y: p.y - 14, w: 28, h: 28 }) // reserve the icon
+        iconRects.push({ x: p.x - 14, y: p.y - 14, w: 28, h: 28 })
       }
 
       const labelRects: Rect[] = []
       const next: Placement[] = []
       for (const { s, sx, sy } of onScreen) {
-        // A precision FAF sits further out to leave room for a long bolt.
         const gap = s.gsFaf ? 44 : 16
         const { w, h } = labelBoxSize(s)
         const cands: Pt[] = [
@@ -289,6 +345,56 @@ export function WaypointMarkers({ procedures }: Props) {
         next.push({ s, dx: c.x, dy: c.y, w, h, placed: true })
       }
       setPlacements(next)
+
+      // ── Segment distance labels (approach, zoom ≥ threshold) ─────────────
+      if (zoom < SEG_LABEL_MIN_ZOOM) {
+        setSegmentLabels([])
+        return
+      }
+
+      const segLabels: SegLabel[] = []
+      for (const proc of procedures) {
+        if (proc.type !== 'APPROACH') continue
+
+        // Build set of fix IDs that carry a DME annotation — those segments are
+        // handled by the D-badge at the fix, so no midpoint label is needed.
+        const dmeFixIds = new Set(
+          proc.symbols.filter((s) => (s.dmeNm ?? null) !== null).map((s) => s.id),
+        )
+
+        const wpts = proc.waypoints
+        for (let i = 0; i < wpts.length - 1; i++) {
+          const a = wpts[i]
+          const b = wpts[i + 1]
+          // Skip when either endpoint already has a DME badge.
+          if (dmeFixIds.has(a.id) || dmeFixIds.has(b.id)) continue
+
+          const pt1 = turf.point([a.lon, a.lat])
+          const pt2 = turf.point([b.lon, b.lat])
+          const distNm = turf.distance(pt1, pt2, { units: 'nauticalmiles' })
+          if (distNm < SEG_LABEL_MIN_NM) continue
+
+          // Place the label 0.25 nm perpendicular to the right of the track.
+          const bearing = turf.bearing(pt1, pt2)
+          const perpBearing = (bearing + 90 + 360) % 360
+          const mid = turf.midpoint(pt1, pt2)
+          const offsetPt = turf.destination(mid, SEG_OFFSET_NM, perpBearing, { units: 'nauticalmiles' })
+          const [lon, lat] = offsetPt.geometry.coordinates
+
+          // Skip if off-screen.
+          const p = map.project([lon, lat])
+          if (p.x < -20 || p.y < -20 || p.x > vw + 20 || p.y > vh + 20) continue
+
+          segLabels.push({
+            key: `${proc.id}-seg-${i}`,
+            lon,
+            lat,
+            text: distNm.toFixed(1),
+            color: proc.color,
+          })
+        }
+      }
+      setSegmentLabels(segLabels)
     }
 
     const schedule = () => {
@@ -305,20 +411,19 @@ export function WaypointMarkers({ procedures }: Props) {
       map.off('moveend', schedule)
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
     }
-  }, [mapRef, symbols])
+  }, [mapRef, symbols, procedures])
 
   return (
     <>
       {placements.map((pl) => {
         const { s, dx, dy, w, h } = pl
-        // Precision FAF shows its glideslope-intercept altitude as "at or above".
         const altC: AltConstraint | null = !s.alt
           ? null
           : s.gsFaf
             ? { type: 'AT_OR_ABOVE', low: s.alt.low }
             : s.alt
-        // Bolt runs from the block edge nearest the fix, pointing at the fix.
         const boltFrom = s.gsFaf ? nearestPointToFix(dx, dy, w, h) : null
+        const dme = s.dmeNm ?? null
 
         return (
           <Marker key={symKey(s)} longitude={s.lon} latitude={s.lat} anchor="center">
@@ -330,7 +435,11 @@ export function WaypointMarkers({ procedures }: Props) {
               {boltFrom && <BoltArrow from={boltFrom} to={{ x: 0, y: 0 }} />}
 
               <div className={styles.label} style={{ transform: `translate(${dx}px, ${dy}px)` }}>
-                <div className={styles.name}>{s.id}</div>
+                {/* Name line: fix ID + optional DME D-badge to the right */}
+                <div className={styles.nameRow}>
+                  <span className={styles.name}>{s.id}</span>
+                  {dme !== null && <DmeBadge nm={dme} />}
+                </div>
                 {(altC || s.speedKt) && (
                   <div className={styles.restrictions}>
                     {altC && <AltLabel c={altC} />}
@@ -342,6 +451,14 @@ export function WaypointMarkers({ procedures }: Props) {
           </Marker>
         )
       })}
+
+      {segmentLabels.map((sl) => (
+        <Marker key={sl.key} longitude={sl.lon} latitude={sl.lat} anchor="center">
+          <div className={styles.segDist} style={{ color: sl.color }}>
+            {sl.text}
+          </div>
+        </Marker>
+      ))}
     </>
   )
 }

@@ -68,10 +68,28 @@
   line-height: 1.1;
 }
 
+/* Name row: fix ID + optional DME D-badge side by side. */
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Hand-drawn glideslope-intercept bolt, absolutely placed in the marker. */
 .bolt {
   position: absolute;
   overflow: visible;
   pointer-events: none;
   filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+
+/* Segment distance label placed perpendicular to the track. */
+.segDist {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow:
+    0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
 }

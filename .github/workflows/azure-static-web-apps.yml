@@ -1,0 +1,50 @@
+# Builds the Vite SPA + Azure Functions API and deploys them to Azure
+# Static Web Apps. Pushes to main deploy to production; pull requests get
+# ephemeral preview environments that are torn down on close.
+#
+# Required repository secrets (see DEPLOYMENT.md):
+#   AZURE_STATIC_WEB_APPS_API_TOKEN  deployment token from the Static Web App
+#   VITE_MAPBOX_TOKEN                Mapbox public token, inlined at build time
+#
+# The ADS-B Exchange key is NOT needed here — it lives in the Static Web
+# App's application settings and is read by the Functions proxy at runtime.
+
+name: Deploy to Azure Static Web Apps
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+
+jobs:
+  build_and_deploy:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    name: Build and deploy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and deploy to Azure
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: '/'
+          api_location: 'api'
+          output_location: 'dist'
+        env:
+          VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+
+  close_pr_environment:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close PR preview environment
+    steps:
+      - name: Close preview
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: close

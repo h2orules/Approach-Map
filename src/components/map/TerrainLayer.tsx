@@ -42,14 +42,14 @@ import {
 // transparently re-added after base-style swaps), as long as the component
 // itself stays mounted.
 
-// TERRAIN_HYPSO_STOPS is [ft, color] ascending; Mapbox `ele` on the contour
-// source-layer is in meters, so convert the stop thresholds ft -> m here.
-// A `step` expression's first argument is the value for anything below the
-// first stop, so use the first stop's color as the base and then step at
-// each subsequent threshold.
-const hypsoStepExpression: Expression = ['step', ['get', 'ele'], TERRAIN_HYPSO_STOPS[0][1]]
-for (let i = 1; i < TERRAIN_HYPSO_STOPS.length; i++) {
-  const [ft, color] = TERRAIN_HYPSO_STOPS[i]
+// TERRAIN_HYPSO_STOPS is [ft, color] ascending starting at 1000 ft; Mapbox
+// `ele` on the contour source-layer is in meters, so convert the stop
+// thresholds ft -> m here. A `step` expression's first argument is the value
+// for anything below the first stop — elevations under 1000 ft should get no
+// tint at all, so the base is fully transparent rather than the first
+// stop's color, and stops start at the first (1000 ft) entry.
+const hypsoStepExpression: Expression = ['step', ['get', 'ele'], 'rgba(0,0,0,0)']
+for (const [ft, color] of TERRAIN_HYPSO_STOPS) {
   hypsoStepExpression.push(ft / FEET_PER_METER, color)
 }
 

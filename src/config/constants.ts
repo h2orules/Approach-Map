@@ -50,8 +50,10 @@ export const MSA_DEFAULT_RADIUS_NM = 25
 export const DETECTION_HISTORY_WINDOW_MS = 5 * 60 * 1000
 
 // Terrain hypsometric tint ramp (ft MSL → fill color), FAA-sectional-like.
+// Elevations below the first stop (1000 ft) get no tint at all — see
+// `hypsoStepExpression` in TerrainLayer.tsx, which uses fully-transparent
+// as the step base rather than the first stop's color.
 export const TERRAIN_HYPSO_STOPS: ReadonlyArray<readonly [number, string]> = [
-  [0, '#a9c799'],
   [1000, '#c5d59b'],
   [2000, '#e3dfa4'],
   [3000, '#f3d999'],
@@ -82,3 +84,14 @@ export const SAFE_ALT_COLOR = '#94a3b8'
 export const SAFE_ALT_FILL_OPACITY = 0.05
 export const SAFE_ALT_LINE_WIDTH = 1.2
 export const SAFE_ALT_LINE_OPACITY = 0.7
+// Sector boundary lines are solid white for both TAA and MSA.
+export const SAFE_ALT_LINE_COLOR = '#ffffff'
+
+// FAA-plate-style localizer "feather" symbol, drawn along the final approach
+// course of the selected LOC-based approach (ILS/LOC/LDA).
+export const LOC_FEATHER_LENGTH_NM = 9
+export const LOC_FEATHER_WIDTH_NM = 1.0
+export const LOC_FEATHER_NOTCH_NM = 0.7
+// Neutral slate so it reads on both dark and satellite basemaps without
+// competing with the green approach-procedure palette.
+export const LOC_FEATHER_COLOR = '#cbd5e1'

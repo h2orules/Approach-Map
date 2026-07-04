@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Source, Layer, Marker, useMap } from 'react-map-gl'
-import type { Expression } from 'mapbox-gl'
 import type { FeatureCollection, Feature } from 'geojson'
 import type { SafeAltitudeArea, SafeAltitudeSector } from '../../types/safeAltitude'
 import { sectorPolygon, sectorBoundaryLines, sectorLabelAnchor } from '../../geo/safeAltitude'
@@ -11,21 +10,13 @@ import {
   SAFE_ALT_FILL_OPACITY,
   SAFE_ALT_LINE_WIDTH,
   SAFE_ALT_LINE_OPACITY,
+  SAFE_ALT_LINE_COLOR,
 } from '../../config/constants'
 import styles from './SafeAltitudeLayer.module.css'
 
 interface Props {
   items: Array<{ icao: string; area: SafeAltitudeArea }>
 }
-
-// Solid for TAA, dashed for MSA — both share the same neutral color, so the
-// only thing that varies per-feature is the dash pattern.
-const LINE_DASH_EXPRESSION: Expression = [
-  'case',
-  ['==', ['get', 'kind'], 'MSA'],
-  ['literal', [4, 3]],
-  ['literal', [1, 0]],
-]
 
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
@@ -140,10 +131,9 @@ export function SafeAltitudeLayer({ items }: Props) {
           filter={['==', ['geometry-type'], 'LineString']}
           layout={{ visibility }}
           paint={{
-            'line-color': SAFE_ALT_COLOR,
+            'line-color': SAFE_ALT_LINE_COLOR,
             'line-width': SAFE_ALT_LINE_WIDTH,
             'line-opacity': SAFE_ALT_LINE_OPACITY,
-            'line-dasharray': LINE_DASH_EXPRESSION,
           }}
         />
       </Source>

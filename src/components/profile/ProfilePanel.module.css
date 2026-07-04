@@ -1,0 +1,125 @@
+/* ── Panel shell ──────────────────────────────────────────────────────── */
+.panel {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  /* Above ActiveProceduresOverlay / AltitudeFilter (z-index: 10). */
+  z-index: 20;
+}
+
+.titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.3);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.titlebar:active {
+  cursor: grabbing;
+}
+
+.titlebarLabel {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px 10px 10px;
+  gap: 6px;
+}
+
+.noGeometry {
+  color: #64748b;
+  font-size: 11px;
+  padding: 12px 4px;
+}
+
+.svgWrap {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ── FAA-plate-style header strip (ProfileHeader) ───────────────────────── */
+.headerStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  border-radius: 4px;
+  padding: 3px 8px;
+  min-width: 84px;
+}
+
+.boxLabel {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.boxValue {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.notesLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 9.5px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.chip {
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 3px;
+  padding: 0 4px;
+  letter-spacing: 0.04em;
+  color: #cbd5e1;
+}

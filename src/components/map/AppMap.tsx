@@ -17,6 +17,7 @@ import { SafeAltitudeLayer } from './SafeAltitudeLayer'
 import { WaypointMarkers } from './WaypointMarkers'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
 import { AltitudeFilter } from './AltitudeFilter'
+import { ProfilePanel } from '../profile/ProfilePanel'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftPoll } from '../../hooks/useAircraftPoll'
 import { useProcedures } from '../../hooks/useProcedures'
@@ -161,6 +162,8 @@ export function AppMap() {
       <AltitudeFilter />
 
       <ActiveProceduresOverlay />
+
+      <ProfilePanel mapRef={mapRef} />
     </div>
   )
 }

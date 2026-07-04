@@ -18,27 +18,32 @@ interface Props {
 
 // ── layout constants (module-local — do not confuse with config/constants.ts) ──
 const MARGIN = { top: 4, right: 20, bottom: 4, left: 16 }
-const TOP_BAND_H = 56 // fix names + DME boxes, staggered following the descent
-const BOTTOM_BAND_H = 22 // inter-fix distance scale
-const NAME_TOP_PAD = 12 // px from the top of the band to the highest fix's label baseline
+const TOP_BAND_H = 64 // fix names + DME boxes, staggered following the descent
+const BOTTOM_BAND_H = 26 // inter-fix distance scale
+const NAME_TOP_PAD = 14 // px from the top of the band to the highest fix's label baseline
 const LABEL_STAGGER_MAX = 26 // px the label baseline steps down inside the top band
-const DME_ROW_GAP = 12 // px from the name baseline down to the DME ident/glyph row
-const DME_SCALE = 0.78 // shrink the shared DmeD glyph to fit the label band
+const DME_ROW_GAP = 15 // px from the name baseline down to the DME ident/glyph row
+const DME_SCALE = 0.92 // scale the shared DmeD glyph to fit the label band
 const WEDGE_HALF_WIDTH_PX = 15 // 34:1 clear-surface wedge half-height at the FAF end
 const WEDGE_TIP_HALF_WIDTH_PX = 3 // half-height at the threshold end (not a perfect point — stays visible)
 const WEDGE_NOTCH_PX = 7 // forked-tail notch depth, cut into the wide (FAF) end
 const X_INSET = 34 // horizontal room inside the margins so the first/last fix labels (name + speed) don't clip
-const ALT_HEADROOM = 26 // vertical room above the highest fix so its altitude label clears the name band
-const ALT_CHAR_W = 6 // px per char of an altitude label at 10px Roboto Mono — sizes the over/under bars to the text
-const ALT_CY_OFFSET = 15 // px the altitude label's vertical center sits from the fix point (above, or below for missed fixes)
-const ALT_BAR_HALF_GAP = 6.5 // px from the altitude label center up/down to each over/under bar
+const ALT_HEADROOM = 30 // vertical room above the highest fix so its altitude label clears the name band
+const ALT_CHAR_W = 7 // px per char of an altitude label at 11.5px Roboto Mono — sizes the over/under bars to the text
+const ALT_CY_OFFSET = 17 // px the altitude label's vertical center sits above the fix point
+const ALT_BAR_HALF_GAP = 7.5 // px from the altitude label center up/down to each over/under bar
+const GS_ALT_DX = -13 // px the GS-intercept altitude is nudged left so the lightning bolt (drawn to the right) has room
+const NAME_CHAR_W = 7.6 // px per char of a fix name at 12px bold Roboto Mono — for label de-collision
+const NAME_ROW_H = 15 // px a colliding fix name is pushed down to the next row
 
 // ── scales ──────────────────────────────────────────────────────────────
 
 function computeYDomain(model: ProfileModel): [number, number] {
+  // Approach fixes only — the missed approach is no longer plotted, so its
+  // (often much higher) altitudes must not stretch the vertical scale.
   const alts: number[] = []
   if (model.tdzeFt != null) alts.push(model.tdzeFt)
-  for (const f of [...model.fixes, ...model.missed]) {
+  for (const f of model.fixes) {
     if (f.plotAltFt != null) alts.push(f.plotAltFt)
   }
   if (alts.length === 0) alts.push(0, 3000)
@@ -88,22 +93,33 @@ function buildWedgePath(anchor: PxPt, threshold: PxPt): string {
 // ── small presentational glyphs ────────────────────────────────────────
 
 /**
- * Glideslope-intercept bolt, built on the shared map glyph. Sits just down and
- * to the right of the FAF, pointing down the glideslope — offset off the fix
- * center so it clears the maltese cross (which sits on the line at the FAF).
+ * Glideslope-intercept bolt, built on the shared map glyph. Drawn to the right
+ * of the FAF pointing down the glideslope, with enough length that the zigzag
+ * isn't compressed and clear of the maltese cross (which sits on the line).
  */
 function ProfileBolt({ x, y }: { x: number; y: number }) {
-  return <BoltGlyph from={{ x: x + 7, y: y - 9 }} to={{ x: x + 17, y: y + 1 }} standalone={false} />
+  return <BoltGlyph from={{ x: x + 9, y: y - 15 }} to={{ x: x + 28, y: y + 7 }} standalone={false} />
 }
 
+// A proper FAA "maltese cross" (cross patée): four arms narrow at the waist,
+// flaring wide at the tips, each tip cut with a V-notch — not a plain plus.
+const MALTESE_PATH = (() => {
+  const w = 1.7 // half-width at the waist (center)
+  const t = 4.8 // half-width at each arm tip
+  const L = 7.5 // arm length from center
+  const n = 2.0 // tip V-notch depth
+  return (
+    `M ${-w} ${-w} L ${-t} ${-L} L 0 ${-L + n} L ${t} ${-L} L ${w} ${-w} ` +
+    `L ${L} ${-t} L ${L - n} 0 L ${L} ${t} L ${w} ${w} ` +
+    `L ${t} ${L} L 0 ${L - n} L ${-t} ${L} L ${-w} ${w} ` +
+    `L ${-L} ${t} L ${-L + n} 0 L ${-L} ${-t} Z`
+  )
+})()
+
 function MalteseCross({ x, y }: { x: number; y: number }) {
-  const s = 5
-  const t = 1.6
   return (
     <g className={styles.malteseCross} transform={`translate(${x} ${y})`}>
-      <path
-        d={`M ${-t} ${-s} H ${t} V ${-t} H ${s} V ${t} H ${t} V ${s} H ${-t} V ${t} H ${-s} V ${-t} H ${-t} Z`}
-      />
+      <path d={MALTESE_PATH} />
     </g>
   )
 }
@@ -112,7 +128,7 @@ function MapGlyph({ x, y }: { x: number; y: number }) {
   // Centered on the descent line at the runway/threshold altitude (not floating above it).
   return (
     <g transform={`translate(${x} ${y})`}>
-      <circle r={7} className={styles.mapGlyph} />
+      <circle r={8} className={styles.mapGlyph} />
       <text className={styles.mapText} textAnchor="middle" dominantBaseline="central">M</text>
     </g>
   )
@@ -157,29 +173,35 @@ function altNumberOnly(c: AltConstraint): string {
 }
 
 /**
- * Altitude restriction text with over/under bars. The bars span the width of
- * the number and the number is vertically centered between them (FAA plate
- * convention). Placed above the fix by default (below for missed-approach
- * fixes, whose names sit above the line) so it clears the role glyphs, which
- * now sit on the descent line.
+ * Altitude restriction text with over/under bars (FAA plate convention): the
+ * bars span the number's width and the number is centered between them, sitting
+ * above the fix so it clears the role glyphs on the descent line. A line under
+ * = at-or-above (minimum), over = at-or-below (maximum), both = mandatory.
+ * The GS-intercept altitude is always drawn as a minimum (bottom line only) and
+ * nudged left so the lightning bolt to its right has room.
  */
-function AltAnnotation({ f, x, y, below }: { f: ProfileFix; x: number; y: number; below?: boolean }) {
+function AltAnnotation({ f, x, y }: { f: ProfileFix; x: number; y: number }) {
   if (!f.constraint) return null
   const label = altNumberOnly(f.constraint)
   const halfW = (label.length * ALT_CHAR_W) / 2
   const type = f.constraint.type
-  const showAbove = type === 'AT_OR_BELOW' || type === 'AT' || type === 'BETWEEN'
-  const showBelow = type === 'AT_OR_ABOVE' || type === 'AT' || type === 'BETWEEN'
-  const cy = below ? y + ALT_CY_OFFSET : y - ALT_CY_OFFSET
+  let showAbove = type === 'AT_OR_BELOW' || type === 'AT' || type === 'BETWEEN'
+  let showBelow = type === 'AT_OR_ABOVE' || type === 'AT' || type === 'BETWEEN'
+  if (f.isGsIntercept) {
+    showAbove = false
+    showBelow = true
+  }
+  const cx = x + (f.isGsIntercept ? GS_ALT_DX : 0)
+  const cy = y - ALT_CY_OFFSET
 
   return (
     <g>
       {showAbove && (
-        <line className={styles.altBar} x1={x - halfW} y1={cy - ALT_BAR_HALF_GAP} x2={x + halfW} y2={cy - ALT_BAR_HALF_GAP} />
+        <line className={styles.altBar} x1={cx - halfW} y1={cy - ALT_BAR_HALF_GAP} x2={cx + halfW} y2={cy - ALT_BAR_HALF_GAP} />
       )}
-      <text className={styles.altText} x={x} y={cy} textAnchor="middle" dominantBaseline="central">{label}</text>
+      <text className={styles.altText} x={cx} y={cy} textAnchor="middle" dominantBaseline="central">{label}</text>
       {showBelow && (
-        <line className={styles.altBar} x1={x - halfW} y1={cy + ALT_BAR_HALF_GAP} x2={x + halfW} y2={cy + ALT_BAR_HALF_GAP} />
+        <line className={styles.altBar} x1={cx - halfW} y1={cy + ALT_BAR_HALF_GAP} x2={cx + halfW} y2={cy + ALT_BAR_HALF_GAP} />
       )}
     </g>
   )
@@ -206,7 +228,10 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
   // label sits below the name band, not on top of it.
   const plotTop = chartTop + ALT_HEADROOM
   const plotH = Math.max(chartBottom - plotTop, 20)
-  const totalNm = Math.max(model.totalNm, 0.1)
+  // Scale x by the approach's own extent (last approach fix), not the full
+  // model extent — the missed approach is now a fixed decorative flourish, not
+  // a data-scaled path, so the approach can use the panel's full width.
+  const approachNm = Math.max(model.fixes[model.fixes.length - 1].distNm, 0.1)
   const [yMin, yMax] = computeYDomain(model)
   const ySpan = yMax - yMin || 1
 
@@ -216,10 +241,8 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
   const plotRight = Math.max(width - MARGIN.right - X_INSET, plotLeft + 1)
   const plotW = plotRight - plotLeft
 
-  const xScale = (nm: number) => plotLeft + (nm / totalNm) * plotW
+  const xScale = (nm: number) => plotLeft + (nm / approachNm) * plotW
   const yScale = (ft: number) => plotTop + plotH - ((ft - yMin) / ySpan) * plotH
-
-  const allFixes = [...model.fixes, ...model.missed]
 
   // ── primary descent path: linear through the fixes, then the glideslope to the threshold ──
   const descentPts = descentProfilePoints(model)
@@ -241,34 +264,60 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
     ? { x: (gsAnchorPx.x + thresholdPx.x) / 2, y: (gsAnchorPx.y + thresholdPx.y) / 2 - 8 }
     : null
 
-  // ── dashed climbing missed-approach path ──
-  let missedPath = ''
-  let missedArrowEnd: PxPt | null = null
-  if (model.missed.length > 0) {
-    const mapFix = model.fixes[model.fixes.length - 1]
-    let prevAlt = fixAlt(mapFix, model)
-    missedPath = `M ${xScale(mapFix.distNm)} ${yScale(prevAlt)}`
-    for (const f of model.missed) {
-      const alt = f.plotAltFt ?? prevAlt + 500
-      missedPath += ` L ${xScale(f.distNm)} ${yScale(alt)}`
-      prevAlt = alt
-    }
-    const last = model.missed[model.missed.length - 1]
-    missedArrowEnd = { x: xScale(last.distNm), y: yScale(prevAlt) }
-  }
+  // ── missed approach: a short dotted curve that leaves the runway and turns
+  //    up, ending in a solid arrowhead — the FAA-plate flourish, not the full
+  //    (space-hungry, rarely-needed) climb path. ──
+  const hasMissed = model.missed.length > 0
+  const missedFlourish = (() => {
+    if (!hasMissed) return null
+    const sx = thresholdPx.x
+    const sy = thresholdPx.y
+    const ex = sx + 44
+    const ey = sy - 42
+    const cx = sx + 26 // control at the start height → leaves horizontally, then curves up
+    const cy = sy
+    const path = `M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`
+    // Arrowhead aligned to the curve's tangent at the end (control → end).
+    const dx = ex - cx
+    const dy = ey - cy
+    const len = Math.hypot(dx, dy) || 1
+    const ux = dx / len
+    const uy = dy / len
+    const perpX = -uy
+    const perpY = ux
+    const AH = 9 // arrowhead length
+    const AW = 5 // arrowhead half-width
+    const bx = ex - ux * AH
+    const by = ey - uy * AH
+    const arrow = `${ex},${ey} ${bx + perpX * AW},${by + perpY * AW} ${bx - perpX * AW},${by - perpY * AW}`
+    return { path, arrow }
+  })()
 
   // ── 34:1 clear-surface wedge (FAF → threshold), forked tail at the FAF end ──
   const wedgePath = gsAnchorPx ? buildWedgePath(gsAnchorPx, thresholdPx) : null
 
-  // ── top-band fix-name labels, staggered downward following the descent ──
+  // ── top-band fix-name labels, staggered downward following the descent,
+  //    then de-collided: a name that would overlap its neighbour horizontally
+  //    is pushed to a lower row so closely-spaced fixes stay readable. ──
   const nameAlts = model.fixes.map((f) => f.plotAltFt ?? model.tdzeFt ?? null)
   const nameOffsets = labelStaggerOffsets(nameAlts, LABEL_STAGGER_MAX)
+  const nameHalfW = (f: ProfileFix) => {
+    const chars = f.fixId.length + (f.speedKt > 0 ? String(f.speedKt).length + 2 : 0)
+    return (chars * NAME_CHAR_W) / 2
+  }
+  for (let i = 1; i < model.fixes.length; i++) {
+    const gap = xScale(model.fixes[i].distNm) - xScale(model.fixes[i - 1].distNm)
+    const need = nameHalfW(model.fixes[i]) + nameHalfW(model.fixes[i - 1]) + 4
+    if (gap < need && nameOffsets[i] - nameOffsets[i - 1] < NAME_ROW_H) {
+      nameOffsets[i] = nameOffsets[i - 1] + NAME_ROW_H
+    }
+  }
 
   // ── bottom-band inter-fix distance scale ──
   const segDists = segmentDistancesNm(model.fixes)
-  const distTickTopY = chartBottom + 2
-  const distTickBotY = chartBottom + 8
-  const distTextY = chartBottom + 17
+  const distTickTopY = chartBottom + 3
+  const distTickBotY = chartBottom + 9
+  const distTextY = chartBottom + 20
 
   return (
     <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -307,16 +356,11 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
         </g>
       )}
 
-      {/* missed approach */}
-      {missedPath && (
+      {/* missed approach — dotted curve up to a solid arrowhead */}
+      {missedFlourish && (
         <g>
-          <path className={styles.missedPath} d={missedPath} />
-          {missedArrowEnd && (
-            <polygon
-              className={styles.missedArrow}
-              points={`${missedArrowEnd.x - 4},${missedArrowEnd.y + 4} ${missedArrowEnd.x + 4},${missedArrowEnd.y + 4} ${missedArrowEnd.x},${missedArrowEnd.y - 5}`}
-            />
-          )}
+          <path className={styles.missedPath} d={missedFlourish.path} fill="none" />
+          <polygon className={styles.missedArrow} points={missedFlourish.arrow} />
         </g>
       )}
 
@@ -353,29 +397,18 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
         )
       })}
 
-      {/* chart: altitude constraint bars/text and role glyphs, approach + missed fixes */}
-      {allFixes.map((f, i) => {
-        const isMissedFix = i >= model.fixes.length
+      {/* chart: altitude constraint bars/text and role glyphs (approach fixes) */}
+      {model.fixes.map((f, i) => {
         const x = xScale(f.distNm)
-        const alt = fixAlt(f, model)
-        const y = yScale(alt)
-        const hold = model.holds.find(
-          (h) => h.inMissed === isMissedFix && h.atFixIdx === (isMissedFix ? i - model.fixes.length : i),
-        )
+        const y = yScale(fixAlt(f, model))
+        const hold = model.holds.find((h) => !h.inMissed && h.atFixIdx === i)
+        // The runway/threshold fix's crossing altitude is redundant with the
+        // TDZE and TCH already shown near the runway — skip it to reduce noise.
+        const isRunwayFix = i === model.fixes.length - 1
 
         return (
           <g key={`${f.fixId}-${i}`}>
-            {isMissedFix && (
-              <text className={styles.missedFixName} x={x} y={y - 10} textAnchor="middle">{f.fixId}</text>
-            )}
-
-            <AltAnnotation f={f} x={x} y={y} below={isMissedFix} />
-
-            {isMissedFix && f.isDmeArc && (
-              <text className={styles.arcText} x={x} y={y + 16} textAnchor="middle">
-                {f.dmeNm != null ? `${f.dmeNm} DME ARC` : 'DME ARC'}
-              </text>
-            )}
+            {!isRunwayFix && <AltAnnotation f={f} x={x} y={y} />}
 
             {f.isGsIntercept && <ProfileBolt x={x} y={y} />}
             {f.role === 'faf' && <MalteseCross x={x} y={y} />}

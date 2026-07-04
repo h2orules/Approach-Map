@@ -60,11 +60,16 @@ export function LocFeatherLayer() {
     const { end, other } = match
     if (!end?.lat || !other?.lat) return EMPTY_FC
 
-    // True inbound course toward `end`, via the reciprocal of the runway
-    // axis bearing — same derivation as extendedCenterline.ts, so we don't
-    // depend on the (possibly magnetic) published heading field.
+    // True inbound landing course toward `end`: the runway-axis bearing FROM
+    // this threshold TOWARD the far end IS the rollout/travel direction, which
+    // equals the course flown to land here — not its reciprocal. Derived from
+    // the threshold coordinates (like extendedCenterline.ts) so we don't depend
+    // on the (possibly magnetic) published heading field. buildLocFeather
+    // extends the feather outbound from here into the final-approach airspace
+    // (the front-course side); passing the reciprocal would flip it to the
+    // back course, over the runway.
     const axisBearing = turf.bearing(turf.point([end.lon, end.lat]), turf.point([other.lon, other.lat]))
-    const inboundCourseTrueDeg = (axisBearing + 180 + 360) % 360
+    const inboundCourseTrueDeg = (axisBearing + 360) % 360
 
     const { shaded, outline } = buildLocFeather(
       end.lat,

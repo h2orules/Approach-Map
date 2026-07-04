@@ -1,13 +1,8 @@
+import { memo } from 'react'
 import { formatAltConstraint } from '../../utils/altitudeConstraint'
 import { glideslopeAltAt } from '../../geo/profileMath'
-import type { ProfileFix, ProfileModel } from '../../geo/profileMath'
+import type { ProfileFix, ProfileModel, LiveAircraft } from '../../geo/profileMath'
 import styles from './ProfileSvg.module.css'
-
-interface LiveAircraft {
-  distNm: number
-  altFt: number
-  label: string
-}
 
 interface Props {
   model: ProfileModel
@@ -99,7 +94,9 @@ function AircraftGlyph({ x, y, label }: { x: number; y: number; label: string })
 
 // ── main component ─────────────────────────────────────────────────────
 
-export function ProfileSvg({ model, liveAircraft, width, height }: Props) {
+// Memoized: the live-aircraft tick re-renders the parent every second, but
+// the static profile geometry only depends on model/width/height.
+export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width, height }: Props) {
   if (model.fixes.length < 2) {
     return (
       <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -271,4 +268,4 @@ export function ProfileSvg({ model, liveAircraft, width, height }: Props) {
       )}
     </svg>
   )
-}
+})

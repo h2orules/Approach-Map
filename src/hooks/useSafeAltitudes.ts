@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { useCifpStore } from '../services/cifpCache'
-import { useProcedureStore } from '../store/useProcedureStore'
-import { computeVisibility } from './useSelectionGuards'
+import { useProcedureStore, computeVisibility } from '../store/useProcedureStore'
 import { averageCount } from '../utils/detectionHistory'
 import { chooseSafeAltitudeArea } from '../geo/safeAltitude'
 import { DETECTION_HISTORY_WINDOW_MS } from '../config/constants'

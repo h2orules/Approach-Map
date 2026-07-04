@@ -2,6 +2,7 @@ import * as turf from '@turf/turf'
 import type { AltConstraint, Procedure, ProcedureLeg, ProcedureTransition, WaypointRole } from '../types/procedure'
 import type { CifpRunwayInfo } from '../types/cifp'
 import { resolveAltConstraint } from '../utils/altitudeConstraint'
+import { FEET_PER_NM } from '../config/constants'
 
 const NM = { units: 'nauticalmiles' as const }
 
@@ -13,6 +14,13 @@ const SAME_FIX_EPS_NM = 0.02
 const ROLE_RANK: Record<WaypointRole, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
 
 const HOLD_PATH_TERMS = new Set(['HM', 'HF', 'HA', 'PI'])
+
+/** A live aircraft's position on the profile (see ProfilePanel/ProfileSvg). */
+export interface LiveAircraft {
+  distNm: number
+  altFt: number
+  label: string
+}
 
 export interface ProfileFix {
   fixId: string
@@ -200,13 +208,11 @@ export function buildProfileModel(p: Procedure, t: ProcedureTransition, rwy: Cif
   }
 }
 
-const FT_PER_NM = 6076.12
-
 /** Expected glideslope altitude (ft MSL) at a given distance from the threshold. */
 export function glideslopeAltAt(model: ProfileModel, distFromThresholdNm: number): number {
   const tdze = model.tdzeFt ?? 0
   const tch = model.tchFt ?? 50
-  return tdze + tch + distFromThresholdNm * Math.tan((model.gsAngleDeg * Math.PI) / 180) * FT_PER_NM
+  return tdze + tch + distFromThresholdNm * Math.tan((model.gsAngleDeg * Math.PI) / 180) * FEET_PER_NM
 }
 
 /**

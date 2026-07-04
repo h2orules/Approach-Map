@@ -26,10 +26,10 @@ import { useRouteEnrichment } from '../../hooks/useRouteEnrichment'
 import { useDatis } from '../../hooks/useDatis'
 import { useRunways } from '../../hooks/useRunways'
 import { useSafeAltitudes } from '../../hooks/useSafeAltitudes'
-import { useProcedureStore } from '../../store/useProcedureStore'
+import { useProcedureStore, computeVisibility } from '../../store/useProcedureStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
-import { useSelectionGuards, computeVisibility } from '../../hooks/useSelectionGuards'
+import { useSelectionGuards } from '../../hooks/useSelectionGuards'
 import type { Procedure } from '../../types/procedure'
 
 // Render order: lowest value drawn first (bottom), highest last (top).

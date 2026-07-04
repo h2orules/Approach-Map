@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useSelectionStore } from '../store/useSelectionStore'
-import { useProcedureStore } from '../store/useProcedureStore'
+import { useProcedureStore, computeVisibility } from '../store/useProcedureStore'
 import { useCifpStore } from '../services/cifpCache'
 import { ensureDtppLoaded } from '../services/dtppMetafile'
-import { computeVisibility } from './useSelectionGuards'
 import type { Procedure } from '../types/procedure'
 
 /**

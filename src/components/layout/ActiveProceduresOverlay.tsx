@@ -106,7 +106,7 @@ export function ActiveProceduresOverlay() {
     : ''
 
   return (
-    <div className={styles.overlay}>
+    <div className={styles.overlay} data-map-overlay="">
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div className={styles.title}>
         IN USE

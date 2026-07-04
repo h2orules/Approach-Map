@@ -69,6 +69,14 @@ export function ProcedureToggleRow({ procedure }: Props) {
 
   const remaining = formatRemaining(lastDetectedAt)
 
+  // Selecting a hidden approach also shows it — otherwise the selection
+  // guards would clear the selection immediately (a selected approach must
+  // stay visible) and the click would appear to do nothing.
+  const handleNameClick = useCallback(() => {
+    if (!isSelected && !isVisible) setUserToggle(procedure.id, true)
+    toggleSelection({ kind: 'approach', procedureId: procedure.id })
+  }, [isSelected, isVisible, procedure.id, setUserToggle, toggleSelection])
+
   return (
     <div className={`${styles.row} ${!procedure.hasGeometry ? styles.noGeom : ''}`}>
       <label className={styles.label}>
@@ -86,7 +94,7 @@ export function ProcedureToggleRow({ procedure }: Props) {
       />
       <span
         className={`${styles.name} ${isApproach ? styles.nameSelectable : ''} ${isSelected ? styles.nameSelected : ''}`}
-        onClick={isApproach ? () => toggleSelection({ kind: 'approach', procedureId: procedure.id }) : undefined}
+        onClick={isApproach ? handleNameClick : undefined}
       >
         {procedure.name}
       </span>

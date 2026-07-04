@@ -2,25 +2,9 @@ import { useEffect } from 'react'
 import { useSelectionStore } from '../store/useSelectionStore'
 import { useAircraftStore } from '../store/useAircraftStore'
 import { useSettingsStore } from '../store/useSettingsStore'
-import { useProcedureStore } from '../store/useProcedureStore'
+import { useProcedureStore, computeVisibility } from '../store/useProcedureStore'
 import { useAirportStore } from '../store/useAirportStore'
 import { positionToMinFt, positionToMaxFt } from '../utils/altitudeFilter'
-
-/**
- * Pure mirror of `useProcedureStore.isVisible` that takes the raw maps
- * instead of the store instance, so callers that already subscribed to
- * `userToggles`/`autoVisible` (e.g. to build a render list) don't need a
- * second subscription just to resolve one id.
- */
-export function computeVisibility(
-  userToggles: Record<string, boolean | undefined>,
-  autoVisible: Record<string, boolean>,
-  id: string,
-): boolean {
-  const userToggle = userToggles[id]
-  if (userToggle !== undefined) return userToggle
-  return autoVisible[id] ?? false
-}
 
 /**
  * Centralizes every condition under which the current selection (aircraft or

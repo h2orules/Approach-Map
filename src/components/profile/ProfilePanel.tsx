@@ -2,13 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MapRef } from 'react-map-gl'
 import { useProfileProcedure } from '../../hooks/useProfileProcedure'
 import { useSelectionStore, selectedHexOf } from '../../store/useSelectionStore'
-import { useProcedureStore } from '../../store/useProcedureStore'
+import { useProcedureStore, computeVisibility } from '../../store/useProcedureStore'
 import { useAircraftStore } from '../../store/useAircraftStore'
 import { useCifpStore, getRunwayInfoForAirport } from '../../services/cifpCache'
 import { pickProfileTransition, buildProfileModel, alongTrackNm } from '../../geo/profileMath'
-import type { ProfileModel } from '../../geo/profileMath'
+import type { ProfileModel, LiveAircraft } from '../../geo/profileMath'
 import { pickPanelAnchor, type Rect } from '../../geo/panelPlacement'
-import { computeVisibility } from '../../hooks/useSelectionGuards'
 import {
   PROFILE_PANEL_MIN_W,
   PROFILE_PANEL_MIN_H,
@@ -29,12 +28,6 @@ interface PanelRect {
   y: number
   width: number
   height: number
-}
-
-interface LiveAircraft {
-  distNm: number
-  altFt: number
-  label: string
 }
 
 const DEFAULT_RECT: PanelRect = {
@@ -59,7 +52,6 @@ export function ProfilePanel({ mapRef }: Props) {
   const cifpData = useCifpStore((s) => s.data)
 
   const [rect, setRect] = useState<PanelRect>(DEFAULT_RECT)
-  const [userMoved, setUserMoved] = useState(false)
   const lastAutoProcId = useRef<string | null>(null)
   const dragStart = useRef<{ startClientX: number; startClientY: number; startX: number; startY: number } | null>(
     null,
@@ -71,17 +63,14 @@ export function ProfilePanel({ mapRef }: Props) {
 
   const transition = useMemo(() => (procedure ? pickProfileTransition(procedure) : null), [procedure])
 
-  const [rwy, setRwy] = useState<CifpRunwayInfo | null>(null)
-  useEffect(() => {
-    if (!procedure) {
-      setRwy(null)
-      return
-    }
+  // cifpData is a dependency only to re-run this lookup once the CIFP
+  // store finishes loading (getRunwayInfoForAirport itself is synchronous).
+  const rwy = useMemo<CifpRunwayInfo | null>(() => {
+    void cifpData
+    if (!procedure) return null
     const info = getRunwayInfoForAirport(procedure.icao)
     const ident = procedure.runways[0]
-    setRwy(ident ? info[`RW${ident}`] ?? null : null)
-    // cifpData is a dependency only to re-run this lookup once the CIFP
-    // store finishes loading (getRunwayInfoForAirport itself is synchronous).
+    return ident ? info[`RW${ident}`] ?? null : null
   }, [procedure, cifpData])
 
   const model = useMemo<ProfileModel | null>(() => {
@@ -120,19 +109,28 @@ export function ProfilePanel({ mapRef }: Props) {
       }
     }
 
-    // Approximate rects for the other absolutely-positioned overlays sharing
-    // this container (ActiveProceduresOverlay bottom-left, AltitudeFilter
-    // bottom-right) — we don't have live refs into their DOM nodes, so these
-    // are rough sizes/positions derived from their CSS Modules, not measured.
-    const reservedRects: Rect[] = [
-      { x: 12, y: containerH - 48 - 160, w: 280, h: 160 },
-      { x: containerW - 10 - 60, y: containerH - 110 - 250, w: 60, h: 250 },
-    ]
+    // Measure the other absolutely-positioned overlays sharing this container
+    // (they mark themselves with data-map-overlay) so placement avoids their
+    // real on-screen footprint rather than numbers copied from their CSS.
+    const reservedRects: Rect[] = []
+    const host = map.getContainer().parentElement
+    if (host) {
+      for (const el of Array.from(host.querySelectorAll<HTMLElement>('[data-map-overlay]'))) {
+        const r = el.getBoundingClientRect()
+        if (r.width > 0 && r.height > 0) {
+          reservedRects.push({
+            x: r.left - containerRect.left,
+            y: r.top - containerRect.top,
+            w: r.width,
+            h: r.height,
+          })
+        }
+      }
+    }
 
     const idx = pickPanelAnchor(candidates, obstaclePts, reservedRects)
     const chosen = candidates[idx]
     setRect({ x: chosen.x, y: chosen.y, width, height })
-    setUserMoved(false)
     lastAutoProcId.current = procedure.id
   }, [procedure, procedures, userToggles, autoVisible, mapRef])
 
@@ -150,7 +148,6 @@ export function ProfilePanel({ mapRef }: Props) {
     if (!dragStart.current) return
     const dx = e.clientX - dragStart.current.startClientX
     const dy = e.clientY - dragStart.current.startClientY
-    setUserMoved(true)
     setRect((prev) => ({ ...prev, x: dragStart.current!.startX + dx, y: dragStart.current!.startY + dy }))
   }, [])
 
@@ -204,7 +201,6 @@ export function ProfilePanel({ mapRef }: Props) {
       ref={panelRef}
       className={styles.panel}
       style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
-      data-user-moved={userMoved}
     >
       <div
         className={styles.titlebar}

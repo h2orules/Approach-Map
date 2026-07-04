@@ -589,7 +589,12 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         resolveFix,
         magVarDeg,
         (centerFixId) => Array.from(centerFixToApproaches.get(centerFixId) ?? []),
-      )
+      ).map((area) => ({
+        // buildSafeAltitudeAreas works with bare ARINC idents; qualify them to
+        // full Procedure.id form so visibility/detection-history lookups match.
+        ...area,
+        procedureIds: area.procedureIds.map((n) => `${icao}-APPROACH-${n}`),
+      }))
 
       result[icao] = {
         procedures,

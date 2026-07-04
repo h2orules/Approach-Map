@@ -72,3 +72,13 @@ export const PROFILE_PANEL_MIN_W = 520
 export const PROFILE_PANEL_MIN_H = 300
 export const PROFILE_MARGIN_PX = 12
 export const PROFILE_AIRCRAFT_UPDATE_MS = 1000
+
+// Unit conversions shared across terrain labels, CIFP parsing, and geo math.
+export const FEET_PER_METER = 3.28084
+export const FEET_PER_NM = 6076.12
+
+// TAA/MSA safe-altitude overlay styling.
+export const SAFE_ALT_COLOR = '#94a3b8'
+export const SAFE_ALT_FILL_OPACITY = 0.05
+export const SAFE_ALT_LINE_WIDTH = 1.2
+export const SAFE_ALT_LINE_OPACITY = 0.7

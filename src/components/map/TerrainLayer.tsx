@@ -9,6 +9,7 @@ import {
   CONTOUR_ALL_MIN_ZOOM,
   CONTOUR_LABEL_MIN_ZOOM,
   PEAK_LABEL_MIN_ZOOM,
+  FEET_PER_METER,
 } from '../../config/constants'
 
 // FAA-sectional-style terrain layer: hillshade relief + hypsometric elevation
@@ -41,8 +42,6 @@ import {
 // transparently re-added after base-style swaps), as long as the component
 // itself stays mounted.
 
-const METERS_PER_FOOT = 0.3048
-
 // TERRAIN_HYPSO_STOPS is [ft, color] ascending; Mapbox `ele` on the contour
 // source-layer is in meters, so convert the stop thresholds ft -> m here.
 // A `step` expression's first argument is the value for anything below the
@@ -51,7 +50,7 @@ const METERS_PER_FOOT = 0.3048
 const hypsoStepExpression: Expression = ['step', ['get', 'ele'], TERRAIN_HYPSO_STOPS[0][1]]
 for (let i = 1; i < TERRAIN_HYPSO_STOPS.length; i++) {
   const [ft, color] = TERRAIN_HYPSO_STOPS[i]
-  hypsoStepExpression.push(ft * METERS_PER_FOOT, color)
+  hypsoStepExpression.push(ft / FEET_PER_METER, color)
 }
 
 const MAJOR_CONTOUR_FILTER = ['match', ['get', 'index'], [5, 10], true, false]
@@ -60,7 +59,7 @@ const MINOR_CONTOUR_FILTER = ['!', ['match', ['get', 'index'], [5, 10], true, fa
 // Elevation in feet, rounded, from a meters-based `ele` property.
 const CONTOUR_LABEL_TEXT: Expression = [
   'concat',
-  ['to-string', ['round', ['*', ['get', 'ele'], 3.28084]]],
+  ['to-string', ['round', ['*', ['get', 'ele'], FEET_PER_METER]]],
   ' ft',
 ]
 
@@ -74,7 +73,7 @@ const PEAK_LABEL_FILTER = [
 const PEAK_ELEVATION_FT = [
   'coalesce',
   ['get', 'elevation_ft'],
-  ['round', ['*', ['coalesce', ['get', 'elevation_m'], 0], 3.28084]],
+  ['round', ['*', ['coalesce', ['get', 'elevation_m'], 0], FEET_PER_METER]],
 ]
 
 const PEAK_LABEL_TEXT: Expression = [

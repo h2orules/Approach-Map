@@ -5,14 +5,18 @@ import type { FeatureCollection, Feature } from 'geojson'
 import type { SafeAltitudeArea, SafeAltitudeSector } from '../../types/safeAltitude'
 import { sectorPolygon, sectorBoundaryLines, sectorLabelAnchor } from '../../geo/safeAltitude'
 import { useSettingsStore } from '../../store/useSettingsStore'
-import { MSA_DEFAULT_RADIUS_NM } from '../../config/constants'
+import {
+  MSA_DEFAULT_RADIUS_NM,
+  SAFE_ALT_COLOR,
+  SAFE_ALT_FILL_OPACITY,
+  SAFE_ALT_LINE_WIDTH,
+  SAFE_ALT_LINE_OPACITY,
+} from '../../config/constants'
 import styles from './SafeAltitudeLayer.module.css'
 
 interface Props {
   items: Array<{ icao: string; area: SafeAltitudeArea }>
 }
-
-const SAFE_ALT_COLOR = '#94a3b8'
 
 // Solid for TAA, dashed for MSA — both share the same neutral color, so the
 // only thing that varies per-feature is the dash pattern.
@@ -127,7 +131,7 @@ export function SafeAltitudeLayer({ items }: Props) {
           layout={{ visibility }}
           paint={{
             'fill-color': SAFE_ALT_COLOR,
-            'fill-opacity': 0.05,
+            'fill-opacity': SAFE_ALT_FILL_OPACITY,
           }}
         />
         <Layer
@@ -137,8 +141,8 @@ export function SafeAltitudeLayer({ items }: Props) {
           layout={{ visibility }}
           paint={{
             'line-color': SAFE_ALT_COLOR,
-            'line-width': 1.2,
-            'line-opacity': 0.7,
+            'line-width': SAFE_ALT_LINE_WIDTH,
+            'line-opacity': SAFE_ALT_LINE_OPACITY,
             'line-dasharray': LINE_DASH_EXPRESSION,
           }}
         />

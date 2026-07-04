@@ -11,7 +11,7 @@
  * `magneticToTrue` once the airport magnetic variation is known.
  */
 
-import { MSA_DEFAULT_RADIUS_NM } from '../config/constants'
+import { MSA_DEFAULT_RADIUS_NM, FEET_PER_METER } from '../config/constants'
 import type { SafeAltitudeArea, SafeAltitudeSector } from '../types/safeAltitude'
 
 // TAA straight-in areas default to 30nm when a sector omits its radius. FAA
@@ -180,7 +180,7 @@ export function parsePathPointRecord(line: string): PathPointRecord | null {
   let tchFt: number | null = null
   if (tchRaw && tchRaw > 0) {
     const tenths = tchRaw / 10
-    tchFt = line[108] === 'M' ? tenths * 3.28084 : tenths
+    tchFt = line[108] === 'M' ? tenths * FEET_PER_METER : tenths
   }
 
   return { icao, approachId, runwayId, gpaDeg, tchFt }

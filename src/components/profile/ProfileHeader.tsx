@@ -20,8 +20,9 @@ function formatEffDate(d: Date): string {
 }
 
 export function ProfileHeader({ procedure, model }: Props) {
-  // Subscribe so the Amdt box fills in once the d-TPP metafile finishes loading.
-  const dtppStatus = useDtppStore((s) => s.status)
+  // Subscribe to the chart data itself so the Amdt box fills in once the
+  // d-TPP metafile finishes loading.
+  const dtppByIcao = useDtppStore((s) => s.byIcao)
   const effectiveDateStr = useCifpStore((s) => s.effectiveDate)
 
   const validity = useMemo(() => {
@@ -32,11 +33,9 @@ export function ProfileHeader({ procedure, model }: Props) {
   }, [effectiveDateStr])
 
   const amdt = useMemo(() => {
-    // dtppStatus is read only to trigger a recompute once the store transitions
-    // to 'ready' — getAmdtFor reads the store's current data directly.
-    void dtppStatus
+    void dtppByIcao
     return getAmdtFor(procedure.icao, procedure)
-  }, [procedure, dtppStatus])
+  }, [procedure, dtppByIcao])
 
   // Notes are computed from the transition's raw legs (not the merged
   // ProfileModel fixes) so DME/recommended-navaid pairing survives leg

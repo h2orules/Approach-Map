@@ -77,13 +77,6 @@ export function ProfileHeader({ procedure, model }: Props) {
           <span className={styles.boxLabel}>Validity</span>
           <span className={styles.boxValue}>{validity ?? '—'}</span>
         </div>
-
-        <div className={styles.box}>
-          <span className={styles.boxLabel}>Amdt</span>
-          <span className={styles.boxValue}>
-            {amdt ? `Amdt ${amdt.amdt} · ${amdt.amdtDate}` : 'Amdt —'}
-          </span>
-        </div>
       </div>
 
       {(isRnpAr || hasGs || dmeRequired || maxSpeed > 0) && (

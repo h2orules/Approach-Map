@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from 'react'
+import { useRef, useCallback, useEffect, useMemo, useState } from 'react'
 import Map, { type MapRef, type MapLayerMouseEvent, NavigationControl } from 'react-map-gl'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore — mapbox-gl CSS import, types not needed
@@ -12,6 +12,8 @@ import { FlownSegmentLayer } from './FlownSegmentLayer'
 import { AutoActiveSegmentsLayer } from './AutoActiveSegmentsLayer'
 import { RunwayLayer } from './RunwayLayer'
 import { ExtendedCenterlineLayer } from './ExtendedCenterlineLayer'
+import { TerrainLayer } from './TerrainLayer'
+import { SafeAltitudeLayer } from './SafeAltitudeLayer'
 import { WaypointMarkers } from './WaypointMarkers'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
 import { AltitudeFilter } from './AltitudeFilter'
@@ -22,6 +24,7 @@ import { useProcedureDetection } from '../../hooks/useProcedureDetection'
 import { useRouteEnrichment } from '../../hooks/useRouteEnrichment'
 import { useDatis } from '../../hooks/useDatis'
 import { useRunways } from '../../hooks/useRunways'
+import { useSafeAltitudes } from '../../hooks/useSafeAltitudes'
 import { useProcedureStore } from '../../store/useProcedureStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
@@ -45,6 +48,7 @@ export function AppMap() {
   const autoVisible = useProcedureStore((s) => s.autoVisible)
   const showCenterlines = useSettingsStore((s) => s.showExtendedCenterlines)
   const runways = useAirportStore((s) => s.runways)
+  const selectedAirport = useAirportStore((s) => s.selectedAirport)
   const toggleSelection = useSelectionStore((s) => s.toggle)
   const clearSelection = useSelectionStore((s) => s.clear)
   const [hoverCursor, setHoverCursor] = useState(false)
@@ -78,6 +82,12 @@ export function AppMap() {
   const visibleProcedures = procedures
     .filter((p) => p.hasGeometry && computeVisibility(userToggles, autoVisible, p.id))
     .sort((a, b) => approachRenderOrder(a) - approachRenderOrder(b))
+
+  const safeAltIcaos = useMemo(
+    () => (selectedAirport ? [selectedAirport.icao] : []),
+    [selectedAirport],
+  )
+  const safeAltItems = useSafeAltitudes(safeAltIcaos)
 
   const interactiveLayerIds = visibleProcedures
     .filter((p) => p.type === 'APPROACH')
@@ -118,6 +128,15 @@ export function AppMap() {
         onMouseLeave={handleMouseLeave}
       >
         <NavigationControl position="bottom-right" />
+
+        {/* Terrain and safe-altitude overlays are always mounted (visibility
+            toggled via layout.visibility) rather than conditionally rendered,
+            so their runtime GL layers keep a stable position in the render
+            order across toggles — see the z-order rationale comment atop
+            TerrainLayer.tsx. */}
+        <TerrainLayer />
+
+        <SafeAltitudeLayer items={safeAltItems} />
 
         <RunwayLayer runways={runways} />
 

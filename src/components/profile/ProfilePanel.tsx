@@ -78,6 +78,21 @@ export function ProfilePanel({ mapRef }: Props) {
     return buildProfileModel(procedure, transition, rwy)
   }, [procedure, transition, rwy])
 
+  // Dev diagnostic: a FAF / glideslope-intercept fix with no parsed crossing
+  // altitude is almost certainly a CIFP parse gap (the FAF altitude drives the
+  // glideslope anchor), not a normally-unconstrained step-down fix. Surfacing
+  // it here separates a real data problem from the interpolation fallback.
+  useEffect(() => {
+    if (!import.meta.env.DEV || !model || !procedure) return
+    const missing = model.fixes.filter((f) => (f.role === 'faf' || f.isGsIntercept) && f.plotAltFt == null)
+    if (missing.length > 0) {
+      console.warn(
+        `[profile] ${procedure.name} (${procedure.id}): FAF/GS-intercept fix(es) with no parsed crossing ` +
+          `altitude: ${missing.map((f) => f.fixId).join(', ')} — likely a CIFP parse gap, not an unconstrained fix.`,
+      )
+    }
+  }, [model, procedure])
+
   // ── Initial auto-placement: once per procedure id, unless the user dragged. ──
   useEffect(() => {
     if (!procedure) return

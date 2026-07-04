@@ -34,13 +34,20 @@ interface LabelInfo {
   minAltFt: number
 }
 
-/** Centroid of a sector's exterior ring, for the boxed altitude label. */
+/**
+ * Anchor point for a sector's boxed altitude label, guaranteed to fall inside
+ * the sector — including sectors with holes (e.g. a ring-shaped MVA sector
+ * carved out around a city/airport) and concave shapes, where a plain
+ * centroid (turf.centerOfMass) can land in a hole or entirely outside the
+ * polygon. turf.pointOnFeature computes the centroid and, if it's not on the
+ * surface, falls back to the nearest point that is.
+ */
 function sectorLabelAnchor(sector: MvaSector): Position | null {
   const exterior = sector.polygon[0]
   if (!exterior || exterior.length < 3) return null
   try {
-    const centroid = turf.centerOfMass(turf.polygon([exterior]))
-    return centroid.geometry.coordinates as Position
+    const anchor = turf.pointOnFeature(turf.polygon(sector.polygon))
+    return anchor.geometry.coordinates as Position
   } catch {
     return null
   }

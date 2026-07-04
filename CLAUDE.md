@@ -39,10 +39,13 @@ There is no ESLint/Prettier config in the repo; match the surrounding code style
 
 Deploys to **Azure Static Web Apps (Free tier)** — static SPA + the six
 `/api/*` proxy routes as SWA-managed Azure Functions (`api/` folder, Node 20).
-GitHub Actions (`.github/workflows/azure-static-web-apps.yml`) deploys on push
-to `main` and creates PR preview environments. Azure resources are defined in
-`infra/main.bicep`, provisioned via `scripts/azure/*.sh`. See `DEPLOYMENT.md`
-for the full setup (secrets, custom domain, limits, troubleshooting).
+GitHub Actions deploys on push to `main` and creates PR preview environments
+(`.github/workflows/azure-static-web-apps.yml`); `.github/workflows/ci.yml`
+runs typecheck + tests + build on every PR and main push and is the required
+status check for merging. Azure resources are defined in `infra/main.bicep`,
+provisioned via `scripts/azure/*.sh`. Shared VS Code debug/test configs are in
+`.vscode/`. See `DEPLOYMENT.md` for the full setup (secrets, custom domain,
+CI/branch protection, local debugging, limits, troubleshooting).
 
 ## Directory layout
 

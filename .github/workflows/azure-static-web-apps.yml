@@ -26,6 +26,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Gate the deploy on the unit tests so a bad direct push to main (or a
+      # PR preview) never ships. The full validation lives in ci.yml; this is
+      # the deploy-time safety net.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npx vitest run
+
       - name: Build and deploy to Azure
         uses: Azure/static-web-apps-deploy@v1
         with:

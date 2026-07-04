@@ -1,0 +1,74 @@
+{
+  // Debug configs for local dev. VS Code allows comments in this file.
+  // Prerequisite for all: `npm install` at the repo root.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // Primary frontend flow: starts the Vite dev server (HMR / live
+      // updates) and opens Chrome attached to the debugger, so breakpoints
+      // in src/**/*.ts(x) work against original source. /api/* is proxied to
+      // the real upstreams by the Vite dev proxy (vite.config.ts).
+      "name": "Frontend: Vite dev + Chrome (HMR)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "vite: dev",
+      "sourceMaps": true
+    },
+    {
+      // Debug the whole unit-test suite. Set breakpoints in any test or the
+      // pure geo/utils functions they exercise.
+      "name": "Vitest: all tests",
+      "type": "node",
+      "request": "launch",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+      "args": ["run"],
+      "smartStep": true,
+      "console": "integratedTerminal"
+    },
+    {
+      // Debug only the currently-open test file.
+      "name": "Vitest: current file",
+      "type": "node",
+      "request": "launch",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+      "args": ["run", "${relativeFile}"],
+      "smartStep": true,
+      "console": "integratedTerminal"
+    },
+    {
+      // Debug the Azure Functions proxy in isolation (api/). Builds the
+      // functions, starts the Core Tools host with the node inspector open,
+      // and attaches. Requires Azure Functions Core Tools v4 (`func`).
+      // The proxy is then reachable at http://localhost:7071/api/<service>/...
+      "name": "Functions: debug proxy (func host)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "preLaunchTask": "func: host start",
+      "skipFiles": ["<node_internals>/**"],
+      "localRoot": "${workspaceFolder}/api",
+      "remoteRoot": "${workspaceFolder}/api"
+    },
+    {
+      // Closest-to-production flow: the SWA CLI serves the SPA (proxied to
+      // the live Vite dev server for HMR) AND the real local Functions, on
+      // http://localhost:4280 — so /api/* hits your actual proxy code.
+      // Requires the SWA CLI (`npm i -g @azure/static-web-apps-cli`) and
+      // Azure Functions Core Tools. See DEPLOYMENT.md.
+      "name": "Full stack: SWA CLI + Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:4280",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "swa: start (live)",
+      "sourceMaps": true
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "ms-azuretools.vscode-azurestaticwebapps",
+    "ms-azuretools.vscode-azurefunctions",
+    "vitest.explorer",
+    "github.vscode-github-actions"
+  ]
+}

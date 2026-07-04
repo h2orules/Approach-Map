@@ -100,25 +100,68 @@ remove the GitHub secrets and the GoDaddy CNAME.
 | --- | --- |
 | `api/` | Azure Functions (Node 20, TypeScript). One catch-all HTTP function `api/src/functions/proxy.ts` with route `{service}/{*path}` mirrors the dev-proxy table in `vite.config.ts`. Keep the two tables in sync. |
 | `staticwebapp.config.json` | SWA runtime config: SPA fallback to `/index.html` (excluding `/api`, assets, and `public/data`), `node:20` API runtime. |
-| `.github/workflows/azure-static-web-apps.yml` | CI/CD: build + deploy on push to `main`, PR previews. |
+| `.github/workflows/ci.yml` | CI validation (typecheck, unit tests, build SPA + API) on PRs and pushes to `main`. The required status check for branch protection. |
+| `.github/workflows/azure-static-web-apps.yml` | CD: build + deploy on push to `main`, PR previews. Runs the unit tests as a deploy-time gate. |
 | `infra/main.bicep` | The Static Web App resource definition. |
 | `scripts/azure/*.sh` | az-cli wrappers: provision, set secret, deploy token, custom domain, teardown. |
+| `.vscode/*` | Shared debug/launch/test configs (see Local development). |
+
+## Continuous integration & branch protection
+
+`ci.yml` runs on every pull request to `main` and every push to `main`, and
+must pass for the app to build. To make it a hard gate on merges (the
+"require passing before merge" part):
+
+1. GitHub → repo **Settings → Branches → Add branch ruleset** (or classic
+   "Add rule") targeting `main`.
+2. Enable **Require a pull request before merging** (optionally require 1
+   approval).
+3. Enable **Require status checks to pass before merging** and, in the
+   search box, select **`Typecheck, test, build`** (the CI job). The check
+   only appears in the list after the workflow has run at least once, so
+   open a throwaway PR first if needed.
+4. Enable **Require branches to be up to date before merging** so checks run
+   against the merged result.
+
+Direct pushes to `main` that skip a PR are still gated at deploy time: the
+`azure-static-web-apps.yml` workflow runs the unit tests before the deploy
+step, so a red build never ships. For belt-and-suspenders, the ruleset above
+can also **Restrict deletions / Block force pushes** and require PRs for all
+changes to `main`.
 
 ## Local development
 
-Unchanged: `npm run dev` uses the Vite dev proxies. The only difference is
+`npm run dev` uses the Vite dev proxies. The only change from before is that
 `.env.local` now uses `ADSBX_API_KEY` (no `VITE_` prefix) — the dev server
-attaches the header on the proxy's server side, same as production.
+attaches the header on the proxy's server side, exactly like production.
 
-To exercise the real Functions locally (optional, requires
-[SWA CLI](https://azure.github.io/static-web-apps-cli/) and Azure Functions
-Core Tools):
+### Debugging in VS Code
 
-```sh
-npm run build && (cd api && npm install && npm run build)
-npx @azure/static-web-apps-cli start ./dist --api-location ./api
-# ADSBX_API_KEY for local Functions goes in api/local.settings.json (gitignored):
-#   { "IsEncrypted": false, "Values": { "ADSBX_API_KEY": "..." } }
+Shared configs live in `.vscode/` (`launch.json`, `tasks.json`,
+`settings.json`, `extensions.json`). Open the Run and Debug panel and pick:
+
+- **Frontend: Vite dev + Chrome (HMR)** — starts the dev server and opens
+  Chrome attached to the debugger. Edit-and-save gives live HMR updates;
+  breakpoints in `src/**` hit against original TypeScript. This is the
+  everyday flow. Needs only `npm install`.
+- **Vitest: all tests** / **Vitest: current file** — run the suite (or the
+  open file) under the debugger with breakpoints in tests and the pure
+  functions they exercise. Needs only `npm install`.
+- **Functions: debug proxy (func host)** — builds `api/`, starts the Azure
+  Functions host with the inspector open, and attaches, so you can breakpoint
+  the proxy at `http://localhost:7071/api/<service>/...`. Requires
+  [Azure Functions Core Tools](https://learn.microsoft.com/azure/azure-functions/functions-run-local).
+- **Full stack: SWA CLI + Chrome** — the closest-to-prod local run: the
+  [SWA CLI](https://azure.github.io/static-web-apps-cli/) fronts the live
+  Vite dev server (HMR preserved) and the real local Functions on
+  `http://localhost:4280`, so `/api/*` exercises your actual proxy code
+  end-to-end. Requires the SWA CLI and Functions Core Tools.
+
+`ADSBX_API_KEY` for the local Functions host goes in `api/local.settings.json`
+(gitignored):
+
+```json
+{ "IsEncrypted": false, "Values": { "FUNCTIONS_WORKER_RUNTIME": "node", "ADSBX_API_KEY": "..." } }
 ```
 
 ## Troubleshooting

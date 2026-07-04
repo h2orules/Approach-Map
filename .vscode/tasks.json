@@ -1,0 +1,101 @@
+{
+  // Tasks backing the debug configs in launch.json, plus a few standalone
+  // conveniences (Terminal > Run Task…). VS Code allows comments here.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Background Vite dev server. The background matcher lets VS Code know
+      // when the server is ready so preLaunchTask-driven debug sessions wait
+      // for it instead of racing ahead.
+      "label": "vite: dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": {
+          "regexp": "^([^\\s].*)\\((\\d+,\\d+)\\):\\s*(.*)$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*(VITE|vite).*",
+          "endsPattern": "^.*(ready in|Local:).*"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      // Vitest in watch mode (standalone; not tied to a debug config).
+      "label": "test: watch",
+      "type": "shell",
+      "command": "npm run test",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      // Compile the Functions TypeScript before running/attaching the host.
+      "label": "build: functions",
+      "type": "shell",
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/api" },
+      "problemMatcher": ["$tsc"],
+      "presentation": { "reveal": "silent", "panel": "dedicated" }
+    },
+    {
+      // Start the Functions host with the node inspector open on 9229 so the
+      // "Functions: debug proxy" config can attach. Builds first.
+      "label": "func: host start",
+      "type": "shell",
+      "command": "func start",
+      "options": {
+        "cwd": "${workspaceFolder}/api",
+        "env": { "languageWorkers__node__arguments": "--inspect=9229" }
+      },
+      "isBackground": true,
+      "dependsOn": "build: functions",
+      "problemMatcher": {
+        "owner": "azureFunctions",
+        "pattern": {
+          "regexp": "^([^\\s].*)\\((\\d+,\\d+)\\):\\s*(.*)$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*(Starting|Job host).*",
+          "endsPattern": "^.*(Host lock lease acquired|Worker process started and initialized|Functions:).*"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      // Full local emulation: SWA CLI fronts the live Vite dev server (HMR)
+      // and the real local Functions on :4280. Builds the functions first.
+      "label": "swa: start (live)",
+      "type": "shell",
+      "command": "swa start http://localhost:5173 --api-location api --run \"npm run dev\"",
+      "isBackground": true,
+      "dependsOn": "build: functions",
+      "problemMatcher": {
+        "owner": "swa",
+        "pattern": {
+          "regexp": "^([^\\s].*)\\((\\d+,\\d+)\\):\\s*(.*)$",
+          "file": 1,
+          "location": 2,
+          "message": 3
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*(Starting|Waiting).*",
+          "endsPattern": "^.*(Azure Static Web Apps emulator started|available at).*"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ]
+}

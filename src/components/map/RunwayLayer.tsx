@@ -4,6 +4,7 @@ import type { FeatureCollection, Feature, Polygon } from 'geojson'
 import * as turf from '@turf/turf'
 import type { Runway } from '../../types/airport'
 import { RUNWAY_FILL_COLOR } from '../../utils/colorScheme'
+import { FEET_PER_NM } from '../../config/constants'
 
 interface Props {
   runways: Runway[]
@@ -13,7 +14,7 @@ function buildRunwayPolygon(runway: Runway): Feature<Polygon> | null {
   const { lowEnd, highEnd, widthFt } = runway
   if (!lowEnd?.lat || !highEnd?.lat) return null
 
-  const widthNm = widthFt / 6076.12
+  const widthNm = widthFt / FEET_PER_NM
 
   const centerLine = turf.lineString([
     [lowEnd.lon, lowEnd.lat],

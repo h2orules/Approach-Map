@@ -98,7 +98,7 @@ export function AltitudeFilter() {
     : null
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} data-map-overlay="">
       {/* Summary badge: shown when filter is non-default */}
       {!isDefault && (
         <div className={styles.summary}>

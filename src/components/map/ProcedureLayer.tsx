@@ -4,6 +4,7 @@ import type { FeatureCollection } from 'geojson'
 import type { Procedure } from '../../types/procedure'
 import { useProcedureStore } from '../../store/useProcedureStore'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { useSelectionStore } from '../../store/useSelectionStore'
 
 interface Props {
   procedure: Procedure
@@ -62,11 +63,15 @@ export function ProcedureLayer({ procedure }: Props) {
   const isAutoShown = useProcedureStore((s) => s.autoShownIds.has(procedure.id))
   // Re-evaluate opposite-direction transitions on each ADS-B poll.
   const revision = useAircraftStore((s) => s.revision)
+  const isSelected = useSelectionStore(
+    (s) => s.selected?.kind === 'approach' && s.selected.procedureId === procedure.id,
+  )
 
   const lineColor = procedure.color
   // Approaches stay thick when auto-detected; SIDs/STARs are always thin here
-  // (AutoActiveSegmentsLayer thickens their active legs instead).
-  const baseWidth = procedure.type === 'APPROACH' && isAutoShown ? 3 : 1.5
+  // (AutoActiveSegmentsLayer thickens their active legs instead). Selection
+  // adds a small emphasis bump on top of whichever base width applies.
+  const baseWidth = (procedure.type === 'APPROACH' && isAutoShown ? 3 : 1.5) + (isSelected ? 1.5 : 0)
 
   // Split GeoJSON for SIDs: inactive RW transitions → separate dotted source.
   const { mainGeojson, inactiveGeojson } = useMemo(() => {
@@ -107,6 +112,21 @@ export function ProcedureLayer({ procedure }: Props) {
       )}
 
       <Source id={`proc-${procedure.id}`} type="geojson" data={mainGeojson}>
+        {/* Invisible wide hit-target for click selection — approaches only.
+            Must come first so it renders (and hit-tests) below the visible
+            lines but still registers in interactiveLayerIds queries. */}
+        {procedure.type === 'APPROACH' && (
+          <Layer
+            id={`proc-hit-${procedure.id}`}
+            type="line"
+            paint={{
+              'line-width': 14,
+              'line-color': '#000',
+              'line-opacity': 0.001,
+            }}
+            layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+          />
+        )}
         {/* Inbound path + holds + procedure turns: solid */}
         <Layer
           id={`proc-line-${procedure.id}`}

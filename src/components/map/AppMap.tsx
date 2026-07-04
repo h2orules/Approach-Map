@@ -1,5 +1,5 @@
-import { useRef, useCallback, useEffect } from 'react'
-import Map, { type MapRef, NavigationControl } from 'react-map-gl'
+import { useRef, useCallback, useEffect, useMemo, useState } from 'react'
+import Map, { type MapRef, type MapLayerMouseEvent, NavigationControl } from 'react-map-gl'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore — mapbox-gl CSS import, types not needed
 import 'mapbox-gl/dist/mapbox-gl.css'
@@ -12,9 +12,14 @@ import { FlownSegmentLayer } from './FlownSegmentLayer'
 import { AutoActiveSegmentsLayer } from './AutoActiveSegmentsLayer'
 import { RunwayLayer } from './RunwayLayer'
 import { ExtendedCenterlineLayer } from './ExtendedCenterlineLayer'
+import { TerrainLayer } from './TerrainLayer'
+import { SafeAltitudeLayer } from './SafeAltitudeLayer'
+import { MvaLayer } from './MvaLayer'
+import { LocFeatherLayer } from './LocFeatherLayer'
 import { WaypointMarkers } from './WaypointMarkers'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
 import { AltitudeFilter } from './AltitudeFilter'
+import { ProfilePanel } from '../profile/ProfilePanel'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftPoll } from '../../hooks/useAircraftPoll'
 import { useProcedures } from '../../hooks/useProcedures'
@@ -22,8 +27,11 @@ import { useProcedureDetection } from '../../hooks/useProcedureDetection'
 import { useRouteEnrichment } from '../../hooks/useRouteEnrichment'
 import { useDatis } from '../../hooks/useDatis'
 import { useRunways } from '../../hooks/useRunways'
-import { useProcedureStore } from '../../store/useProcedureStore'
+import { useSafeAltitudes } from '../../hooks/useSafeAltitudes'
+import { useProcedureStore, computeVisibility } from '../../store/useProcedureStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
+import { useSelectionStore } from '../../store/useSelectionStore'
+import { useSelectionGuards } from '../../hooks/useSelectionGuards'
 import type { Procedure } from '../../types/procedure'
 
 // Render order: lowest value drawn first (bottom), highest last (top).
@@ -43,6 +51,10 @@ export function AppMap() {
   const autoVisible = useProcedureStore((s) => s.autoVisible)
   const showCenterlines = useSettingsStore((s) => s.showExtendedCenterlines)
   const runways = useAirportStore((s) => s.runways)
+  const selectedAirport = useAirportStore((s) => s.selectedAirport)
+  const toggleSelection = useSelectionStore((s) => s.toggle)
+  const clearSelection = useSelectionStore((s) => s.clear)
+  const [hoverCursor, setHoverCursor] = useState(false)
 
   useAircraftInterpolation()
   useAircraftPoll()
@@ -51,6 +63,7 @@ export function AppMap() {
   useRouteEnrichment()
   useDatis()
   useRunways()
+  useSelectionGuards()
 
   // On reload, center the map on the airport restored from the last session.
   useEffect(() => {
@@ -70,8 +83,34 @@ export function AppMap() {
   )
 
   const visibleProcedures = procedures
-    .filter((p) => p.hasGeometry && (userToggles[p.id] ?? autoVisible[p.id] ?? false))
+    .filter((p) => p.hasGeometry && computeVisibility(userToggles, autoVisible, p.id))
     .sort((a, b) => approachRenderOrder(a) - approachRenderOrder(b))
+
+  const safeAltIcaos = useMemo(
+    () => (selectedAirport ? [selectedAirport.icao] : []),
+    [selectedAirport],
+  )
+  const safeAltItems = useSafeAltitudes(safeAltIcaos)
+
+  const interactiveLayerIds = visibleProcedures
+    .filter((p) => p.type === 'APPROACH')
+    .map((p) => `proc-hit-${p.id}`)
+
+  const handleMapClick = useCallback(
+    (evt: MapLayerMouseEvent) => {
+      const f = evt.features?.[0]
+      if (!f) {
+        clearSelection()
+        return
+      }
+      const m = /^proc-hit-(.+)$/.exec(f.layer.id)
+      if (m) toggleSelection({ kind: 'approach', procedureId: m[1] })
+    },
+    [clearSelection, toggleSelection],
+  )
+
+  const handleMouseEnter = useCallback(() => setHoverCursor(true), [])
+  const handleMouseLeave = useCallback(() => setHoverCursor(false), [])
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -85,8 +124,26 @@ export function AppMap() {
         mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
+        interactiveLayerIds={interactiveLayerIds}
+        cursor={hoverCursor ? 'pointer' : undefined}
+        onClick={handleMapClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
         <NavigationControl position="bottom-right" />
+
+        {/* Terrain and safe-altitude overlays are always mounted (visibility
+            toggled via layout.visibility) rather than conditionally rendered,
+            so their runtime GL layers keep a stable position in the render
+            order across toggles — see the z-order rationale comment atop
+            TerrainLayer.tsx. */}
+        <TerrainLayer />
+
+        <SafeAltitudeLayer items={safeAltItems} />
+
+        <MvaLayer />
+
+        <LocFeatherLayer />
 
         <RunwayLayer runways={runways} />
 
@@ -111,6 +168,8 @@ export function AppMap() {
       <AltitudeFilter />
 
       <ActiveProceduresOverlay />
+
+      <ProfilePanel mapRef={mapRef} />
     </div>
   )
 }

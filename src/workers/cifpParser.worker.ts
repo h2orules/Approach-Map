@@ -1,7 +1,20 @@
-import type { Procedure, ProcedureWaypoint, NavaidType, ProcedureType, WaypointRole, WaypointSymbol, AltConstraint } from '../types/procedure'
+import type { Procedure, ProcedureWaypoint, ProcedureLeg, ProcedureTransition, NavaidType, ProcedureType, WaypointRole, WaypointSymbol } from '../types/procedure'
+import type { CifpAirportData, CifpRunwayInfo } from '../types/cifp'
 import { parseArinc424AltDescriptor } from '../utils/altitudeConstraint'
 import { nextProcedureColor, resetColorCounters } from '../utils/colorScheme'
 import { parseLatLon } from '../utils/arincCoords'
+import {
+  parseAirportMagVar,
+  parseRunwayExtras,
+  parseIlsGsFields,
+  parsePathPointRecord,
+  parseMsaRecord,
+  parseTaaRecord,
+  buildSafeAltitudeAreas,
+  type MsaRawRecord,
+  type TaaRawRecord,
+  type IlsGsFields,
+} from '../utils/arincRecords'
 import { holdTrack, procedureTurn } from '../geo/procedureShapes'
 
 export interface ParseRequest {
@@ -17,7 +30,7 @@ export interface ParseProgress {
 
 export interface ParseResult {
   type: 'result'
-  data: Record<string, Procedure[]>
+  data: Record<string, CifpAirportData>
 }
 
 export interface ParseError {
@@ -92,24 +105,8 @@ function parseProcRecord(line: string): Record424 | null {
   }
 }
 
-/** One parsed leg of a transition, carrying everything geometry/render needs. */
-interface Leg {
-  seq: number
-  fixId: string
-  lat: number
-  lon: number
-  navaidType: NavaidType
-  altConstraint: AltConstraint | null
-  pathTerm: string
-  role: WaypointRole
-  flyover: boolean
-  turnRight: boolean
-  course: number // degrees (from magCourse / 10)
-  legNm: number // straight-leg length, nm (time legs approximated)
-  speedKt: number // speed restriction (knots, 0 = none)
-  dmeNm: number | null // Rho: DME distance from navaid to this fix (nm), null if absent
-  recNavId: string // recommended navaid id (the DME reference), '' if absent
-}
+// One parsed leg of a transition is the exported `ProcedureLeg` (shape-identical
+// to the former internal `Leg`), so transitions can be surfaced on the Procedure.
 
 function legRole(descCode4: string, pathTerm: string): WaypointRole {
   if (descCode4 === 'A') return 'iaf'
@@ -153,7 +150,7 @@ function lineFeature(coords: Coord[], props: Record<string, unknown>): AnyFeatur
  * Every feature gets a `transitionId` property so the renderer can style
  * opposite-direction SID runway transitions as dotted lines.
  */
-function buildProcedureFeatures(transitions: Array<{ id: string; legs: Leg[] }>): AnyFeature[] {
+function buildProcedureFeatures(transitions: Array<{ id: string; legs: ProcedureLeg[] }>): AnyFeature[] {
   const features: AnyFeature[] = []
 
   for (const { id: transitionId, legs } of transitions) {
@@ -204,6 +201,24 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
     // IPAE) repeat across airports and serve as the DME reference for ILS legs.
     const localizerDb = new Map<string, WaypointRecord>()
 
+    // Airport reference positions and magnetic variation (PA records). The
+    // magvar converts MSA/TAA magnetic sector bearings to true; the reference
+    // position resolves airport-centered MSA records.
+    const airportRefDb = new Map<string, WaypointRecord>()
+    const magVarByAirport = new Map<string, number | null>()
+    // Runway length + threshold elevation (PG extras) merged with the runway
+    // threshold position, keyed by airport then runway id (e.g. RW16C).
+    const runwayInfoByAirport = new Map<string, Record<string, CifpRunwayInfo>>()
+    // ILS glide-slope angle/TCH (PI records), keyed by `${icao}:${runway}` so an
+    // ILS approach can look up its glide path by the runway it serves. A record
+    // carrying an actual GS angle wins over a LOC-only record for the same runway.
+    const ilsGsByRunway = new Map<string, IlsGsFields>()
+    // Raw MSA (PS) / TAA (PK) records per airport, resolved after pass 1 when the
+    // fix database is complete. Path point (PP) glide paths keyed by approach id.
+    const msaRawByAirport = new Map<string, MsaRawRecord[]>()
+    const taaRawByAirport = new Map<string, TaaRawRecord[]>()
+    const pathPointByKey = new Map<string, { gpaDeg: number | null; tchFt: number | null }>()
+
     self.postMessage({ type: 'progress', percent: 0, message: 'Building navaid database…' } satisfies ParseProgress)
 
     for (let i = 0; i < lines.length; i++) {
@@ -229,7 +244,23 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         const icao = line.slice(6, 10).trim()
         const fixId = line.slice(13, 18).trim()
         const coords = parseLatLon(line.slice(32, 41).trim(), line.slice(41, 51).trim())
-        if (icao && fixId && coords) runwayDb.set(`${icao}:${fixId}`, { ...coords, navaidType: 'RUNWAY' })
+        if (icao && fixId && coords) {
+          runwayDb.set(`${icao}:${fixId}`, { ...coords, navaidType: 'RUNWAY' })
+          // Merge runway length + landing threshold elevation into runwayInfo.
+          const extras = parseRunwayExtras(line)
+          let rwMap = runwayInfoByAirport.get(icao)
+          if (!rwMap) {
+            rwMap = {}
+            runwayInfoByAirport.set(icao, rwMap)
+          }
+          rwMap[fixId] = {
+            id: fixId,
+            lat: coords.lat,
+            lon: coords.lon,
+            thresholdElevFt: extras?.thresholdElevFt ?? null,
+            lengthFt: extras?.lengthFt ?? null,
+          }
+        }
       } else if (sc === 'P' && line[12] === 'I') {
         // ILS localizer (airport section P, subsection I). Carries the localizer
         // antenna position in the standard lat/lon columns — this is the DME
@@ -241,6 +272,45 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         if (icao && locId && coords && !localizerDb.has(`${icao}:${locId}`)) {
           localizerDb.set(`${icao}:${locId}`, { ...coords, navaidType: 'LOC' })
         }
+        // Glide-slope angle/TCH so ILS approaches can report a glide path.
+        const gs = parseIlsGsFields(line)
+        if (gs && gs.runwayId) {
+          const key = `${gs.icao}:${gs.runwayId}`
+          const existing = ilsGsByRunway.get(key)
+          if (!existing || (existing.gsAngleDeg == null && gs.gsAngleDeg != null)) {
+            ilsGsByRunway.set(key, gs)
+          }
+        }
+      } else if (sc === 'P' && line[12] === 'A') {
+        // Airport reference (airport section P, subsection A). Provides the
+        // magnetic variation (for MSA/TAA true-bearing conversion) and the
+        // reference position (for airport-centered MSA records).
+        const icao = line.slice(6, 10).trim()
+        if (icao && !magVarByAirport.has(icao)) {
+          magVarByAirport.set(icao, parseAirportMagVar(line))
+          const coords = parseLatLon(line.slice(32, 41).trim(), line.slice(41, 51).trim())
+          if (coords) airportRefDb.set(icao, { ...coords, navaidType: 'AIRPORT' })
+        }
+      } else if (sc === 'P' && line[12] === 'S') {
+        // MSA (minimum sector altitude). Resolved to positions after pass 1.
+        const rec = parseMsaRecord(line)
+        if (rec) {
+          const list = msaRawByAirport.get(rec.icao) ?? []
+          list.push(rec)
+          msaRawByAirport.set(rec.icao, list)
+        }
+      } else if (sc === 'P' && line[12] === 'K') {
+        // TAA (terminal arrival area). Resolved to positions after pass 1.
+        const rec = parseTaaRecord(line)
+        if (rec) {
+          const list = taaRawByAirport.get(rec.icao) ?? []
+          list.push(rec)
+          taaRawByAirport.set(rec.icao, list)
+        }
+      } else if (sc === 'P' && line[12] === 'P') {
+        // Path point (RNAV glide path). Keyed by approach ident for the approach.
+        const pp = parsePathPointRecord(line)
+        if (pp) pathPointByKey.set(`${pp.icao}:${pp.approachId}`, { gpaDeg: pp.gpaDeg, tchFt: pp.tchFt })
       } else if (sc === 'E' && ss === 'A') {
         // Enroute waypoint
         const fixId = line.slice(13, 18).trim()
@@ -273,7 +343,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
     // transitions that each restart their sequence numbers at 010, so merging
     // them into one sequence map would overwrite legs and tangle the path.
     type ProcKey = string
-    type TransitionMap = Map<string, Map<number, Leg>>
+    type TransitionMap = Map<string, Map<number, ProcedureLeg>>
     const procGroups = new Map<string, Map<ProcKey, { type: ProcedureType; transitions: TransitionMap; runways: Set<string> }>>()
 
     for (let i = 0; i < lines.length; i++) {
@@ -351,11 +421,11 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
 
     self.postMessage({ type: 'progress', percent: 85, message: 'Building GeoJSON…' } satisfies ParseProgress)
 
-    // Convert to Procedure[]
+    // Convert to CifpAirportData per airport.
     resetColorCounters()
-    const result: Record<string, Procedure[]> = {}
+    const result: Record<string, CifpAirportData> = {}
 
-    const legToWaypoint = (l: Leg): ProcedureWaypoint => ({
+    const legToWaypoint = (l: ProcedureLeg): ProcedureWaypoint => ({
       id: l.fixId,
       lat: l.lat,
       lon: l.lon,
@@ -366,6 +436,9 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
 
     for (const [icao, airportMap] of procGroups) {
       const procedures: Procedure[] = []
+      // Fix id → approach idents referencing it (fix or recommended navaid), so
+      // an MSA centered on that fix can list the approaches it serves.
+      const centerFixToApproaches = new Map<string, Set<string>>()
       for (const [procKey, group] of airportMap) {
         const [, name] = procKey.split(':')
 
@@ -441,6 +514,51 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
 
         const features = buildProcedureFeatures(transitionEntries)
 
+        // Surface each transition's ordered legs (ProcedureLeg[]) for profile
+        // rendering, and resolve the approach's published glide path.
+        const transitions: ProcedureTransition[] = transitionEntries.map(({ id, legs }) => ({ id, legs }))
+
+        let gpaDeg: number | null | undefined
+        let tchFt: number | null | undefined
+        if (group.type === 'APPROACH') {
+          // Approach transitions are named by IAF, not runway, so the
+          // transition-id scrape above misses them — the runway is encoded in
+          // the procedure ident itself (e.g. I16R → 16R). Without this, the
+          // TDZE/runway-length lookup and the ILS glide-slope fallback below
+          // both come up empty.
+          const rwFromName = name.match(/^[A-Z](\d{2}[LRC]?)/)
+          if (rwFromName) group.runways.add(rwFromName[1])
+          for (const { legs } of transitionEntries) {
+            for (const l of legs) {
+              for (const fx of [l.fixId, l.recNavId]) {
+                if (!fx) continue
+                let set = centerFixToApproaches.get(fx)
+                if (!set) {
+                  set = new Set()
+                  centerFixToApproaches.set(fx, set)
+                }
+                set.add(name)
+              }
+            }
+          }
+          // RNAV approaches carry a path point; ILS ('I…') fall back to the
+          // localizer glide slope for the runway they serve; others have none.
+          const pp = pathPointByKey.get(`${icao}:${name}`)
+          if (pp) {
+            gpaDeg = pp.gpaDeg
+            tchFt = pp.tchFt
+          } else if (name[0] === 'I') {
+            for (const rw of group.runways) {
+              const gs = ilsGsByRunway.get(`${icao}:${rw}`)
+              if (gs && gs.gsAngleDeg != null) {
+                gpaDeg = gs.gsAngleDeg
+                tchFt = gs.gsTchFt
+                break
+              }
+            }
+          }
+        }
+
         procedures.push({
           id: `${icao}-${group.type}-${name}`,
           icao,
@@ -453,9 +571,44 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
           geojson: { type: 'FeatureCollection', features } as any,
           hasGeometry: true,
           color: nextProcedureColor(group.type),
+          transitions,
+          ...(gpaDeg !== undefined ? { gpaDeg } : {}),
+          ...(tchFt !== undefined ? { tchFt } : {}),
         })
       }
-      if (procedures.length > 0) result[icao] = procedures
+
+      if (procedures.length === 0) continue
+
+      const magVarDeg = magVarByAirport.get(icao) ?? null
+      const airportRef = airportRefDb.get(icao)
+      const resolveFix = (fixId: string): { lat: number; lon: number } | null => {
+        const r =
+          waypointDb.get(fixId) ??
+          runwayDb.get(`${icao}:${fixId}`) ??
+          localizerDb.get(`${icao}:${fixId}`) ??
+          (fixId === icao ? airportRef : undefined)
+        return r ? { lat: r.lat, lon: r.lon } : null
+      }
+
+      const safeAltitudes = buildSafeAltitudeAreas(
+        msaRawByAirport.get(icao) ?? [],
+        taaRawByAirport.get(icao) ?? [],
+        resolveFix,
+        magVarDeg,
+        (centerFixId) => Array.from(centerFixToApproaches.get(centerFixId) ?? []),
+      ).map((area) => ({
+        // buildSafeAltitudeAreas works with bare ARINC idents; qualify them to
+        // full Procedure.id form so visibility/detection-history lookups match.
+        ...area,
+        procedureIds: area.procedureIds.map((n) => `${icao}-APPROACH-${n}`),
+      }))
+
+      result[icao] = {
+        procedures,
+        safeAltitudes,
+        runwayInfo: runwayInfoByAirport.get(icao) ?? {},
+        magVarDeg,
+      }
     }
 
     self.postMessage({ type: 'progress', percent: 100, message: 'Done.' } satisfies ParseProgress)

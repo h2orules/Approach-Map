@@ -83,6 +83,23 @@
   gap: 4px;
 }
 
+/* DME badge: source-navaid ident stacked right above the "D" outline, matching
+   the vertical-profile layout. */
+.dmeBadge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.dmeIdent {
+  font-size: 8.5px;
+  font-weight: 600;
+  color: #fde68a;
+  letter-spacing: 0.02em;
+  margin-bottom: 1px;
+}
+
 /* Amber dashed ring marking a navaid that is the DME reference for a fix. */
 .dmeRing {
   position: absolute;

@@ -5,7 +5,6 @@ import { STALE_AIRCRAFT_THRESHOLD_S } from '../config/constants'
 interface AircraftStore {
   aircraftMap: Map<string, InterpolatedAircraft>
   lastPollMs: number
-  selectedHex: string | null
   /** Bumped only when the aircraft *set* changes (poll), not on interpolation. */
   revision: number
 
@@ -13,7 +12,6 @@ interface AircraftStore {
   updateInterpolated: (hex: string, lat: number, lon: number) => void
   setRouteData: (hex: string, origin: string, destination: string) => void
   getAll: () => InterpolatedAircraft[]
-  setSelectedHex: (hex: string | null) => void
 }
 
 function mapRawToInterpolated(
@@ -48,7 +46,6 @@ function mapRawToInterpolated(
 export const useAircraftStore = create<AircraftStore>((set, get) => ({
   aircraftMap: new Map(),
   lastPollMs: 0,
-  selectedHex: null,
   revision: 0,
 
   updateFromPoll: (raw, pollTimeMs) =>
@@ -91,6 +88,4 @@ export const useAircraftStore = create<AircraftStore>((set, get) => ({
     }),
 
   getAll: () => Array.from(get().aircraftMap.values()),
-
-  setSelectedHex: (hex) => set({ selectedHex: hex }),
 }))

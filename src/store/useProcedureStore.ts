@@ -1,5 +1,24 @@
 import { create } from 'zustand'
 import type { Procedure } from '../types/procedure'
+import { appendSamples, type DetectionSample } from '../utils/detectionHistory'
+import { DETECTION_HISTORY_WINDOW_MS } from '../config/constants'
+
+/**
+ * The dual visibility rule: an explicit user toggle wins, otherwise the
+ * auto-detection engine decides. Pure so callers that already subscribed to
+ * `userToggles`/`autoVisible` (e.g. to build a render list) don't need a
+ * second store subscription just to resolve one id — `isVisible` below
+ * delegates here, keeping exactly one implementation.
+ */
+export function computeVisibility(
+  userToggles: Record<string, boolean | undefined>,
+  autoVisible: Record<string, boolean>,
+  id: string,
+): boolean {
+  const userToggle = userToggles[id]
+  if (userToggle !== undefined) return userToggle
+  return autoVisible[id] ?? false
+}
 
 interface ProcedureStore {
   procedures: Procedure[]
@@ -16,6 +35,8 @@ interface ProcedureStore {
   lastDetectedAt: Record<string, number>
   // hex codes of aircraft currently matching each auto-detected approach
   detectedHexes: Record<string, string[]>
+  // rolling window of detected-aircraft counts per procedure (see src/utils/detectionHistory.ts)
+  detectionHistory: Record<string, DetectionSample[]>
 
   setProcedures: (procedures: Procedure[]) => void
   setLoading: (loading: boolean) => void
@@ -40,6 +61,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
   autoShownIds: new Set(),
   lastDetectedAt: {},
   detectedHexes: {},
+  detectionHistory: {},
 
   setProcedures: (procedures) =>
     set({
@@ -49,6 +71,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
       autoShownIds: new Set(),
       lastDetectedAt: {},
       detectedHexes: {},
+      detectionHistory: {},
     }),
 
   setLoading: (loading) => set({ loading }),
@@ -93,13 +116,18 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
           }
         }
       }
-      return { autoVisible, lastDetectedAt, autoShownIds, detectedHexes: hexes }
+
+      const counts: Record<string, number> = {}
+      for (const id of Object.keys(detected)) {
+        counts[id] = hexes[id]?.length ?? 0
+      }
+      const detectionHistory = appendSamples(s.detectionHistory, counts, nowMs, DETECTION_HISTORY_WINDOW_MS)
+
+      return { autoVisible, lastDetectedAt, autoShownIds, detectedHexes: hexes, detectionHistory }
     }),
 
   isVisible: (id) => {
     const { userToggles, autoVisible } = get()
-    const userToggle = userToggles[id]
-    if (userToggle !== undefined) return userToggle
-    return autoVisible[id] ?? false
+    return computeVisibility(userToggles, autoVisible, id)
   },
 }))

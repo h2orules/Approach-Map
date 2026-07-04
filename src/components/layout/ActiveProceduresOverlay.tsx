@@ -2,6 +2,7 @@ import { useRef, useState, useCallback } from 'react'
 import { useProcedureStore } from '../../store/useProcedureStore'
 import { useAirportStore } from '../../store/useAirportStore'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { useSelectionStore } from '../../store/useSelectionStore'
 import { useMapStore } from '../../store/useMapStore'
 import { arrivalSummary } from '../../api/datis'
 import styles from './ActiveProceduresOverlay.module.css'
@@ -66,7 +67,9 @@ export function ActiveProceduresOverlay() {
   const lastDetectedAt = useProcedureStore((s) => s.lastDetectedAt)
   const atisInfo = useAirportStore((s) => s.atisInfo)
 
-  const setSelectedHex = useAircraftStore((s) => s.setSelectedHex)
+  const selected = useSelectionStore((s) => s.selected)
+  const selectAircraftSel = useSelectionStore((s) => s.select)
+  const toggleSelection = useSelectionStore((s) => s.toggle)
   const setViewport = useMapStore((s) => s.setViewport)
 
   const atisHover = useHoverDelay()
@@ -86,9 +89,9 @@ export function ActiveProceduresOverlay() {
   const selectAircraft = useCallback((hex: string) => {
     const ac = useAircraftStore.getState().aircraftMap.get(hex)
     if (!ac) return
-    setSelectedHex(hex)
+    selectAircraftSel({ kind: 'aircraft', hex })
     setViewport({ longitude: ac.interpLon, latitude: ac.interpLat, zoom: 13 })
-  }, [setSelectedHex, setViewport])
+  }, [selectAircraftSel, setViewport])
 
   const active = procedures.filter(
     (p) => autoShownIds.has(p.id) || userToggles[p.id] === true,
@@ -103,7 +106,7 @@ export function ActiveProceduresOverlay() {
     : ''
 
   return (
-    <div className={styles.overlay}>
+    <div className={styles.overlay} data-map-overlay="">
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div className={styles.title}>
         IN USE
@@ -154,6 +157,8 @@ export function ActiveProceduresOverlay() {
         const hexes = detectedHexes[p.id] ?? []
         const isAutoShown = autoShownIds.has(p.id)
         const isHovered = hoveredProcId === p.id
+        const isApproach = p.type === 'APPROACH'
+        const isSelected = selected?.kind === 'approach' && selected.procedureId === p.id
         return (
           <div
             key={p.id}
@@ -162,7 +167,12 @@ export function ActiveProceduresOverlay() {
             onMouseLeave={hideProcTooltip}
           >
             <span className={styles.dot} style={{ background: p.color }} />
-            <span className={styles.name}>{p.name}</span>
+            <span
+              className={`${styles.name} ${isApproach ? styles.nameSelectable : ''} ${isSelected ? styles.nameSelected : ''}`}
+              onClick={isApproach ? () => toggleSelection({ kind: 'approach', procedureId: p.id }) : undefined}
+            >
+              {p.name}
+            </span>
             <span className={styles.badge}>{p.type}</span>
             {isHovered && isAutoShown && (
               <ProcTooltip

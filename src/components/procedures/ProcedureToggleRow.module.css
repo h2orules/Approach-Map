@@ -17,10 +17,8 @@
 .label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex: 1;
   cursor: pointer;
-  min-width: 0;
+  flex-shrink: 0;
 }
 
 .checkbox {
@@ -38,12 +36,27 @@
 }
 
 .name {
+  flex: 1;
   font-size: 11px;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: 'Roboto Mono', monospace;
+  min-width: 0;
+}
+
+.nameSelectable {
+  cursor: pointer;
+}
+
+.nameSelectable:hover {
+  color: var(--accent);
+}
+
+.nameSelected {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .badges {

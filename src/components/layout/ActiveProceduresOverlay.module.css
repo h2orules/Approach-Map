@@ -115,6 +115,19 @@
   white-space: nowrap;
 }
 
+.nameSelectable {
+  cursor: pointer;
+}
+
+.nameSelectable:hover {
+  color: #7dd3fc;
+}
+
+.nameSelected {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+
 .badge {
   font-size: 9px;
   color: #64748b;

@@ -3,6 +3,7 @@ import { Source, Layer } from 'react-map-gl'
 import type { FeatureCollection } from 'geojson'
 import type { Procedure } from '../../types/procedure'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { useSelectionStore, selectedHexOf } from '../../store/useSelectionStore'
 import { findActiveSegments } from '../../geo/activeSegments'
 
 interface Props {
@@ -18,7 +19,7 @@ const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
  * stay at the base 1.5px drawn by ProcedureLayer.
  */
 export function AutoActiveSegmentsLayer({ procedures }: Props) {
-  const selectedHex = useAircraftStore((s) => s.selectedHex)
+  const selectedHex = useSelectionStore((s) => selectedHexOf(s.selected))
   const [segments, setSegments] = useState<FeatureCollection>(EMPTY)
 
   const sidStarProcs = useMemo(

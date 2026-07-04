@@ -5,6 +5,9 @@ import {
   buildProfileModel,
   glideslopeAltAt,
   alongTrackNm,
+  descentProfilePoints,
+  segmentDistancesNm,
+  labelStaggerOffsets,
 } from '../profileMath'
 import type { Procedure, ProcedureLeg, ProcedureTransition } from '../../types/procedure'
 import type { CifpRunwayInfo } from '../../types/cifp'
@@ -172,6 +175,25 @@ describe('buildProfileModel', () => {
     expect(model.fixes[1].isDmeArc).toBe(false)
   })
 
+  it('carries the DME source navaid ident through from the leg recNavId', () => {
+    expect(model.fixes[0].dmeNavaidId).toBe('VOR1')
+    // Fixes with no dmeNm never got a recNavId set, either.
+    expect(model.fixes[1].dmeNavaidId).toBeNull()
+  })
+
+  it('nulls dmeNavaidId when the DME-carrying leg has an empty recNavId', () => {
+    const noIdentLegs: ProcedureLeg[] = [
+      leg({ seq: 10, fixId: 'IAF1', ...IAF, role: 'iaf', pathTerm: 'AF', dmeNm: 8.5, recNavId: '' }),
+      leg({ seq: 20, fixId: 'MIDFX', ...MID, role: 'normal', pathTerm: 'CF' }),
+      leg({ seq: 30, fixId: 'FAFFX', ...FAF, role: 'faf', pathTerm: 'CF', altConstraint: { type: 'AT_OR_ABOVE', low: 1800 } }),
+      leg({ seq: 40, fixId: 'MAPFX', ...MAP, role: 'map', pathTerm: 'TF' }),
+    ]
+    const t2: ProcedureTransition = { id: 'no-ident', legs: noIdentLegs }
+    const m2 = buildProfileModel(makeProcedure({ transitions: [t2] }), t2, rwy)
+    expect(m2.fixes[0].dmeNm).toBe(8.5)
+    expect(m2.fixes[0].dmeNavaidId).toBeNull()
+  })
+
   it('flags the GS-intercept FAF for a precision (ILS) approach', () => {
     expect(model.fixes[2].isGsIntercept).toBe(true)
   })
@@ -244,5 +266,74 @@ describe('alongTrackNm', () => {
     expect(xtNm).toBeCloseTo(1, 1)
     const halfway = turf.distance(turf.point([IAF.lon, IAF.lat]), turf.point([MID.lon, MID.lat]), NM) / 2
     expect(distNm).toBeCloseTo(halfway, 1)
+  })
+})
+
+describe('descentProfilePoints', () => {
+  const p = makeProcedure({ gpaDeg: 3.0, tchFt: 55 })
+  const model = buildProfileModel(p, transition, rwy)
+
+  it('connects IAF/MID/FAF directly (no step-downs) then rides the glideslope to the threshold', () => {
+    const pts = descentProfilePoints(model)
+    // IAF, MID, FAF (the gs-intercept anchor since this is a precision approach), then threshold.
+    expect(pts).toHaveLength(4)
+    expect(pts[0]).toEqual({ distNm: model.fixes[0].distNm, altFt: model.fixes[0].plotAltFt ?? model.tdzeFt ?? 0 })
+    expect(pts[1]).toEqual({ distNm: model.fixes[1].distNm, altFt: model.fixes[1].plotAltFt ?? model.tdzeFt ?? 0 })
+    expect(pts[2]).toEqual({ distNm: model.fixes[2].distNm, altFt: model.fixes[2].plotAltFt })
+    // MAP fix's own plotted altitude is skipped; the final vertex instead sits
+    // at the threshold distance and the computed glideslope altitude.
+    const thresholdDistNm = model.fixes[model.fixes.length - 1].distNm
+    expect(pts[3]).toEqual({ distNm: thresholdDistNm, altFt: glideslopeAltAt(model, 0) })
+  })
+
+  it('falls back to a direct point-to-point polyline when no fix is a FAF or gs-intercept', () => {
+    const noFafLegs: ProcedureLeg[] = [
+      leg({ seq: 10, fixId: 'A', ...IAF, role: 'normal', altConstraint: { type: 'AT', low: 5000 } }),
+      leg({ seq: 20, fixId: 'B', ...MID, role: 'normal', altConstraint: { type: 'AT', low: 3000 } }),
+    ]
+    const t2: ProcedureTransition = { id: 'no-faf', legs: noFafLegs }
+    const m2 = buildProfileModel(makeProcedure({ transitions: [t2] }), t2, rwy)
+    expect(descentProfilePoints(m2)).toEqual([
+      { distNm: m2.fixes[0].distNm, altFt: 5000 },
+      { distNm: m2.fixes[1].distNm, altFt: 3000 },
+    ])
+  })
+
+  it('returns an empty array when the model has no approach fixes', () => {
+    expect(descentProfilePoints({ ...model, fixes: [] })).toEqual([])
+  })
+})
+
+describe('segmentDistancesNm', () => {
+  it('returns consecutive deltas, one shorter than the input', () => {
+    const fixes = [{ distNm: 0 }, { distNm: 3.1 }, { distNm: 7.4 }, { distNm: 7.4 }]
+    expect(segmentDistancesNm(fixes)).toEqual([3.1, 4.300000000000001, 0])
+  })
+
+  it('returns an empty array for 0 or 1 fixes', () => {
+    expect(segmentDistancesNm([])).toEqual([])
+    expect(segmentDistancesNm([{ distNm: 5 }])).toEqual([])
+  })
+})
+
+describe('labelStaggerOffsets', () => {
+  it('maps the highest altitude to 0 and the lowest to maxOffsetPx', () => {
+    const offsets = labelStaggerOffsets([5000, 3000, 1000], 40)
+    expect(offsets[0]).toBeCloseTo(0, 6)
+    expect(offsets[2]).toBeCloseTo(40, 6)
+    expect(offsets[1]).toBeCloseTo(20, 6)
+  })
+
+  it('repeats the previous offset for a null (unconstrained) altitude', () => {
+    const offsets = labelStaggerOffsets([5000, null, 1000], 40)
+    expect(offsets[1]).toBeCloseTo(offsets[0], 6)
+  })
+
+  it('returns all zeros when every altitude is null', () => {
+    expect(labelStaggerOffsets([null, null], 40)).toEqual([0, 0])
+  })
+
+  it('is stable (all zero offset) when every fix shares the same altitude', () => {
+    expect(labelStaggerOffsets([2000, 2000], 40)).toEqual([0, 0])
   })
 })

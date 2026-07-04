@@ -33,6 +33,8 @@ export interface ProfileFix {
   isGsIntercept: boolean
   isDmeArc: boolean
   dmeNm: number | null
+  /** Ident of the DME's source navaid (e.g. 'I-CJL'), null if dmeNm is null or the leg carried no recNavId. */
+  dmeNavaidId: string | null
   flyover: boolean
 }
 
@@ -90,6 +92,7 @@ interface MergedGroup {
   constraint: AltConstraint | null
   speedKt: number
   dmeNm: number | null
+  dmeNavaidId: string | null
   flyover: boolean
   isDmeArc: boolean
 }
@@ -101,6 +104,7 @@ function mergeGroup(legs: ProcedureLeg[]): MergedGroup {
   let constraint: AltConstraint | null = null
   let speedKt = 0
   let dmeNm: number | null = null
+  let dmeNavaidId: string | null = null
   let flyover = false
   let isDmeArc = false
 
@@ -111,12 +115,15 @@ function mergeGroup(legs: ProcedureLeg[]): MergedGroup {
     }
     if (leg.altConstraint) constraint = leg.altConstraint
     if (leg.speedKt > speedKt) speedKt = leg.speedKt
-    if (dmeNm == null && leg.dmeNm != null) dmeNm = leg.dmeNm
+    if (dmeNm == null && leg.dmeNm != null) {
+      dmeNm = leg.dmeNm
+      dmeNavaidId = leg.recNavId || null
+    }
     if (leg.flyover) flyover = true
     if (leg.pathTerm === 'AF') isDmeArc = true
   }
 
-  return { fixId: legs[0].fixId, role, pathTerm, constraint, speedKt, dmeNm, flyover, isDmeArc }
+  return { fixId: legs[0].fixId, role, pathTerm, constraint, speedKt, dmeNm, dmeNavaidId, flyover, isDmeArc }
 }
 
 /**
@@ -168,6 +175,7 @@ export function buildProfileModel(p: Procedure, t: ProcedureTransition, rwy: Cif
       isGsIntercept,
       isDmeArc: merged.isDmeArc,
       dmeNm: merged.dmeNm,
+      dmeNavaidId: merged.dmeNavaidId,
       flyover: merged.flyover,
     })
   }
@@ -213,6 +221,61 @@ export function glideslopeAltAt(model: ProfileModel, distFromThresholdNm: number
   const tdze = model.tdzeFt ?? 0
   const tch = model.tchFt ?? 50
   return tdze + tch + distFromThresholdNm * Math.tan((model.gsAngleDeg * Math.PI) / 180) * FEET_PER_NM
+}
+
+/**
+ * The vertices (distNm, altFt) of the primary descent path, in domain units
+ * (not pixels). Connects fix altitudes directly — no step-downs — up through
+ * the glideslope-intercept fix (or the FAF, on non-precision approaches where
+ * no fix is flagged isGsIntercept); from there to the runway threshold the
+ * path follows the computed glideslope altitude rather than the last
+ * approach fix's own (often threshold-adjacent, sometimes unconstrained)
+ * plotted altitude. See ProfileSvg.tsx, requirement #1 (linear descent path).
+ */
+export function descentProfilePoints(model: ProfileModel): { distNm: number; altFt: number }[] {
+  if (model.fixes.length === 0) return []
+
+  const altOf = (f: ProfileFix) => f.plotAltFt ?? model.tdzeFt ?? 0
+  const thresholdDistNm = model.fixes[model.fixes.length - 1].distNm
+  const anchorIdx = model.fixes.findIndex((f) => f.isGsIntercept || f.role === 'faf')
+
+  if (anchorIdx === -1) {
+    return model.fixes.map((f) => ({ distNm: f.distNm, altFt: altOf(f) }))
+  }
+
+  const points = model.fixes.slice(0, anchorIdx + 1).map((f) => ({ distNm: f.distNm, altFt: altOf(f) }))
+  points.push({ distNm: thresholdDistNm, altFt: glideslopeAltAt(model, 0) })
+  return points
+}
+
+/** Along-track distance (nm) between each consecutive pair of fixes. */
+export function segmentDistancesNm(fixes: { distNm: number }[]): number[] {
+  const out: number[] = []
+  for (let i = 1; i < fixes.length; i++) out.push(fixes[i].distNm - fixes[i - 1].distNm)
+  return out
+}
+
+/**
+ * Vertical pixel offsets (0..maxOffsetPx) for a row of fix-name labels so
+ * they step down following the descent, like the FAA plate (highest fix's
+ * label sits at the top of the band, lower fixes' labels progressively
+ * lower). `null` altitudes (unconstrained fixes) repeat the previous fix's
+ * offset rather than collapsing to 0.
+ */
+export function labelStaggerOffsets(altsFt: (number | null)[], maxOffsetPx: number): number[] {
+  const known = altsFt.filter((a): a is number => a != null)
+  if (known.length === 0) return altsFt.map(() => 0)
+
+  const lo = Math.min(...known)
+  const hi = Math.max(...known)
+  const span = hi - lo || 1
+
+  let last = 0
+  return altsFt.map((a) => {
+    if (a == null) return last
+    last = ((hi - a) / span) * maxOffsetPx
+    return last
+  })
 }
 
 /**

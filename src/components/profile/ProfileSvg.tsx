@@ -1,6 +1,11 @@
 import { memo } from 'react'
-import { formatAltConstraint } from '../../utils/altitudeConstraint'
-import { glideslopeAltAt } from '../../geo/profileMath'
+import type { AltConstraint } from '../../types/procedure'
+import { BoltGlyph, DmeD, dmeGlyphWidth } from '../map/glyphs'
+import {
+  descentProfilePoints,
+  segmentDistancesNm,
+  labelStaggerOffsets,
+} from '../../geo/profileMath'
 import type { ProfileFix, ProfileModel, LiveAircraft } from '../../geo/profileMath'
 import styles from './ProfileSvg.module.css'
 
@@ -11,7 +16,17 @@ interface Props {
   height: number
 }
 
-const MARGIN = { top: 30, right: 26, bottom: 46, left: 16 }
+// ── layout constants (module-local — do not confuse with config/constants.ts) ──
+const MARGIN = { top: 4, right: 26, bottom: 4, left: 16 }
+const TOP_BAND_H = 56 // fix names + DME boxes, staggered following the descent
+const BOTTOM_BAND_H = 22 // inter-fix distance scale
+const NAME_TOP_PAD = 12 // px from the top of the band to the highest fix's label baseline
+const LABEL_STAGGER_MAX = 26 // px the label baseline steps down inside the top band
+const DME_ROW_GAP = 12 // px from the name baseline down to the DME ident/glyph row
+const DME_SCALE = 0.78 // shrink the shared DmeD glyph to fit the label band
+const WEDGE_HALF_WIDTH_PX = 15 // 34:1 clear-surface wedge half-height at the FAF end
+const WEDGE_TIP_HALF_WIDTH_PX = 3 // half-height at the threshold end (not a perfect point — stays visible)
+const WEDGE_NOTCH_PX = 7 // forked-tail notch depth, cut into the wide (FAF) end
 
 // ── scales ──────────────────────────────────────────────────────────────
 
@@ -32,16 +47,48 @@ function fixAlt(f: ProfileFix, model: ProfileModel): number {
   return f.plotAltFt ?? model.tdzeFt ?? 0
 }
 
+interface PxPt {
+  x: number
+  y: number
+}
+
+/**
+ * The FAA-plate "forked" 34:1 clear-surface wedge: wide at the FAF-crossing
+ * point (anchor), narrowing toward the threshold, with a notch cut into the
+ * wide end so the tail reads as forked rather than a flat edge.
+ */
+function buildWedgePath(anchor: PxPt, threshold: PxPt): string {
+  const dx = threshold.x - anchor.x
+  const dy = threshold.y - anchor.y
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len
+  const uy = dy / len
+  const px = -uy
+  const py = ux
+
+  const hw = WEDGE_HALF_WIDTH_PX
+  const tipHw = WEDGE_TIP_HALF_WIDTH_PX
+  const notch = WEDGE_NOTCH_PX
+
+  const topOuter = { x: anchor.x - ux * notch + px * hw, y: anchor.y - uy * notch + py * hw }
+  const notchPt = { x: anchor.x + ux * notch, y: anchor.y + uy * notch }
+  const bottomOuter = { x: anchor.x - ux * notch - px * hw, y: anchor.y - uy * notch - py * hw }
+  const bottomTip = { x: threshold.x - px * tipHw, y: threshold.y - py * tipHw }
+  const topTip = { x: threshold.x + px * tipHw, y: threshold.y + py * tipHw }
+
+  const P = (p: PxPt) => `${p.x} ${p.y}`
+  return `M ${P(topOuter)} L ${P(notchPt)} L ${P(bottomOuter)} L ${P(bottomTip)} L ${P(topTip)} Z`
+}
+
 // ── small presentational glyphs ────────────────────────────────────────
 
-function BoltGlyph({ x, y }: { x: number; y: number }) {
-  // Small lightning-bolt centered above the fix — glideslope intercept.
-  return (
-    <polygon
-      className={styles.boltGlyph}
-      points={`${x - 2},${y - 22} ${x + 3},${y - 22} ${x - 1},${y - 14} ${x + 4},${y - 14} ${x - 4},${y - 4} ${x - 1},${y - 13} ${x - 6},${y - 13}`}
-    />
-  )
+/**
+ * Glideslope-intercept bolt, built on the shared map glyph. Points down-right
+ * onto the intercept point (the FAF, riding the glideslope) from a spot up
+ * and to the left — the same "aim at the fix" convention WaypointMarkers uses.
+ */
+function ProfileBolt({ x, y }: { x: number; y: number }) {
+  return <BoltGlyph from={{ x: x - 14, y: y - 20 }} to={{ x, y }} standalone={false} />
 }
 
 function MalteseCross({ x, y }: { x: number; y: number }) {
@@ -92,6 +139,39 @@ function AircraftGlyph({ x, y, label }: { x: number; y: number; label: string })
   )
 }
 
+/** Altitude number only — no ≥/≤ prefix; the bar(s) express the semantics instead (FAA plate convention). */
+function altNumberOnly(c: AltConstraint): string {
+  const f = (n: number) => n.toLocaleString('en-US')
+  switch (c.type) {
+    case 'AT': return f(c.low)
+    case 'AT_OR_ABOVE': return f(c.low)
+    case 'AT_OR_BELOW': return f(c.high ?? c.low)
+    case 'BETWEEN': return `${f(c.low)}–${f(c.high ?? c.low)}`
+  }
+}
+
+/**
+ * Altitude restriction text with over/under bars, clearly offset above/below
+ * the text's own bounding box so the bars never strike through the digits
+ * (see requirement #7 — the old rendering overlapped bar and glyph).
+ */
+function AltAnnotation({ f, x, y }: { f: ProfileFix; x: number; y: number }) {
+  if (!f.constraint) return null
+  const textY = y - 16
+  const barAboveY = textY - 9
+  const barBelowY = textY + 3
+  const showAbove = f.constraint.type === 'AT_OR_BELOW' || f.constraint.type === 'AT' || f.constraint.type === 'BETWEEN'
+  const showBelow = f.constraint.type === 'AT_OR_ABOVE' || f.constraint.type === 'AT' || f.constraint.type === 'BETWEEN'
+
+  return (
+    <g>
+      {showAbove && <line className={styles.altBar} x1={x - 13} y1={barAboveY} x2={x + 13} y2={barAboveY} />}
+      <text className={styles.altText} x={x} y={textY} textAnchor="middle">{altNumberOnly(f.constraint)}</text>
+      {showBelow && <line className={styles.altBar} x1={x - 13} y1={barBelowY} x2={x + 13} y2={barBelowY} />}
+    </g>
+  )
+}
+
 // ── main component ─────────────────────────────────────────────────────
 
 // Memoized: the live-aircraft tick re-renders the parent every second, but
@@ -108,31 +188,41 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
   }
 
   const innerW = Math.max(width - MARGIN.left - MARGIN.right, 1)
-  const innerH = Math.max(height - MARGIN.top - MARGIN.bottom, 1)
+  const chartTop = MARGIN.top + TOP_BAND_H
+  const chartBottom = Math.max(height - MARGIN.bottom - BOTTOM_BAND_H, chartTop + 20)
+  const innerH = chartBottom - chartTop
   const totalNm = Math.max(model.totalNm, 0.1)
   const [yMin, yMax] = computeYDomain(model)
   const ySpan = yMax - yMin || 1
 
   const xScale = (nm: number) => MARGIN.left + (nm / totalNm) * innerW
-  const yScale = (ft: number) => MARGIN.top + innerH - ((ft - yMin) / ySpan) * innerH
+  const yScale = (ft: number) => chartTop + innerH - ((ft - yMin) / ySpan) * innerH
 
   const allFixes = [...model.fixes, ...model.missed]
-  const thresholdDistNm = model.fixes[model.fixes.length - 1].distNm
-  const chartBottomY = MARGIN.top + innerH
 
-  // ── step-down path through the approach fixes ──
-  let stepPath = `M ${xScale(model.fixes[0].distNm)} ${yScale(fixAlt(model.fixes[0], model))}`
-  for (let i = 1; i < model.fixes.length; i++) {
-    const prev = model.fixes[i - 1]
-    const cur = model.fixes[i]
-    const prevY = yScale(fixAlt(prev, model))
-    const curX = xScale(cur.distNm)
-    stepPath += ` L ${curX} ${prevY} L ${curX} ${yScale(fixAlt(cur, model))}`
+  // ── primary descent path: linear through the fixes, then the glideslope to the threshold ──
+  const descentPts = descentProfilePoints(model)
+  const mainPath = descentPts
+    .map((pt, i) => `${i === 0 ? 'M' : 'L'} ${xScale(pt.distNm)} ${yScale(pt.altFt)}`)
+    .join(' ')
+
+  // The anchor (FAF / gs-intercept) and the threshold — used for the GS
+  // label, TCH note, and the 34:1 wedge.
+  const gsAnchorPx: PxPt | null =
+    descentPts.length >= 2
+      ? { x: xScale(descentPts[descentPts.length - 2].distNm), y: yScale(descentPts[descentPts.length - 2].altFt) }
+      : null
+  const thresholdPx: PxPt = {
+    x: xScale(descentPts[descentPts.length - 1].distNm),
+    y: yScale(descentPts[descentPts.length - 1].altFt),
   }
+  const gsLabelPos = gsAnchorPx
+    ? { x: (gsAnchorPx.x + thresholdPx.x) / 2, y: (gsAnchorPx.y + thresholdPx.y) / 2 - 8 }
+    : null
 
-  // ── dashed missed-approach climb path ──
+  // ── dashed climbing missed-approach path ──
   let missedPath = ''
-  let missedArrowEnd: { x: number; y: number } | null = null
+  let missedArrowEnd: PxPt | null = null
   if (model.missed.length > 0) {
     const mapFix = model.fixes[model.fixes.length - 1]
     let prevAlt = fixAlt(mapFix, model)
@@ -146,21 +236,18 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
     missedArrowEnd = { x: xScale(last.distNm), y: yScale(prevAlt) }
   }
 
-  // ── glideslope ──
-  const gsFix = model.fixes.find((f) => f.isGsIntercept)
-  let gsLine: { x1: number; y1: number; x2: number; y2: number } | null = null
-  let gsLabelPos: { x: number; y: number } | null = null
-  if (gsFix) {
-    const startAlt = gsFix.plotAltFt ?? glideslopeAltAt(model, thresholdDistNm - gsFix.distNm)
-    const endAlt = glideslopeAltAt(model, 0)
-    gsLine = {
-      x1: xScale(gsFix.distNm),
-      y1: yScale(startAlt),
-      x2: xScale(thresholdDistNm),
-      y2: yScale(endAlt),
-    }
-    gsLabelPos = { x: (gsLine.x1 + gsLine.x2) / 2, y: (gsLine.y1 + gsLine.y2) / 2 - 8 }
-  }
+  // ── 34:1 clear-surface wedge (FAF → threshold), forked tail at the FAF end ──
+  const wedgePath = gsAnchorPx ? buildWedgePath(gsAnchorPx, thresholdPx) : null
+
+  // ── top-band fix-name labels, staggered downward following the descent ──
+  const nameAlts = model.fixes.map((f) => f.plotAltFt ?? model.tdzeFt ?? null)
+  const nameOffsets = labelStaggerOffsets(nameAlts, LABEL_STAGGER_MAX)
+
+  // ── bottom-band inter-fix distance scale ──
+  const segDists = segmentDistancesNm(model.fixes)
+  const distTickTopY = chartBottom + 2
+  const distTickBotY = chartBottom + 8
+  const distTextY = chartBottom + 17
 
   return (
     <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -180,20 +267,19 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
         </g>
       )}
 
-      {/* step-down altitude path */}
-      <path className={styles.stepPath} d={stepPath} />
+      {/* 34:1 clear-surface wedge — drawn below the path lines */}
+      {wedgePath && <path className={styles.clearSurfaceWedge} d={wedgePath} />}
 
-      {/* glideslope */}
-      {gsLine && (
+      {/* primary descent path: linear through the fixes, glideslope to the threshold */}
+      <path className={styles.descentPath} d={mainPath} />
+
+      {gsAnchorPx && gsLabelPos && (
         <g>
-          <line className={styles.gsLine} x1={gsLine.x1} y1={gsLine.y1} x2={gsLine.x2} y2={gsLine.y2} />
-          {gsLabelPos && (
-            <text className={styles.gsLabel} x={gsLabelPos.x} y={gsLabelPos.y} textAnchor="middle">
-              {`GS ${model.gsAngleDeg.toFixed(1)}°${model.usedFallbackGs ? '*' : ''}`}
-            </text>
-          )}
+          <text className={styles.gsLabel} x={gsLabelPos.x} y={gsLabelPos.y} textAnchor="middle">
+            {`GS ${model.gsAngleDeg.toFixed(2)}°${model.usedFallbackGs ? '*' : ''}`}
+          </text>
           {model.tchFt != null && (
-            <text className={styles.gsLabel} x={xScale(thresholdDistNm)} y={gsLine.y2 + 14} textAnchor="middle">
+            <text className={styles.gsLabel} x={thresholdPx.x} y={thresholdPx.y + 14} textAnchor="middle">
               {`TCH ${model.tchFt}′`}
             </text>
           )}
@@ -213,54 +299,100 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
         </g>
       )}
 
-      {/* per-fix ticks, labels, glyphs */}
+      {/* top band: fix names + DME boxes, dashed vertical ticks down to the path */}
+      {model.fixes.map((f, i) => {
+        const x = xScale(f.distNm)
+        const nameY = MARGIN.top + NAME_TOP_PAD + nameOffsets[i]
+        const dmeY = nameY + DME_ROW_GAP
+        const pathY = yScale(fixAlt(f, model))
+        const dmeW = f.dmeNm != null ? dmeGlyphWidth(f.dmeNm) * DME_SCALE : 0
+
+        return (
+          <g key={`name-${f.fixId}-${i}`}>
+            <line className={styles.tick} x1={x} y1={nameY + 4} x2={x} y2={pathY} />
+
+            <text className={styles.fixName} x={x} y={nameY} textAnchor="middle">
+              {f.fixId}
+              {f.speedKt > 0 && <tspan className={styles.speedInline}> {f.speedKt}K</tspan>}
+            </text>
+
+            {f.dmeNm != null && (
+              <g transform={`translate(${x - dmeW / 2} ${dmeY})`}>
+                {f.dmeNavaidId && (
+                  <text className={styles.dmeIdent} x={dmeW / 2} y={-2} textAnchor="middle">
+                    {f.dmeNavaidId}{f.isDmeArc ? ' ARC' : ''}
+                  </text>
+                )}
+                <g transform={`scale(${DME_SCALE})`}>
+                  <DmeD nm={f.dmeNm} standalone={false} />
+                </g>
+              </g>
+            )}
+          </g>
+        )
+      })}
+
+      {/* chart: altitude constraint bars/text and role glyphs, approach + missed fixes */}
       {allFixes.map((f, i) => {
         const isMissedFix = i >= model.fixes.length
         const x = xScale(f.distNm)
         const alt = fixAlt(f, model)
         const y = yScale(alt)
-        const altLabel = formatAltConstraint(f.constraint)
-        const hold = model.holds.find((h) => h.inMissed === isMissedFix && h.atFixIdx === (isMissedFix ? i - model.fixes.length : i))
+        const hold = model.holds.find(
+          (h) => h.inMissed === isMissedFix && h.atFixIdx === (isMissedFix ? i - model.fixes.length : i),
+        )
 
         return (
           <g key={`${f.fixId}-${i}`}>
-            <line className={styles.tick} x1={x} y1={MARGIN.top} x2={x} y2={chartBottomY} />
-
-            <text className={styles.fixName} x={x} y={chartBottomY + 14} textAnchor="middle">
-              {f.fixId}
-            </text>
-
-            {altLabel && (
-              <g>
-                {(f.constraint?.type === 'AT_OR_BELOW' || f.constraint?.type === 'AT' || f.constraint?.type === 'BETWEEN') && (
-                  <line className={styles.altBar} x1={x - 12} y1={y - 22} x2={x + 12} y2={y - 22} />
-                )}
-                <text className={styles.altText} x={x} y={y - 18} textAnchor="middle">{altLabel}</text>
-                {(f.constraint?.type === 'AT_OR_ABOVE' || f.constraint?.type === 'AT' || f.constraint?.type === 'BETWEEN') && (
-                  <line className={styles.altBar} x1={x - 12} y1={y - 14} x2={x + 12} y2={y - 14} />
-                )}
-              </g>
+            {isMissedFix && (
+              <text className={styles.missedFixName} x={x} y={y - 10} textAnchor="middle">{f.fixId}</text>
             )}
 
-            {f.speedKt > 0 && (
-              <text className={styles.speedText} x={x} y={chartBottomY + 26} textAnchor="middle">
-                {f.speedKt}K
-              </text>
-            )}
+            <AltAnnotation f={f} x={x} y={y} />
 
-            {f.isDmeArc && (
-              <text className={styles.arcText} x={x} y={chartBottomY + 38} textAnchor="middle">
+            {isMissedFix && f.isDmeArc && (
+              <text className={styles.arcText} x={x} y={y + 16} textAnchor="middle">
                 {f.dmeNm != null ? `${f.dmeNm} DME ARC` : 'DME ARC'}
               </text>
             )}
 
-            {f.isGsIntercept && <BoltGlyph x={x} y={y} />}
-            {!f.isGsIntercept && f.role === 'faf' && <MalteseCross x={x} y={y} />}
+            {f.isGsIntercept && <ProfileBolt x={x} y={y} />}
+            {f.role === 'faf' && <MalteseCross x={x} y={y} />}
             {f.role === 'map' && <MapGlyph x={x} y={y} />}
             {hold && <HoldGlyph x={x} y={y} isPi={hold.kind === 'PI'} />}
           </g>
         )
       })}
+
+      {/* bottom band: inter-fix distance scale */}
+      <g>
+        <line
+          className={styles.distBaseline}
+          x1={xScale(model.fixes[0].distNm)}
+          y1={distTickTopY}
+          x2={xScale(model.fixes[model.fixes.length - 1].distNm)}
+          y2={distTickTopY}
+        />
+        {model.fixes.map((f, i) => (
+          <line
+            key={`dtick-${i}`}
+            className={styles.distTick}
+            x1={xScale(f.distNm)}
+            y1={distTickTopY}
+            x2={xScale(f.distNm)}
+            y2={distTickBotY}
+          />
+        ))}
+        {segDists.map((d, i) => {
+          const x1 = xScale(model.fixes[i].distNm)
+          const x2 = xScale(model.fixes[i + 1].distNm)
+          return (
+            <text key={`dtext-${i}`} className={styles.distText} x={(x1 + x2) / 2} y={distTextY} textAnchor="middle">
+              {d.toFixed(1)} NM
+            </text>
+          )
+        })}
+      </g>
 
       {/* live aircraft */}
       {liveAircraft && (

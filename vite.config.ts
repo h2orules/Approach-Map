@@ -35,24 +35,17 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/dtpp/, '/d-tpp'),
       },
-      // MVA/MIA sector-chart AIXM XML, published per-TRACON by FAA AJV under
-      // faa.gov's digital_products/mva_mia page. UNVERIFIED: that page is
-      // blocked from this sandbox's network egress, so the exact upstream
-      // directory path below is a best guess, not a confirmed URL. If
-      // requests through this proxy 404 in practice: open
-      // https://www.faa.gov (search "MVA MIA charts" / digital products) in
-      // a real browser, find an actual XML file's href, and update the
-      // `rewrite` path to match (the `<FACILITY>_MVA_FUS3.xml` filename
-      // convention itself — see src/utils/mvaFacilities.ts — was verified
-      // against a real downloaded ABQ file, only the directory is a guess).
+      // MVA/MIA sector-chart AIXM XML, published per-TRACON by FAA AJV. The
+      // faa.gov digital_products/mva_mia page is just an HTML index; the
+      // actual `<FACILITY>_MVA_FUS3.xml` / `_FUS5.xml` files it links to are
+      // hosted on aeronav.faa.gov (verified by fetching the index page and
+      // inspecting its <a href> list directly, e.g. .../MVA_Charts/aixm/
+      // S46_MVA_FUS3.xml for Seattle) — a different host+path than
+      // faa-cifp's aeronav.faa.gov/Upload_313-d/cifp above.
       '/api/faa-mva': {
-        target: 'https://www.faa.gov',
+        target: 'https://aeronav.faa.gov',
         changeOrigin: true,
-        rewrite: (path) =>
-          path.replace(
-            /^\/api\/faa-mva/,
-            '/air_traffic/flight_info/aeronav/digital_products/mva_mia/mva',
-          ),
+        rewrite: (path) => path.replace(/^\/api\/faa-mva/, '/MVA_Charts/aixm'),
       },
     },
   },

@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { unzipSync } from 'fflate'
 import type { Procedure } from '../types/procedure'
+import type { CifpAirportData, CifpRunwayInfo } from '../types/cifp'
+import type { SafeAltitudeArea } from '../types/safeAltitude'
 import { currentCycleEffectiveDate, nextCycleDate, cifpUrl, formatCycleDate, isCycleStale } from '../utils/airac'
 
 const DB_NAME = 'approach-map-cifp'
@@ -10,7 +12,9 @@ const STORE_NAME = 'cifp'
 // Bump whenever the ARINC 424 parser logic changes, so previously cached
 // parse results (which may have been produced by buggy parser code) are
 // discarded and the CIFP is re-parsed even within the same AIRAC cycle.
-const PARSER_VERSION = 10
+// v11: parser now emits CifpAirportData (procedures + safe altitudes + runway
+// info + magvar) instead of a bare Procedure[] per airport.
+const PARSER_VERSION = 11
 
 export type CifpStatus = 'idle' | 'fetching' | 'parsing' | 'ready' | 'error'
 
@@ -19,11 +23,11 @@ interface CifpStore {
   progress: number
   progressMessage: string
   effectiveDate: string | null
-  data: Record<string, Procedure[]>
+  data: Record<string, CifpAirportData>
   error: string | null
 
   setStatus: (s: CifpStatus, progress?: number, message?: string) => void
-  setData: (data: Record<string, Procedure[]>, effectiveDate: string) => void
+  setData: (data: Record<string, CifpAirportData>, effectiveDate: string) => void
   setError: (e: string) => void
 }
 
@@ -123,11 +127,11 @@ async function fetchAndParseCifp(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     worker.onmessage = (e) => {
-      const msg = e.data as { type: string; percent?: number; message?: string; data?: Record<string, Procedure[]>; message2?: string }
+      const msg = e.data as { type: string; percent?: number; message?: string; data?: Record<string, CifpAirportData>; message2?: string }
       if (msg.type === 'progress') {
         store.setStatus('parsing', msg.percent ?? 0, msg.message ?? '')
       } else if (msg.type === 'result') {
-        const data = msg.data as Record<string, Procedure[]>
+        const data = msg.data as Record<string, CifpAirportData>
         store.setData(data, dateStr)
         openDb()
           .then((db) =>
@@ -160,7 +164,7 @@ async function checkAndRefreshIfStale(): Promise<void> {
   const storedVersion = await dbGet<number>(db, 'parserVersion')
 
   if (storedVersion === PARSER_VERSION && !isCycleStale(storedDate ?? null)) {
-    const data = await dbGet<Record<string, Procedure[]>>(db, 'data')
+    const data = await dbGet<Record<string, CifpAirportData>>(db, 'data')
     if (data) {
       useCifpStore.getState().setData(data, storedDate!)
       scheduleRollover()
@@ -179,7 +183,15 @@ export async function getCifpData(): Promise<void> {
 }
 
 export function getProceduresForAirport(icao: string): Procedure[] {
-  return useCifpStore.getState().data[icao.toUpperCase()] ?? []
+  return useCifpStore.getState().data[icao.toUpperCase()]?.procedures ?? []
+}
+
+export function getSafeAltitudesForAirport(icao: string): SafeAltitudeArea[] {
+  return useCifpStore.getState().data[icao.toUpperCase()]?.safeAltitudes ?? []
+}
+
+export function getRunwayInfoForAirport(icao: string): Record<string, CifpRunwayInfo> {
+  return useCifpStore.getState().data[icao.toUpperCase()]?.runwayInfo ?? {}
 }
 
 export function setupVisibilityRefresh(): () => void {

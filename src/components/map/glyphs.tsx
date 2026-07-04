@@ -173,8 +173,8 @@ export function DmeD({ nm, className, standalone = true }: DmeDProps) {
       <text
         x={textX}
         y={DME_H / 2}
+        dy="0.35em"
         textAnchor="middle"
-        dominantBaseline="central"
         fontSize={10}
         fontFamily="'Roboto Mono', monospace"
         fill={RESTRICTION_COLOR}
@@ -194,7 +194,10 @@ export function DmeD({ nm, className, standalone = true }: DmeDProps) {
       height={DME_H}
       viewBox={`0 0 ${svgW} ${DME_H}`}
       className={className}
-      style={{ display: 'block', flexShrink: 0 }}
+      // overflow visible so the D outline's stroke and the right-arc's
+      // rightmost point (both sitting exactly on the viewBox edge) aren't
+      // clipped — matching how the profile renders the same glyph.
+      style={{ display: 'block', flexShrink: 0, overflow: 'visible' }}
       aria-label={`DME ${text}`}
     >
       {content}

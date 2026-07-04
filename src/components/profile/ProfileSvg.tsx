@@ -17,7 +17,7 @@ interface Props {
 }
 
 // ── layout constants (module-local — do not confuse with config/constants.ts) ──
-const MARGIN = { top: 4, right: 26, bottom: 4, left: 16 }
+const MARGIN = { top: 4, right: 20, bottom: 4, left: 16 }
 const TOP_BAND_H = 56 // fix names + DME boxes, staggered following the descent
 const BOTTOM_BAND_H = 22 // inter-fix distance scale
 const NAME_TOP_PAD = 12 // px from the top of the band to the highest fix's label baseline
@@ -27,6 +27,11 @@ const DME_SCALE = 0.78 // shrink the shared DmeD glyph to fit the label band
 const WEDGE_HALF_WIDTH_PX = 15 // 34:1 clear-surface wedge half-height at the FAF end
 const WEDGE_TIP_HALF_WIDTH_PX = 3 // half-height at the threshold end (not a perfect point — stays visible)
 const WEDGE_NOTCH_PX = 7 // forked-tail notch depth, cut into the wide (FAF) end
+const X_INSET = 34 // horizontal room inside the margins so the first/last fix labels (name + speed) don't clip
+const ALT_HEADROOM = 26 // vertical room above the highest fix so its altitude label clears the name band
+const ALT_CHAR_W = 6 // px per char of an altitude label at 10px Roboto Mono — sizes the over/under bars to the text
+const ALT_CY_OFFSET = 15 // px the altitude label's vertical center sits from the fix point (above, or below for missed fixes)
+const ALT_BAR_HALF_GAP = 6.5 // px from the altitude label center up/down to each over/under bar
 
 // ── scales ──────────────────────────────────────────────────────────────
 
@@ -83,19 +88,19 @@ function buildWedgePath(anchor: PxPt, threshold: PxPt): string {
 // ── small presentational glyphs ────────────────────────────────────────
 
 /**
- * Glideslope-intercept bolt, built on the shared map glyph. Points down-right
- * onto the intercept point (the FAF, riding the glideslope) from a spot up
- * and to the left — the same "aim at the fix" convention WaypointMarkers uses.
+ * Glideslope-intercept bolt, built on the shared map glyph. Sits just down and
+ * to the right of the FAF, pointing down the glideslope — offset off the fix
+ * center so it clears the maltese cross (which sits on the line at the FAF).
  */
 function ProfileBolt({ x, y }: { x: number; y: number }) {
-  return <BoltGlyph from={{ x: x - 14, y: y - 20 }} to={{ x, y }} standalone={false} />
+  return <BoltGlyph from={{ x: x + 7, y: y - 9 }} to={{ x: x + 17, y: y + 1 }} standalone={false} />
 }
 
 function MalteseCross({ x, y }: { x: number; y: number }) {
   const s = 5
   const t = 1.6
   return (
-    <g className={styles.malteseCross} transform={`translate(${x} ${y - 16})`}>
+    <g className={styles.malteseCross} transform={`translate(${x} ${y})`}>
       <path
         d={`M ${-t} ${-s} H ${t} V ${-t} H ${s} V ${t} H ${t} V ${s} H ${-t} V ${t} H ${-s} V ${-t} H ${-t} Z`}
       />
@@ -104,8 +109,9 @@ function MalteseCross({ x, y }: { x: number; y: number }) {
 }
 
 function MapGlyph({ x, y }: { x: number; y: number }) {
+  // Centered on the descent line at the runway/threshold altitude (not floating above it).
   return (
-    <g transform={`translate(${x} ${y - 20})`}>
+    <g transform={`translate(${x} ${y})`}>
       <circle r={7} className={styles.mapGlyph} />
       <text className={styles.mapText} textAnchor="middle" dominantBaseline="central">M</text>
     </g>
@@ -151,23 +157,30 @@ function altNumberOnly(c: AltConstraint): string {
 }
 
 /**
- * Altitude restriction text with over/under bars, clearly offset above/below
- * the text's own bounding box so the bars never strike through the digits
- * (see requirement #7 — the old rendering overlapped bar and glyph).
+ * Altitude restriction text with over/under bars. The bars span the width of
+ * the number and the number is vertically centered between them (FAA plate
+ * convention). Placed above the fix by default (below for missed-approach
+ * fixes, whose names sit above the line) so it clears the role glyphs, which
+ * now sit on the descent line.
  */
-function AltAnnotation({ f, x, y }: { f: ProfileFix; x: number; y: number }) {
+function AltAnnotation({ f, x, y, below }: { f: ProfileFix; x: number; y: number; below?: boolean }) {
   if (!f.constraint) return null
-  const textY = y - 16
-  const barAboveY = textY - 9
-  const barBelowY = textY + 3
-  const showAbove = f.constraint.type === 'AT_OR_BELOW' || f.constraint.type === 'AT' || f.constraint.type === 'BETWEEN'
-  const showBelow = f.constraint.type === 'AT_OR_ABOVE' || f.constraint.type === 'AT' || f.constraint.type === 'BETWEEN'
+  const label = altNumberOnly(f.constraint)
+  const halfW = (label.length * ALT_CHAR_W) / 2
+  const type = f.constraint.type
+  const showAbove = type === 'AT_OR_BELOW' || type === 'AT' || type === 'BETWEEN'
+  const showBelow = type === 'AT_OR_ABOVE' || type === 'AT' || type === 'BETWEEN'
+  const cy = below ? y + ALT_CY_OFFSET : y - ALT_CY_OFFSET
 
   return (
     <g>
-      {showAbove && <line className={styles.altBar} x1={x - 13} y1={barAboveY} x2={x + 13} y2={barAboveY} />}
-      <text className={styles.altText} x={x} y={textY} textAnchor="middle">{altNumberOnly(f.constraint)}</text>
-      {showBelow && <line className={styles.altBar} x1={x - 13} y1={barBelowY} x2={x + 13} y2={barBelowY} />}
+      {showAbove && (
+        <line className={styles.altBar} x1={x - halfW} y1={cy - ALT_BAR_HALF_GAP} x2={x + halfW} y2={cy - ALT_BAR_HALF_GAP} />
+      )}
+      <text className={styles.altText} x={x} y={cy} textAnchor="middle" dominantBaseline="central">{label}</text>
+      {showBelow && (
+        <line className={styles.altBar} x1={x - halfW} y1={cy + ALT_BAR_HALF_GAP} x2={x + halfW} y2={cy + ALT_BAR_HALF_GAP} />
+      )}
     </g>
   )
 }
@@ -187,16 +200,24 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
     )
   }
 
-  const innerW = Math.max(width - MARGIN.left - MARGIN.right, 1)
   const chartTop = MARGIN.top + TOP_BAND_H
   const chartBottom = Math.max(height - MARGIN.bottom - BOTTOM_BAND_H, chartTop + 20)
-  const innerH = chartBottom - chartTop
+  // Reserve headroom at the top of the plot so the highest fix's altitude
+  // label sits below the name band, not on top of it.
+  const plotTop = chartTop + ALT_HEADROOM
+  const plotH = Math.max(chartBottom - plotTop, 20)
   const totalNm = Math.max(model.totalNm, 0.1)
   const [yMin, yMax] = computeYDomain(model)
   const ySpan = yMax - yMin || 1
 
-  const xScale = (nm: number) => MARGIN.left + (nm / totalNm) * innerW
-  const yScale = (ft: number) => chartTop + innerH - ((ft - yMin) / ySpan) * innerH
+  // Inset the horizontal domain so the first/last fix labels (centered on their
+  // ticks, and widened by an inline speed restriction) don't clip at the edges.
+  const plotLeft = MARGIN.left + X_INSET
+  const plotRight = Math.max(width - MARGIN.right - X_INSET, plotLeft + 1)
+  const plotW = plotRight - plotLeft
+
+  const xScale = (nm: number) => plotLeft + (nm / totalNm) * plotW
+  const yScale = (ft: number) => plotTop + plotH - ((ft - yMin) / ySpan) * plotH
 
   const allFixes = [...model.fixes, ...model.missed]
 
@@ -251,21 +272,21 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
 
   return (
     <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      {/* ground reference line */}
-      {model.tdzeFt != null && (
-        <g>
-          <line
-            className={styles.groundLine}
-            x1={MARGIN.left}
-            y1={yScale(model.tdzeFt)}
-            x2={width - MARGIN.right}
-            y2={yScale(model.tdzeFt)}
-          />
-          <text className={styles.groundLabel} x={MARGIN.left + 2} y={yScale(model.tdzeFt) - 4}>
-            TDZE {model.tdzeFt.toLocaleString('en-US')}
-          </text>
-        </g>
-      )}
+      {/* ground / runway reference — a short mark near the threshold, not a
+          full-width baseline under the whole profile */}
+      {model.tdzeFt != null && (() => {
+        const gy = yScale(model.tdzeFt)
+        const rwLeft = Math.max(thresholdPx.x - 78, MARGIN.left)
+        const rwRight = Math.min(thresholdPx.x + 16, width - MARGIN.right)
+        return (
+          <g>
+            <line className={styles.groundLine} x1={rwLeft} y1={gy} x2={rwRight} y2={gy} />
+            <text className={styles.groundLabel} x={rwLeft} y={gy - 4}>
+              TDZE {model.tdzeFt.toLocaleString('en-US')}
+            </text>
+          </g>
+        )
+      })()}
 
       {/* 34:1 clear-surface wedge — drawn below the path lines */}
       {wedgePath && <path className={styles.clearSurfaceWedge} d={wedgePath} />}
@@ -348,7 +369,7 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
               <text className={styles.missedFixName} x={x} y={y - 10} textAnchor="middle">{f.fixId}</text>
             )}
 
-            <AltAnnotation f={f} x={x} y={y} />
+            <AltAnnotation f={f} x={x} y={y} below={isMissedFix} />
 
             {isMissedFix && f.isDmeArc && (
               <text className={styles.arcText} x={x} y={y + 16} textAnchor="middle">

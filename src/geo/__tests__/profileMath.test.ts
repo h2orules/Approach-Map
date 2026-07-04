@@ -6,9 +6,11 @@ import {
   glideslopeAltAt,
   alongTrackNm,
   descentProfilePoints,
+  fixRenderAltitudes,
   segmentDistancesNm,
   labelStaggerOffsets,
 } from '../profileMath'
+import type { ProfileFix, ProfileModel } from '../profileMath'
 import type { Procedure, ProcedureLeg, ProcedureTransition } from '../../types/procedure'
 import type { CifpRunwayInfo } from '../../types/cifp'
 
@@ -269,6 +271,47 @@ describe('alongTrackNm', () => {
   })
 })
 
+describe('fixRenderAltitudes', () => {
+  function pf(fixId: string, distNm: number, plotAltFt: number | null, role: ProfileFix['role'] = 'normal'): ProfileFix {
+    return {
+      fixId, distNm, plotAltFt, role,
+      constraint: plotAltFt == null ? null : { type: 'AT', low: plotAltFt },
+      pathTerm: 'TF', speedKt: 0, isGsIntercept: role === 'faf', isDmeArc: false,
+      dmeNm: null, dmeNavaidId: null, flyover: false,
+    }
+  }
+  const base: Omit<ProfileModel, 'fixes'> = {
+    procedureId: 'x', name: 'x', gsAngleDeg: 3, usedFallbackGs: false, tchFt: 50,
+    tdzeFt: 400, runwayLengthFt: null, totalNm: 13, holds: [], missed: [],
+  }
+
+  it('interpolates an unconstrained interior fix between its constrained neighbours', () => {
+    // A(5000) B(3000) C(none) FAF(1800) RW(none) — C sits 3/5 of the way from B to FAF.
+    const m: ProfileModel = {
+      ...base,
+      fixes: [pf('A', 0, 5000), pf('B', 5, 3000), pf('C', 8, null), pf('FAF', 10, 1800, 'faf'), pf('RW', 13, null, 'map')],
+    }
+    const alts = fixRenderAltitudes(m)
+    expect(alts[0]).toBe(5000)
+    expect(alts[1]).toBe(3000)
+    expect(alts[2]).toBeCloseTo(2280, 6) // 3000 + (1800-3000) * (8-5)/(10-5)
+    expect(alts[3]).toBe(1800)
+    expect(alts[4]).toBeCloseTo(glideslopeAltAt(m, 0), 6) // runway anchored to threshold crossing
+    // The interpolated fix must sit strictly between its neighbours, never at TDZE.
+    expect(alts[2]).toBeGreaterThan(m.tdzeFt!)
+  })
+
+  it('anchors leading unconstrained fixes to the first constrained altitude (flat, not TDZE)', () => {
+    const m: ProfileModel = {
+      ...base,
+      fixes: [pf('A', 0, null), pf('B', 5, null), pf('FAF', 10, 2000, 'faf'), pf('RW', 13, null, 'map')],
+    }
+    const alts = fixRenderAltitudes(m)
+    expect(alts[0]).toBe(2000)
+    expect(alts[1]).toBe(2000)
+  })
+})
+
 describe('descentProfilePoints', () => {
   const p = makeProcedure({ gpaDeg: 3.0, tchFt: 55 })
   const model = buildProfileModel(p, transition, rwy)
@@ -277,8 +320,10 @@ describe('descentProfilePoints', () => {
     const pts = descentProfilePoints(model)
     // IAF, MID, FAF (the gs-intercept anchor since this is a precision approach), then threshold.
     expect(pts).toHaveLength(4)
-    expect(pts[0]).toEqual({ distNm: model.fixes[0].distNm, altFt: model.fixes[0].plotAltFt ?? model.tdzeFt ?? 0 })
-    expect(pts[1]).toEqual({ distNm: model.fixes[1].distNm, altFt: model.fixes[1].plotAltFt ?? model.tdzeFt ?? 0 })
+    // IAF and MID carry no constraint here; sitting before the only constrained
+    // fix (FAF, 1800) they anchor to it rather than dropping to the runway.
+    expect(pts[0]).toEqual({ distNm: model.fixes[0].distNm, altFt: 1800 })
+    expect(pts[1]).toEqual({ distNm: model.fixes[1].distNm, altFt: 1800 })
     expect(pts[2]).toEqual({ distNm: model.fixes[2].distNm, altFt: model.fixes[2].plotAltFt })
     // MAP fix's own plotted altitude is skipped; the final vertex instead sits
     // at the threshold distance and the computed glideslope altitude.

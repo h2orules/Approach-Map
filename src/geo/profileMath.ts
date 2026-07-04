@@ -232,18 +232,61 @@ export function glideslopeAltAt(model: ProfileModel, distFromThresholdNm: number
  * approach fix's own (often threshold-adjacent, sometimes unconstrained)
  * plotted altitude. See ProfileSvg.tsx, requirement #1 (linear descent path).
  */
+/**
+ * The altitude to PLOT for each approach fix. Fixes that carry a crossing
+ * restriction use it; unconstrained intermediate fixes (e.g. a step-down or
+ * turn fix with no published altitude) are linearly interpolated by distance
+ * between their nearest constrained neighbours, so they sit on the descent
+ * line instead of collapsing to the runway elevation. The last fix (runway/
+ * threshold) is anchored to the glideslope's threshold-crossing altitude.
+ *
+ * This is a pure function of the model, so the plotted profile never depends
+ * on anything but the procedure data.
+ */
+export function fixRenderAltitudes(model: ProfileModel): number[] {
+  const fixes = model.fixes
+  const n = fixes.length
+  if (n === 0) return []
+
+  const alt: (number | null)[] = fixes.map((f) => f.plotAltFt)
+  // Anchor the endpoints so interior interpolation always has both brackets.
+  if (alt[n - 1] == null) alt[n - 1] = glideslopeAltAt(model, 0)
+  if (alt[0] == null) alt[0] = alt.find((a) => a != null) ?? model.tdzeFt ?? 0
+
+  for (let i = 0; i < n; ) {
+    if (alt[i] != null) {
+      i++
+      continue
+    }
+    const j = i - 1 // previous fix with a known altitude (alt[0] is set above)
+    let k = i + 1
+    while (k < n && alt[k] == null) k++ // next fix with a known altitude (alt[n-1] is set)
+    const aj = alt[j] as number
+    const ak = alt[k] as number
+    const dj = fixes[j].distNm
+    const dk = fixes[k].distNm
+    for (let m = i; m < k; m++) {
+      const t = dk === dj ? 0 : (fixes[m].distNm - dj) / (dk - dj)
+      alt[m] = aj + (ak - aj) * t
+    }
+    i = k
+  }
+
+  return alt as number[]
+}
+
 export function descentProfilePoints(model: ProfileModel): { distNm: number; altFt: number }[] {
   if (model.fixes.length === 0) return []
 
-  const altOf = (f: ProfileFix) => f.plotAltFt ?? model.tdzeFt ?? 0
+  const alts = fixRenderAltitudes(model)
   const thresholdDistNm = model.fixes[model.fixes.length - 1].distNm
   const anchorIdx = model.fixes.findIndex((f) => f.isGsIntercept || f.role === 'faf')
 
   if (anchorIdx === -1) {
-    return model.fixes.map((f) => ({ distNm: f.distNm, altFt: altOf(f) }))
+    return model.fixes.map((f, i) => ({ distNm: f.distNm, altFt: alts[i] }))
   }
 
-  const points = model.fixes.slice(0, anchorIdx + 1).map((f) => ({ distNm: f.distNm, altFt: altOf(f) }))
+  const points = model.fixes.slice(0, anchorIdx + 1).map((f, i) => ({ distNm: f.distNm, altFt: alts[i] }))
   points.push({ distNm: thresholdDistNm, altFt: glideslopeAltAt(model, 0) })
   return points
 }

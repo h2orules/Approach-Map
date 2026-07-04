@@ -3,6 +3,7 @@ import type { AltConstraint } from '../../types/procedure'
 import { BoltGlyph, DmeD, dmeGlyphWidth } from '../map/glyphs'
 import {
   descentProfilePoints,
+  fixRenderAltitudes,
   segmentDistancesNm,
   labelStaggerOffsets,
 } from '../../geo/profileMath'
@@ -50,11 +51,6 @@ function computeYDomain(model: ProfileModel): [number, number] {
   const lo = Math.min(...alts)
   const hi = Math.max(...alts)
   return [lo - 300, hi + 500]
-}
-
-/** Best-effort plotting altitude for a fix that carries no explicit constraint. */
-function fixAlt(f: ProfileFix, model: ProfileModel): number {
-  return f.plotAltFt ?? model.tdzeFt ?? 0
 }
 
 interface PxPt {
@@ -235,6 +231,10 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
   const [yMin, yMax] = computeYDomain(model)
   const ySpan = yMax - yMin || 1
 
+  // Plotted altitude per fix — interpolated for unconstrained fixes so they
+  // sit on the descent line rather than dropping to the runway elevation.
+  const fixAlts = fixRenderAltitudes(model)
+
   // Inset the horizontal domain so the first/last fix labels (centered on their
   // ticks, and widened by an inline speed restriction) don't clip at the edges.
   const plotLeft = MARGIN.left + X_INSET
@@ -369,7 +369,7 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
         const x = xScale(f.distNm)
         const nameY = MARGIN.top + NAME_TOP_PAD + nameOffsets[i]
         const dmeY = nameY + DME_ROW_GAP
-        const pathY = yScale(fixAlt(f, model))
+        const pathY = yScale(fixAlts[i])
         const dmeW = f.dmeNm != null ? dmeGlyphWidth(f.dmeNm) * DME_SCALE : 0
 
         return (
@@ -400,7 +400,7 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
       {/* chart: altitude constraint bars/text and role glyphs (approach fixes) */}
       {model.fixes.map((f, i) => {
         const x = xScale(f.distNm)
-        const y = yScale(fixAlt(f, model))
+        const y = yScale(fixAlts[i])
         const hold = model.holds.find((h) => !h.inMissed && h.atFixIdx === i)
         // The runway/threshold fix's crossing altitude is redundant with the
         // TDZE and TCH already shown near the runway — skip it to reduce noise.

@@ -58,8 +58,10 @@ export function ProfileHeader({ procedure, model }: Props) {
         <div className={styles.box}>
           <span className={styles.boxLabel}>Procedure</span>
           <span className={styles.boxValue}>
-            {procedure.name}
-            {procedure.runways.length > 0 ? ` RWY ${procedure.runways.join('/')}` : ''} · {procedure.icao}
+            {/* Prefer the official chart name once the d-TPP metafile is loaded */}
+            {amdt?.chartName ??
+              `${procedure.name}${procedure.runways.length > 0 ? ` RWY ${procedure.runways.join('/')}` : ''}`}{' '}
+            · {procedure.icao}
           </span>
         </div>
 

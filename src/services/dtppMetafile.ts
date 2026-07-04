@@ -182,7 +182,7 @@ async function loadCycle(cycle: string): Promise<void> {
 export function getAmdtFor(
   icao: string,
   proc: { name: string; runways: string[] },
-): { amdt: string; amdtDate: string } | null {
+): DtppChart | null {
   const { byIcao } = useDtppStore.getState()
   const charts = byIcao[icao.toUpperCase()] ?? []
   if (charts.length === 0) return null
@@ -190,6 +190,5 @@ export function getAmdtFor(
   const match = matchChartName(proc, charts.map((c) => c.chartName))
   if (!match) return null
 
-  const chart = charts.find((c) => c.chartName === match)
-  return chart ? { amdt: chart.amdt, amdtDate: chart.amdtDate } : null
+  return charts.find((c) => c.chartName === match) ?? null
 }

@@ -43,3 +43,32 @@ export const AIRAC_REFERENCE_DATE = '2024-01-25T00:00:00Z'
 export const AIRAC_CYCLE_DAYS = 28
 
 export const NASR_CYCLE_DAYS = 56
+
+export const MSA_DEFAULT_RADIUS_NM = 25
+
+// Rolling window for per-approach traffic averages.
+export const DETECTION_HISTORY_WINDOW_MS = 5 * 60 * 1000
+
+// Terrain hypsometric tint ramp (ft MSL → fill color), FAA-sectional-like.
+export const TERRAIN_HYPSO_STOPS: ReadonlyArray<readonly [number, string]> = [
+  [0, '#a9c799'],
+  [1000, '#c5d59b'],
+  [2000, '#e3dfa4'],
+  [3000, '#f3d999'],
+  [5000, '#e6bc80'],
+  [7000, '#d49a64'],
+  [9000, '#bd7c4f'],
+  [12000, '#a05c3b'],
+]
+export const TERRAIN_FILL_OPACITY = 0.3
+export const TERRAIN_CONTOUR_COLOR = '#8a6d4b'
+export const CONTOUR_MAJOR_MIN_ZOOM = 9
+export const CONTOUR_ALL_MIN_ZOOM = 11.5
+export const CONTOUR_LABEL_MIN_ZOOM = 11
+export const PEAK_LABEL_MIN_ZOOM = 8
+
+// Profile panel (draggable/resizable altitude-profile overlay).
+export const PROFILE_PANEL_MIN_W = 520
+export const PROFILE_PANEL_MIN_H = 300
+export const PROFILE_MARGIN_PX = 12
+export const PROFILE_AIRCRAFT_UPDATE_MS = 1000

@@ -55,6 +55,30 @@ export interface WaypointSymbol {
   isDmeSource?: boolean
 }
 
+/** One parsed leg of a transition, preserving path/terminator detail for profile rendering. */
+export interface ProcedureLeg {
+  seq: number
+  fixId: string
+  lat: number
+  lon: number
+  navaidType: NavaidType
+  altConstraint: AltConstraint | null
+  pathTerm: string // CF/TF/RF/AF/HM/HF/HA/PI/...
+  role: WaypointRole
+  flyover: boolean
+  turnRight: boolean
+  course: number // degrees (magCourse / 10)
+  legNm: number // straight-leg length, nm
+  speedKt: number // 0 = none
+  dmeNm: number | null
+  recNavId: string // '' if absent
+}
+
+export interface ProcedureTransition {
+  id: string // transitionId, '(common)' for blank
+  legs: ProcedureLeg[] // ordered by seq
+}
+
 export interface Procedure {
   id: string
   icao: string
@@ -66,6 +90,11 @@ export interface Procedure {
   geojson: FeatureCollection
   hasGeometry: boolean
   color: string
+  transitions?: ProcedureTransition[]
+  /** Published glide path angle; null/absent = unknown (renderers fall back to 3°). */
+  gpaDeg?: number | null
+  /** Threshold crossing height, ft. */
+  tchFt?: number | null
 }
 
 export type ProcedureVisibilitySource = 'user' | 'auto' | 'none'

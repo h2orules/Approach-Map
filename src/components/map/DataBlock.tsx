@@ -20,7 +20,6 @@ interface Props {
 }
 
 export function DataBlock({ aircraft, onClose }: Props) {
-  const [expanded, setExpanded] = useState(false)
   const [logoOk, setLogoOk] = useState(true)
   const decoded = decodeCallsign(aircraft.flight)
 
@@ -39,7 +38,7 @@ export function DataBlock({ aircraft, onClose }: Props) {
       className={styles.popup}
       offset={[8, -8] as [number, number]}
     >
-      <div className={styles.block} onClick={() => setExpanded((e) => !e)}>
+      <div className={styles.block}>
         <div className={styles.callsign}>{formatCallsign(aircraft.flight)}</div>
         <div className={styles.row}>
           <span className={styles.alt}>{formatAltitude(aircraft.altBaro)}</span>
@@ -64,9 +63,8 @@ export function DataBlock({ aircraft, onClose }: Props) {
           </div>
         )}
 
-        {expanded && (
-          <div className={styles.expanded}>
-            {decoded.airline && (
+        <div className={styles.expanded}>
+          {decoded.airline && (
               <div className={styles.airline}>
                 {logoOk && (
                   <img
@@ -124,9 +122,7 @@ export function DataBlock({ aircraft, onClose }: Props) {
                 </span>
               </div>
             )}
-          </div>
-        )}
-        <div className={styles.expandHint}>{expanded ? '▲ less' : '▼ more'}</div>
+        </div>
       </div>
     </Popup>
   )

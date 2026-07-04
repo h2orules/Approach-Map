@@ -28,12 +28,17 @@ const DME_SCALE = 0.92 // scale the shared DmeD glyph to fit the label band
 const WEDGE_HALF_WIDTH_PX = 15 // 34:1 clear-surface wedge half-height at the FAF end
 const WEDGE_TIP_HALF_WIDTH_PX = 3 // half-height at the threshold end (not a perfect point — stays visible)
 const WEDGE_NOTCH_PX = 7 // forked-tail notch depth, cut into the wide (FAF) end
-const X_INSET = 34 // horizontal room inside the margins so the first/last fix labels (name + speed) don't clip
+const X_INSET_LEFT = 34 // horizontal room inside the left margin so the first fix label (name + speed) doesn't clip
+const X_INSET_RIGHT = 76 // larger right inset: the last fix's label PLUS the TDZE note (which sits past the threshold) must fit — keeps the drawn profile visually centered
 const ALT_HEADROOM = 30 // vertical room above the highest fix so its altitude label clears the name band
 const ALT_CHAR_W = 7 // px per char of an altitude label at 11.5px Roboto Mono — sizes the over/under bars to the text
 const ALT_CY_OFFSET = 17 // px the altitude label's vertical center sits above the fix point
 const ALT_BAR_HALF_GAP = 7.5 // px from the altitude label center up/down to each over/under bar
-const GS_ALT_DX = -13 // px the GS-intercept altitude is nudged left so the lightning bolt (drawn to the right) has room
+// Lightning-bolt geometry, relative to the FAF/GS-intercept fix: the arrowhead
+// lands on the fix (0,0) and the tail sits up and to the right. The altitude
+// restriction is placed at the tail (see AltAnnotation / ProfileBolt).
+const GS_BOLT_TAIL = { dx: 18, dy: -22 }
+const GS_ALT_GAP = 6 // px between the bolt tail and the near edge of the altitude label
 const NAME_CHAR_W = 7.6 // px per char of a fix name at 12px bold Roboto Mono — for label de-collision
 const NAME_ROW_H = 15 // px a colliding fix name is pushed down to the next row
 
@@ -89,12 +94,13 @@ function buildWedgePath(anchor: PxPt, threshold: PxPt): string {
 // ── small presentational glyphs ────────────────────────────────────────
 
 /**
- * Glideslope-intercept bolt, built on the shared map glyph. Drawn to the right
- * of the FAF pointing down the glideslope, with enough length that the zigzag
- * isn't compressed and clear of the maltese cross (which sits on the line).
+ * Glideslope-intercept bolt, built on the shared map glyph. Comes down from the
+ * upper-right tail (GS_BOLT_TAIL) and lands its arrowhead on the FAF /
+ * GS-intercept fix itself (the actual intercept location); the altitude
+ * restriction is drawn at the tail.
  */
 function ProfileBolt({ x, y }: { x: number; y: number }) {
-  return <BoltGlyph from={{ x: x + 9, y: y - 15 }} to={{ x: x + 28, y: y + 7 }} standalone={false} />
+  return <BoltGlyph from={{ x: x + GS_BOLT_TAIL.dx, y: y + GS_BOLT_TAIL.dy }} to={{ x, y }} standalone={false} />
 }
 
 // A proper FAA "maltese cross" (cross patée): four arms narrow at the waist,
@@ -114,7 +120,7 @@ const MALTESE_PATH = (() => {
 
 function MalteseCross({ x, y }: { x: number; y: number }) {
   return (
-    <g className={styles.malteseCross} transform={`translate(${x} ${y})`}>
+    <g className={styles.malteseCross} transform={`translate(${x} ${y}) rotate(45)`}>
       <path d={MALTESE_PATH} />
     </g>
   )
@@ -187,8 +193,10 @@ function AltAnnotation({ f, x, y }: { f: ProfileFix; x: number; y: number }) {
     showAbove = false
     showBelow = true
   }
-  const cx = x + (f.isGsIntercept ? GS_ALT_DX : 0)
-  const cy = y - ALT_CY_OFFSET
+  // The GS-intercept altitude is placed at the tail of the lightning bolt (up
+  // and to the right of the fix); everything else sits centered above its fix.
+  const cx = f.isGsIntercept ? x + GS_BOLT_TAIL.dx + GS_ALT_GAP + halfW : x
+  const cy = f.isGsIntercept ? y + GS_BOLT_TAIL.dy : y - ALT_CY_OFFSET
 
   return (
     <g>
@@ -237,8 +245,8 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
 
   // Inset the horizontal domain so the first/last fix labels (centered on their
   // ticks, and widened by an inline speed restriction) don't clip at the edges.
-  const plotLeft = MARGIN.left + X_INSET
-  const plotRight = Math.max(width - MARGIN.right - X_INSET, plotLeft + 1)
+  const plotLeft = MARGIN.left + X_INSET_LEFT
+  const plotRight = Math.max(width - MARGIN.right - X_INSET_RIGHT, plotLeft + 1)
   const plotW = plotRight - plotLeft
 
   const xScale = (nm: number) => plotLeft + (nm / approachNm) * plotW
@@ -326,11 +334,14 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
       {model.tdzeFt != null && (() => {
         const gy = yScale(model.tdzeFt)
         const rwLeft = Math.max(thresholdPx.x - 78, MARGIN.left)
-        const rwRight = Math.min(thresholdPx.x + 16, width - MARGIN.right)
+        const rwRight = Math.min(thresholdPx.x + 44, width - MARGIN.right)
+        // Label sits to the right of the threshold/MAP glyph, tucked under the
+        // rising missed-approach arrow — clear of the glideslope descent line
+        // that comes down to the threshold from the left.
         return (
           <g>
             <line className={styles.groundLine} x1={rwLeft} y1={gy} x2={rwRight} y2={gy} />
-            <text className={styles.groundLabel} x={rwLeft} y={gy - 4}>
+            <text className={styles.groundLabel} x={thresholdPx.x + 10} y={gy + 13}>
               TDZE {model.tdzeFt.toLocaleString('en-US')}
             </text>
           </g>
@@ -349,7 +360,7 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
             {`GS ${model.gsAngleDeg.toFixed(2)}°${model.usedFallbackGs ? '*' : ''}`}
           </text>
           {model.tchFt != null && (
-            <text className={styles.gsLabel} x={thresholdPx.x} y={thresholdPx.y + 14} textAnchor="middle">
+            <text className={styles.gsLabel} x={thresholdPx.x} y={distTextY} textAnchor="middle">
               {`TCH ${model.tchFt}′`}
             </text>
           )}

@@ -29,7 +29,6 @@
   border: 1px solid rgba(100, 116, 139, 0.4);
   border-radius: 4px;
   padding: 5px 7px;
-  cursor: pointer;
   min-width: 120px;
   font-family: 'Roboto Mono', 'Courier New', monospace;
   font-size: 11px;
@@ -133,11 +132,4 @@
 
 .descending {
   color: #f87171;
-}
-
-.expandHint {
-  font-size: 9px;
-  color: #475569;
-  text-align: right;
-  margin-top: 2px;
 }

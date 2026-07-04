@@ -333,7 +333,12 @@ export function WaypointMarkers({ procedures }: Props) {
                 {/* Name line: fix ID + optional DME D-badge to the right */}
                 <div className={styles.nameRow}>
                   <span className={styles.name}>{s.id}</span>
-                  {dme !== null && <DmeD nm={dme} />}
+                  {dme !== null && (
+                    <span className={styles.dmeBadge}>
+                      {s.dmeNavaid && <span className={styles.dmeIdent}>{s.dmeNavaid}</span>}
+                      <DmeD nm={dme} />
+                    </span>
+                  )}
                 </div>
                 {(altC || s.speedKt) && (
                   <div className={styles.restrictions}>

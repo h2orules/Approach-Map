@@ -1,4 +1,5 @@
 import { Source, Layer } from 'react-map-gl'
+import type { Expression } from 'mapbox-gl'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import {
   TERRAIN_HYPSO_STOPS,
@@ -47,7 +48,7 @@ const METERS_PER_FOOT = 0.3048
 // A `step` expression's first argument is the value for anything below the
 // first stop, so use the first stop's color as the base and then step at
 // each subsequent threshold.
-const hypsoStepExpression: unknown[] = ['step', ['get', 'ele'], TERRAIN_HYPSO_STOPS[0][1]]
+const hypsoStepExpression: Expression = ['step', ['get', 'ele'], TERRAIN_HYPSO_STOPS[0][1]]
 for (let i = 1; i < TERRAIN_HYPSO_STOPS.length; i++) {
   const [ft, color] = TERRAIN_HYPSO_STOPS[i]
   hypsoStepExpression.push(ft * METERS_PER_FOOT, color)
@@ -57,7 +58,7 @@ const MAJOR_CONTOUR_FILTER = ['match', ['get', 'index'], [5, 10], true, false]
 const MINOR_CONTOUR_FILTER = ['!', ['match', ['get', 'index'], [5, 10], true, false]]
 
 // Elevation in feet, rounded, from a meters-based `ele` property.
-const CONTOUR_LABEL_TEXT = [
+const CONTOUR_LABEL_TEXT: Expression = [
   'concat',
   ['to-string', ['round', ['*', ['get', 'ele'], 3.28084]]],
   ' ft',
@@ -76,7 +77,7 @@ const PEAK_ELEVATION_FT = [
   ['round', ['*', ['coalesce', ['get', 'elevation_m'], 0], 3.28084]],
 ]
 
-const PEAK_LABEL_TEXT = [
+const PEAK_LABEL_TEXT: Expression = [
   'concat',
   ['get', 'name'],
   '\n',

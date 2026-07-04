@@ -2,13 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as turf from '@turf/turf'
 import { Marker, useMap } from 'react-map-gl'
 import type { Procedure, WaypointSymbol, AltConstraint } from '../../types/procedure'
+import { BoltGlyph, DmeD, dmeGlyphWidth, type Pt } from './glyphs'
 import styles from './WaypointMarkers.module.css'
 
 interface Props {
   procedures: Procedure[]
 }
-
-const RESTRICTION_COLOR = '#fde68a'
 
 // Below this zoom, labels that can't find a clear spot are dropped. At/above it
 // every on-screen label is shown (overlapping only as a last resort).
@@ -85,58 +84,6 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   )
 }
 
-// ---- DME badge -----------------------------------------------------------
-// FAA-standard DME distance indicator: numbers circumscribed inside a D shape.
-// The D is formed by a vertical bar on the left, two horizontal lines, and a
-// right-side semicircular arc whose radius equals half the badge height.
-const DME_H = 14        // px — badge height (fits 10px font with 2px pad each side)
-const DME_R = DME_H / 2 // px — right-arc radius
-const DME_CHAR_W = 6.5  // px — approx char width at 10px monospace
-const DME_PAD_X = 3     // px — horizontal padding inside the D
-
-function formatDme(nm: number): string {
-  return nm % 1 === 0 ? String(nm) : nm.toFixed(1)
-}
-
-function dmeBadgeWidth(nm: number): number {
-  return formatDme(nm).length * DME_CHAR_W + DME_PAD_X * 2 + DME_R
-}
-
-function DmeBadge({ nm }: { nm: number }) {
-  const text = formatDme(nm)
-  const contentW = text.length * DME_CHAR_W + DME_PAD_X * 2
-  const svgW = contentW + DME_R
-  return (
-    <svg
-      width={svgW}
-      height={DME_H}
-      viewBox={`0 0 ${svgW} ${DME_H}`}
-      style={{ display: 'block', flexShrink: 0 }}
-      aria-label={`DME ${text}`}
-    >
-      {/* D shape: top line → right arc → bottom line → left bar (Z closes it) */}
-      <path
-        d={`M 0 0 H ${contentW} A ${DME_R} ${DME_R} 0 0 1 ${contentW} ${DME_H} H 0 Z`}
-        fill="none"
-        stroke={RESTRICTION_COLOR}
-        strokeWidth={1.3}
-        strokeLinejoin="round"
-      />
-      <text
-        x={contentW / 2}
-        y={DME_H / 2}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={10}
-        fontFamily="'Roboto Mono', monospace"
-        fill={RESTRICTION_COLOR}
-      >
-        {text}
-      </text>
-    </svg>
-  )
-}
-
 // ---- restriction labels --------------------------------------------------
 const fNum = (n: number) => n.toLocaleString('en-US')
 
@@ -166,59 +113,6 @@ function SpeedLabel({ kt }: { kt: number }) {
     <div className={styles.spd}>
       <span className={styles.barAbove}>{kt}Kt</span>
     </div>
-  )
-}
-
-interface Pt { x: number; y: number }
-
-function BoltArrow({ from, to }: { from: Pt; to: Pt }) {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len
-  const uy = dy / len
-  const px = -uy
-  const py = ux
-  const lineW = 2
-  const amp = lineW * 3.5
-  const headLen = 7
-  const headW = 5
-
-  const tipGap = 7
-  const seg = len - tipGap
-  const tip = { x: from.x + ux * seg, y: from.y + uy * seg }
-
-  const along = (t: number, side: number): Pt => ({
-    x: from.x + ux * seg * t + px * amp * side,
-    y: from.y + uy * seg * t + py * amp * side,
-  })
-  const p0 = from
-  const p1 = along(0.40, 0.5)
-  const p2 = along(0.22, -0.5)
-  const base = { x: tip.x - ux * headLen, y: tip.y - uy * headLen }
-
-  const pad = 4
-  const wing1 = { x: base.x + px * headW, y: base.y + py * headW }
-  const wing2 = { x: base.x - px * headW, y: base.y - py * headW }
-  const all = [p0, p1, p2, base, tip, wing1, wing2]
-  const minX = Math.min(...all.map((p) => p.x)) - pad
-  const minY = Math.min(...all.map((p) => p.y)) - pad
-  const w = Math.max(...all.map((p) => p.x)) - minX + pad
-  const h = Math.max(...all.map((p) => p.y)) - minY + pad
-  const L = (p: Pt) => `${p.x - minX},${p.y - minY}`
-
-  return (
-    <svg className={styles.bolt} style={{ left: minX, top: minY, width: w, height: h }} width={w} height={h}>
-      <polyline
-        points={`${L(p0)} ${L(p1)} ${L(p2)} ${L(base)}`}
-        fill="none"
-        stroke={RESTRICTION_COLOR}
-        strokeWidth={lineW}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <polygon points={`${L(tip)} ${L(wing1)} ${L(wing2)}`} fill={RESTRICTION_COLOR} stroke="#0b0f14" strokeWidth={0.6} />
-    </svg>
   )
 }
 
@@ -275,7 +169,7 @@ function labelBoxSize(s: WaypointSymbol): { w: number; h: number } {
   const rowChars = altChars + (s.speedKt ? 1 + spdChars : 0)
 
   const dme = s.dmeNm ?? null
-  const dmeExtra = dme !== null ? 4 + dmeBadgeWidth(dme) : 0 // 4px gap before badge
+  const dmeExtra = dme !== null ? 4 + dmeGlyphWidth(dme) : 0 // 4px gap before badge
   const nameLineW = s.id.length * 8.4 + dmeExtra
   const maxW = Math.max(nameLineW, rowChars * 8.4)
   const rowLines = between ? 2 : showAlt || s.speedKt ? 1 : 0
@@ -435,13 +329,13 @@ export function WaypointMarkers({ procedures }: Props) {
                 <WpIcon s={s} />
               </div>
 
-              {boltFrom && <BoltArrow from={boltFrom} to={{ x: 0, y: 0 }} />}
+              {boltFrom && <BoltGlyph from={boltFrom} to={{ x: 0, y: 0 }} className={styles.bolt} />}
 
               <div className={styles.label} style={{ transform: `translate(${dx}px, ${dy}px)` }}>
                 {/* Name line: fix ID + optional DME D-badge to the right */}
                 <div className={styles.nameRow}>
                   <span className={styles.name}>{s.id}</span>
-                  {dme !== null && <DmeBadge nm={dme} />}
+                  {dme !== null && <DmeD nm={dme} />}
                 </div>
                 {(altC || s.speedKt) && (
                   <div className={styles.restrictions}>

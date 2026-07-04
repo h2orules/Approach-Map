@@ -1,5 +1,7 @@
 import { AirportSearch } from '../airport/AirportSearch'
 import { MapStyleToggle } from '../controls/MapStyleToggle'
+import { SafeAltToggle } from '../controls/SafeAltToggle'
+import { TerrainToggle } from '../controls/TerrainToggle'
 import { ThemeToggle } from '../controls/ThemeToggle'
 import { CifpStatusBanner } from './CifpStatusBanner'
 import styles from './TopBar.module.css'
@@ -14,6 +16,8 @@ export function TopBar() {
       <div className={styles.controls}>
         <ThemeToggle />
         <MapStyleToggle />
+        <TerrainToggle />
+        <SafeAltToggle />
       </div>
       <CifpStatusBanner />
     </header>

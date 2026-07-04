@@ -20,3 +20,7 @@
   color: var(--accent);
   background: rgba(56, 189, 248, 0.1);
 }
+
+.icon {
+  display: block;
+}

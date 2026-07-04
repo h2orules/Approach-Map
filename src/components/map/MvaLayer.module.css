@@ -1,0 +1,15 @@
+/* Plate-style boxed altitude label, matching SafeAltitudeLayer's look
+   (src/components/map/SafeAltitudeLayer.module.css `.box`) so MVA and
+   TAA/MSA labels read as one consistent overlay family. */
+.box {
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  background: rgba(15, 23, 42, 0.85);
+  border-radius: 2px;
+  padding: 2px 6px;
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  white-space: nowrap;
+  pointer-events: none;
+}

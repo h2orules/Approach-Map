@@ -95,3 +95,11 @@ export const LOC_FEATHER_NOTCH_NM = 0.7
 // Neutral slate so it reads on both dark and satellite basemaps without
 // competing with the green approach-procedure palette.
 export const LOC_FEATHER_COLOR = '#cbd5e1'
+
+// MVA (Minimum Vectoring Altitude) sector overlay styling. Kept visually
+// quiet (low fill opacity, thin lines) since sectors can be numerous/large
+// and shouldn't compete with terrain tinting or procedure lines.
+export const MVA_COLOR = '#e2e8f0'
+export const MVA_FILL_OPACITY = 0.04
+export const MVA_LINE_WIDTH = 1
+export const MVA_LINE_OPACITY = 0.55

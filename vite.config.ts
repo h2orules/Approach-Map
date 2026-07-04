@@ -30,6 +30,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/datis/, '/api'),
       },
+      '/api/dtpp': {
+        target: 'https://aeronav.faa.gov',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/dtpp/, '/d-tpp'),
+      },
     },
   },
   build: {

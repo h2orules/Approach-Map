@@ -6,16 +6,18 @@
   pointer-events: none;
 }
 
-/* Plate-style boxed altitude, e.g. FAA TAA/MSA charts: "5600". */
+/* Plate-style boxed altitude, e.g. FAA TAA/MSA charts: "5600". Amber accent
+   (distinct from MvaLayer.module.css's slate/white box) so the two overlays'
+   altitude figures stay legible when both are toggled on at once. */
 .box {
-  border: 1px solid rgba(148, 163, 184, 0.9);
-  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(251, 191, 36, 0.9);
+  background: rgba(41, 27, 5, 0.85);
   border-radius: 2px;
   padding: 2px 6px;
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
   font-size: 12px;
   font-weight: 700;
-  color: #e2e8f0;
+  color: #fde68a;
   white-space: nowrap;
 }
 
@@ -24,7 +26,7 @@
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
   font-size: 10px;
   font-weight: 600;
-  color: #cbd5e1;
+  color: #fbbf24;
   white-space: nowrap;
   text-shadow:
     0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;

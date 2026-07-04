@@ -3,6 +3,7 @@ import { Source, Layer } from 'react-map-gl'
 import type { Feature, LineString } from 'geojson'
 import type { Procedure } from '../../types/procedure'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { useSelectionStore, selectedHexOf } from '../../store/useSelectionStore'
 import { findFlownSegment } from '../../geo/flownSegment'
 import { ACTIVE_SEGMENT_COLOR } from '../../utils/colorScheme'
 
@@ -17,7 +18,7 @@ interface Props {
  * slowly) to avoid per-frame turf work.
  */
 export function FlownSegmentLayer({ procedures }: Props) {
-  const selectedHex = useAircraftStore((s) => s.selectedHex)
+  const selectedHex = useSelectionStore((s) => selectedHexOf(s.selected))
   const [segment, setSegment] = useState<Feature<LineString> | null>(null)
 
   useEffect(() => {

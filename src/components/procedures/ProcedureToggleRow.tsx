@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback } from 'react'
 import { useProcedureStore } from '../../store/useProcedureStore'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { useSelectionStore } from '../../store/useSelectionStore'
 import { useMapStore } from '../../store/useMapStore'
 import type { Procedure } from '../../types/procedure'
 import styles from './ProcedureToggleRow.module.css'
@@ -29,9 +30,13 @@ export function ProcedureToggleRow({ procedure }: Props) {
   const setUserToggle = useProcedureStore((s) => s.setUserToggle)
   const revertToAuto = useProcedureStore((s) => s.revertToAuto)
   const aircraftMap = useAircraftStore((s) => s.aircraftMap)
-  const setSelectedHex = useAircraftStore((s) => s.setSelectedHex)
+  const selected = useSelectionStore((s) => s.selected)
+  const selectAircraftSel = useSelectionStore((s) => s.select)
+  const toggleSelection = useSelectionStore((s) => s.toggle)
   const setViewport = useMapStore((s) => s.setViewport)
 
+  const isApproach = procedure.type === 'APPROACH'
+  const isSelected = selected?.kind === 'approach' && selected.procedureId === procedure.id
   const hasUserOverride = userToggle !== undefined
   const badgeRef = useRef<HTMLSpanElement>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
@@ -57,10 +62,10 @@ export function ProcedureToggleRow({ procedure }: Props) {
   const selectAircraft = useCallback((hex: string) => {
     const ac = useAircraftStore.getState().aircraftMap.get(hex)
     if (!ac) return
-    setSelectedHex(hex)
+    selectAircraftSel({ kind: 'aircraft', hex })
     setViewport({ longitude: ac.interpLon, latitude: ac.interpLat, zoom: 13 })
     setTooltipPos(null)
-  }, [setSelectedHex, setViewport])
+  }, [selectAircraftSel, setViewport])
 
   const remaining = formatRemaining(lastDetectedAt)
 
@@ -73,12 +78,18 @@ export function ProcedureToggleRow({ procedure }: Props) {
           checked={isVisible}
           onChange={(e) => setUserToggle(procedure.id, e.target.checked)}
         />
-        <span
-          className={styles.colorDot}
-          style={{ background: procedure.color }}
-        />
-        <span className={styles.name}>{procedure.name}</span>
       </label>
+
+      <span
+        className={styles.colorDot}
+        style={{ background: procedure.color }}
+      />
+      <span
+        className={`${styles.name} ${isApproach ? styles.nameSelectable : ''} ${isSelected ? styles.nameSelected : ''}`}
+        onClick={isApproach ? () => toggleSelection({ kind: 'approach', procedureId: procedure.id }) : undefined}
+      >
+        {procedure.name}
+      </span>
 
       <div className={styles.badges}>
         {autoShown && !hasUserOverride && (

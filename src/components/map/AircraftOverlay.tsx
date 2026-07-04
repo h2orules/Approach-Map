@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { MapRef } from 'react-map-gl'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { useSelectionStore, selectedHexOf } from '../../store/useSelectionStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import { formatAltitude, formatSpeed, formatHeading } from '../../utils/formatters'
 import { altitudeColor } from '../../utils/colorScheme'
@@ -29,8 +30,8 @@ function AircraftIcon() {
  */
 export function AircraftOverlay({ mapRef }: Props) {
   const revision = useAircraftStore((s) => s.revision)
-  const selectedHex = useAircraftStore((s) => s.selectedHex)
-  const setSelectedHex = useAircraftStore((s) => s.setSelectedHex)
+  const selectedHex = useSelectionStore((s) => selectedHexOf(s.selected))
+  const toggleSelection = useSelectionStore((s) => s.toggle)
   const nodes = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // Snapshot the airborne aircraft set; only changes on a poll.
@@ -78,17 +79,6 @@ export function AircraftOverlay({ mapRef }: Props) {
     return () => cancelAnimationFrame(raf)
   }, [mapRef])
 
-  // Deselect when clicking empty map (plane clicks are handled on the markers).
-  useEffect(() => {
-    const map = mapRef.current?.getMap()
-    if (!map) return
-    const onClick = () => setSelectedHex(null)
-    map.on('click', onClick)
-    return () => {
-      map.off('click', onClick)
-    }
-  }, [mapRef, setSelectedHex])
-
   return (
     <div className={styles.overlay}>
       {aircraft.map((ac) => {
@@ -118,7 +108,7 @@ export function AircraftOverlay({ mapRef }: Props) {
             }}
             onClick={(e) => {
               e.stopPropagation()
-              setSelectedHex(ac.hex === selectedHex ? null : ac.hex)
+              toggleSelection({ kind: 'aircraft', hex: ac.hex })
             }}
           >
             <div

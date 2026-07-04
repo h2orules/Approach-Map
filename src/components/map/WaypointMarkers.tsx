@@ -356,7 +356,7 @@ export function WaypointMarkers({ procedures }: Props) {
       }
       setPlacements(next)
 
-      // ── Segment distance labels (approach, zoom ≥ threshold) ─────────────
+      // ── Segment distance labels (zoom ≥ threshold) ────────────────────────
       if (zoom < SEG_LABEL_MIN_ZOOM) {
         setSegmentLabels([])
         return
@@ -364,8 +364,6 @@ export function WaypointMarkers({ procedures }: Props) {
 
       const segLabels: SegLabel[] = []
       for (const proc of procedures) {
-        if (proc.type !== 'APPROACH') continue
-
         const wpts = proc.waypoints
         for (let i = 0; i < wpts.length - 1; i++) {
           const a = wpts[i]

@@ -521,6 +521,13 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         let gpaDeg: number | null | undefined
         let tchFt: number | null | undefined
         if (group.type === 'APPROACH') {
+          // Approach transitions are named by IAF, not runway, so the
+          // transition-id scrape above misses them — the runway is encoded in
+          // the procedure ident itself (e.g. I16R → 16R). Without this, the
+          // TDZE/runway-length lookup and the ILS glide-slope fallback below
+          // both come up empty.
+          const rwFromName = name.match(/^[A-Z](\d{2}[LRC]?)/)
+          if (rwFromName) group.runways.add(rwFromName[1])
           for (const { legs } of transitionEntries) {
             for (const l of legs) {
               for (const fx of [l.fixId, l.recNavId]) {

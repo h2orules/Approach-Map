@@ -42,8 +42,16 @@ const GS_BOLT_TAIL = { dx: 18, dy: -22 }
 const GS_ALT_GAP = 6 // px between the bolt tail and the near edge of the altitude label
 const NAME_CHAR_W = 7.6 // px per char of a fix name at 12px bold Roboto Mono — for label de-collision
 const NAME_ROW_H = 15 // px a colliding fix name is pushed down to the next row
-const AIRCRAFT_LABEL_ABOVE_DY = -10 // px from the glyph center to the label baseline, above
-const AIRCRAFT_LABEL_BELOW_DY = 17 // px from the glyph center to the label baseline, below
+// Aircraft glyph scale — bumped up from the original size for legibility;
+// body dimensions, label offset, and label text size (CSS) all scale with it
+// so the callsign stays proportional to the feather it's labeling.
+const AIRCRAFT_GLYPH_SCALE = 1.4
+const AIRCRAFT_BODY_LEN = 15 * AIRCRAFT_GLYPH_SCALE // tip-to-tail length
+const AIRCRAFT_BODY_HALF_H = 5 * AIRCRAFT_GLYPH_SCALE // half-height at the tail
+const AIRCRAFT_NOTCH_LEN = 11 * AIRCRAFT_GLYPH_SCALE // tail-notch depth from the tip
+const AIRCRAFT_LABEL_X_OFFSET = -7 * AIRCRAFT_GLYPH_SCALE // px, tip → label horizontal center
+const AIRCRAFT_LABEL_ABOVE_DY = -10 * AIRCRAFT_GLYPH_SCALE // px from the glyph tip to the label baseline, above
+const AIRCRAFT_LABEL_BELOW_DY = 17 * AIRCRAFT_GLYPH_SCALE // px from the glyph tip to the label baseline, below
 
 // ── scales ──────────────────────────────────────────────────────────────
 
@@ -161,13 +169,15 @@ function AircraftGlyph({
   // Feather points RIGHT with its tip at (x, y). The tip — not the body center —
   // is the reference point for both lateral (distance) and vertical (altitude)
   // position, so the body extends left from it. Label centers over the body.
-  const points = `${x - 15},${y + 5} ${x},${y} ${x - 15},${y - 5} ${x - 11},${y}`
+  const points =
+    `${x - AIRCRAFT_BODY_LEN},${y + AIRCRAFT_BODY_HALF_H} ${x},${y} ` +
+    `${x - AIRCRAFT_BODY_LEN},${y - AIRCRAFT_BODY_HALF_H} ${x - AIRCRAFT_NOTCH_LEN},${y}`
   return (
     <g>
       <polygon className={isSelected ? styles.aircraft : styles.aircraftInactive} points={points} />
       <text
         className={isSelected ? styles.aircraftLabel : styles.aircraftLabelDimmed}
-        x={x - 7}
+        x={x + AIRCRAFT_LABEL_X_OFFSET}
         y={labelY}
         textAnchor="middle"
       >
@@ -478,7 +488,9 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
           rest are dimmed. Labels alternate above/below when entries crowd. */}
       {liveAircraft.length > 0 && (() => {
         const nmPerPx = plotW > 0 ? approachNm / plotW : 1
-        const labelSides = placeProfileLabels(liveAircraft, nmPerPx)
+        // Wider min gap than the default 40px: labels scaled up with the glyph
+        // (AIRCRAFT_GLYPH_SCALE) need more clearance to avoid overlapping.
+        const labelSides = placeProfileLabels(liveAircraft, nmPerPx, 40 * AIRCRAFT_GLYPH_SCALE)
         return liveAircraft.map((ac, i) => (
           <AircraftGlyph
             key={ac.hex}

@@ -149,19 +149,21 @@
 /* Selected target: bright accent cyan. paint-order:stroke draws the dark
    outline behind the fill as a halo, so the glyph reads over the light
    glideslope line and the dark background alike. */
+/* Sizes here scale with AIRCRAFT_GLYPH_SCALE (1.4) in ProfileSvg.tsx — keep
+   the two in sync if either changes. */
 .aircraft {
   fill: #38bdf8;
   stroke: #0b0f14;
-  stroke-width: 1.4;
+  stroke-width: 2px;
   paint-order: stroke;
 }
 
 .aircraftLabel {
   fill: #7dd3fc;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
   stroke: #0b0f14;
-  stroke-width: 2.5px;
+  stroke-width: 3.5px;
   paint-order: stroke;
 }
 
@@ -172,15 +174,15 @@
 .aircraftInactive {
   fill: #cbd5e1;
   stroke: #0b0f14;
-  stroke-width: 1.7;
+  stroke-width: 2.4px;
   paint-order: stroke;
 }
 
 .aircraftLabelDimmed {
   fill: #cbd5e1;
-  font-size: 8.5px;
+  font-size: 12px;
   font-weight: 700;
   stroke: #0b0f14;
-  stroke-width: 2.5px;
+  stroke-width: 3.5px;
   paint-order: stroke;
 }

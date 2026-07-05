@@ -37,7 +37,7 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
     return (
       <svg width={size} height={size} viewBox="0 0 26 26">
         {fo && <Ring cx={13} cy={13} r={12} color="#f0abfc" />}
-        <path d={MALTESE_PATH} transform="translate(13 13) rotate(45)" fill="#f0abfc" {...halo} />
+        <path d={MALTESE_PATH} transform="translate(13 13) rotate(45) scale(1.3)" fill="#f0abfc" {...halo} />
       </svg>
     )
   }

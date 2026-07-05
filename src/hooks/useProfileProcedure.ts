@@ -27,7 +27,7 @@ import type { Procedure } from '../types/procedure'
 export function useProfileProcedure(): Procedure | null {
   const selected = useSelectionStore((s) => s.selected)
   const procedures = useProcedureStore((s) => s.procedures)
-  const aircraftAssignments = useProcedureStore((s) => s.aircraftAssignments ?? {})
+  const aircraftAssignments = useProcedureStore((s) => s.aircraftAssignments)
   const userToggles = useProcedureStore((s) => s.userToggles)
   const autoVisible = useProcedureStore((s) => s.autoVisible)
   const effectiveDate = useCifpStore((s) => s.effectiveDate)

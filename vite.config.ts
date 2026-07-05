@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Dev-only proxies for the six upstream APIs. In production these same
+// Dev-only proxies for the nine upstream APIs. In production these same
 // /api/* paths are served by the Azure Functions proxy in api/ — keep the
 // two route tables in sync (see api/src/functions/proxy.ts).
 export default defineConfig(({ mode }) => {
@@ -38,6 +38,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/adsbdb/, '/v0'),
         },
+        '/api/adsblol': {
+          target: 'https://api.adsb.lol',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/adsblol/, '/api/0'),
+        },
         '/api/datis': {
           target: 'https://atis.info',
           changeOrigin: true,
@@ -47,6 +52,32 @@ export default defineConfig(({ mode }) => {
           target: 'https://aeronav.faa.gov',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/dtpp/, '/d-tpp'),
+        },
+        // MVA/MIA sector-chart AIXM XML, published per-TRACON by FAA AJV. The
+        // faa.gov digital_products/mva_mia page is just an HTML index; the
+        // actual `<FACILITY>_MVA_FUS3.xml` / `_FUS5.xml` files it links to are
+        // hosted on aeronav.faa.gov (verified by fetching the index page and
+        // inspecting its <a href> list directly, e.g. .../MVA_Charts/aixm/
+        // S46_MVA_FUS3.xml for Seattle) — a different host+path than
+        // faa-cifp's aeronav.faa.gov/Upload_313-d/cifp above.
+        '/api/faa-mva': {
+          target: 'https://aeronav.faa.gov',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/faa-mva/, '/MVA_Charts/aixm'),
+        },
+        // FAA AIS "Class_Airspace" ArcGIS FeatureServer (layer 0) — Class B/C/D/E
+        // boundaries with floor/ceiling altitudes, queried by bbox as GeoJSON.
+        // See src/api/faaAirspace.ts. The service sends CORS `*`, but we proxy it
+        // anyway to keep every upstream behind /api and future-proof against CORS
+        // changes.
+        '/api/faa-airspace': {
+          target: 'https://services6.arcgis.com',
+          changeOrigin: true,
+          rewrite: (path) =>
+            path.replace(
+              /^\/api\/faa-airspace/,
+              '/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0',
+            ),
         },
       },
     },

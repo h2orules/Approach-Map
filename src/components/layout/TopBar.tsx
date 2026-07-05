@@ -1,6 +1,8 @@
 import { AirportSearch } from '../airport/AirportSearch'
 import { MapStyleToggle } from '../controls/MapStyleToggle'
 import { SafeAltToggle } from '../controls/SafeAltToggle'
+import { MvaToggle } from '../controls/MvaToggle'
+import { AirspaceToggle } from '../controls/AirspaceToggle'
 import { TerrainToggle } from '../controls/TerrainToggle'
 import { ThemeToggle } from '../controls/ThemeToggle'
 import { CifpStatusBanner } from './CifpStatusBanner'
@@ -18,6 +20,8 @@ export function TopBar() {
         <MapStyleToggle />
         <TerrainToggle />
         <SafeAltToggle />
+        <MvaToggle />
+        <AirspaceToggle />
       </div>
       <CifpStatusBanner />
     </header>

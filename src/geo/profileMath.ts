@@ -17,9 +17,12 @@ const HOLD_PATH_TERMS = new Set(['HM', 'HF', 'HA', 'PI'])
 
 /** A live aircraft's position on the profile (see ProfilePanel/ProfileSvg). */
 export interface LiveAircraft {
+  hex: string
   distNm: number
   altFt: number
   label: string
+  /** Whether this is the currently-selected aircraft (drawn in accent styling; others are dimmed). */
+  isSelected: boolean
 }
 
 export interface ProfileFix {
@@ -33,6 +36,8 @@ export interface ProfileFix {
   isGsIntercept: boolean
   isDmeArc: boolean
   dmeNm: number | null
+  /** Ident of the DME's source navaid (e.g. 'I-CJL'), null if dmeNm is null or the leg carried no recNavId. */
+  dmeNavaidId: string | null
   flyover: boolean
 }
 
@@ -90,6 +95,7 @@ interface MergedGroup {
   constraint: AltConstraint | null
   speedKt: number
   dmeNm: number | null
+  dmeNavaidId: string | null
   flyover: boolean
   isDmeArc: boolean
 }
@@ -101,6 +107,7 @@ function mergeGroup(legs: ProcedureLeg[]): MergedGroup {
   let constraint: AltConstraint | null = null
   let speedKt = 0
   let dmeNm: number | null = null
+  let dmeNavaidId: string | null = null
   let flyover = false
   let isDmeArc = false
 
@@ -111,12 +118,15 @@ function mergeGroup(legs: ProcedureLeg[]): MergedGroup {
     }
     if (leg.altConstraint) constraint = leg.altConstraint
     if (leg.speedKt > speedKt) speedKt = leg.speedKt
-    if (dmeNm == null && leg.dmeNm != null) dmeNm = leg.dmeNm
+    if (dmeNm == null && leg.dmeNm != null) {
+      dmeNm = leg.dmeNm
+      dmeNavaidId = leg.recNavId || null
+    }
     if (leg.flyover) flyover = true
     if (leg.pathTerm === 'AF') isDmeArc = true
   }
 
-  return { fixId: legs[0].fixId, role, pathTerm, constraint, speedKt, dmeNm, flyover, isDmeArc }
+  return { fixId: legs[0].fixId, role, pathTerm, constraint, speedKt, dmeNm, dmeNavaidId, flyover, isDmeArc }
 }
 
 /**
@@ -168,6 +178,7 @@ export function buildProfileModel(p: Procedure, t: ProcedureTransition, rwy: Cif
       isGsIntercept,
       isDmeArc: merged.isDmeArc,
       dmeNm: merged.dmeNm,
+      dmeNavaidId: merged.dmeNavaidId,
       flyover: merged.flyover,
     })
   }
@@ -216,6 +227,104 @@ export function glideslopeAltAt(model: ProfileModel, distFromThresholdNm: number
 }
 
 /**
+ * The vertices (distNm, altFt) of the primary descent path, in domain units
+ * (not pixels). Connects fix altitudes directly — no step-downs — up through
+ * the glideslope-intercept fix (or the FAF, on non-precision approaches where
+ * no fix is flagged isGsIntercept); from there to the runway threshold the
+ * path follows the computed glideslope altitude rather than the last
+ * approach fix's own (often threshold-adjacent, sometimes unconstrained)
+ * plotted altitude. See ProfileSvg.tsx, requirement #1 (linear descent path).
+ */
+/**
+ * The altitude to PLOT for each approach fix. Fixes that carry a crossing
+ * restriction use it; unconstrained intermediate fixes (e.g. a step-down or
+ * turn fix with no published altitude) are linearly interpolated by distance
+ * between their nearest constrained neighbours, so they sit on the descent
+ * line instead of collapsing to the runway elevation. The last fix (runway/
+ * threshold) is anchored to the glideslope's threshold-crossing altitude.
+ *
+ * This is a pure function of the model, so the plotted profile never depends
+ * on anything but the procedure data.
+ */
+export function fixRenderAltitudes(model: ProfileModel): number[] {
+  const fixes = model.fixes
+  const n = fixes.length
+  if (n === 0) return []
+
+  const alt: (number | null)[] = fixes.map((f) => f.plotAltFt)
+  // Anchor the endpoints so interior interpolation always has both brackets.
+  if (alt[n - 1] == null) alt[n - 1] = glideslopeAltAt(model, 0)
+  if (alt[0] == null) alt[0] = alt.find((a) => a != null) ?? model.tdzeFt ?? 0
+
+  for (let i = 0; i < n; ) {
+    if (alt[i] != null) {
+      i++
+      continue
+    }
+    const j = i - 1 // previous fix with a known altitude (alt[0] is set above)
+    let k = i + 1
+    while (k < n && alt[k] == null) k++ // next fix with a known altitude (alt[n-1] is set)
+    const aj = alt[j] as number
+    const ak = alt[k] as number
+    const dj = fixes[j].distNm
+    const dk = fixes[k].distNm
+    for (let m = i; m < k; m++) {
+      const t = dk === dj ? 0 : (fixes[m].distNm - dj) / (dk - dj)
+      alt[m] = aj + (ak - aj) * t
+    }
+    i = k
+  }
+
+  return alt as number[]
+}
+
+export function descentProfilePoints(model: ProfileModel): { distNm: number; altFt: number }[] {
+  if (model.fixes.length === 0) return []
+
+  const alts = fixRenderAltitudes(model)
+  const thresholdDistNm = model.fixes[model.fixes.length - 1].distNm
+  const anchorIdx = model.fixes.findIndex((f) => f.isGsIntercept || f.role === 'faf')
+
+  if (anchorIdx === -1) {
+    return model.fixes.map((f, i) => ({ distNm: f.distNm, altFt: alts[i] }))
+  }
+
+  const points = model.fixes.slice(0, anchorIdx + 1).map((f, i) => ({ distNm: f.distNm, altFt: alts[i] }))
+  points.push({ distNm: thresholdDistNm, altFt: glideslopeAltAt(model, 0) })
+  return points
+}
+
+/** Along-track distance (nm) between each consecutive pair of fixes. */
+export function segmentDistancesNm(fixes: { distNm: number }[]): number[] {
+  const out: number[] = []
+  for (let i = 1; i < fixes.length; i++) out.push(fixes[i].distNm - fixes[i - 1].distNm)
+  return out
+}
+
+/**
+ * Vertical pixel offsets (0..maxOffsetPx) for a row of fix-name labels so
+ * they step down following the descent, like the FAA plate (highest fix's
+ * label sits at the top of the band, lower fixes' labels progressively
+ * lower). `null` altitudes (unconstrained fixes) repeat the previous fix's
+ * offset rather than collapsing to 0.
+ */
+export function labelStaggerOffsets(altsFt: (number | null)[], maxOffsetPx: number): number[] {
+  const known = altsFt.filter((a): a is number => a != null)
+  if (known.length === 0) return altsFt.map(() => 0)
+
+  const lo = Math.min(...known)
+  const hi = Math.max(...known)
+  const span = hi - lo || 1
+
+  let last = 0
+  return altsFt.map((a) => {
+    if (a == null) return last
+    last = ((hi - a) / span) * maxOffsetPx
+    return last
+  })
+}
+
+/**
  * Project (lat, lon) onto the transition's leg-to-leg line, returning the
  * along-track distance from the first leg and the cross-track offset —
  * both in nautical miles.
@@ -228,4 +337,34 @@ export function alongTrackNm(t: ProcedureTransition, lat: number, lon: number): 
   const pt = turf.point([lon, lat])
   const nearest = turf.nearestPointOnLine(line, pt, NM)
   return { distNm: nearest.properties.location ?? 0, xtNm: nearest.properties.dist ?? 0 }
+}
+
+/**
+ * Label anti-collision for the live-aircraft glyphs on the profile: decides
+ * whether each entry's callsign label should sit 'above' or 'below' its dot.
+ * Entries are walked in `distNm` order; when two consecutive entries would sit
+ * closer than `minGapPx` on screen (`nmPerPx` converts the along-track domain
+ * to pixels, matching the caller's x-scale), the later one flips to the
+ * opposite side of its predecessor so the labels don't overlap. Widely-spaced
+ * entries all default to 'above'. Returned in the same order as `entries`
+ * (not the sorted order used internally) and is a pure function of its inputs.
+ */
+export function placeProfileLabels(
+  entries: { distNm: number }[],
+  nmPerPx: number,
+  minGapPx = 40,
+): Array<'above' | 'below'> {
+  const order = entries.map((_, i) => i).sort((a, b) => entries[a].distNm - entries[b].distNm)
+  const placement: Array<'above' | 'below'> = entries.map(() => 'above')
+
+  let prevIdx: number | null = null
+  for (const idx of order) {
+    if (prevIdx !== null) {
+      const gapPx = nmPerPx > 0 ? Math.abs(entries[idx].distNm - entries[prevIdx].distNm) / nmPerPx : Infinity
+      placement[idx] = gapPx < minGapPx ? (placement[prevIdx] === 'above' ? 'below' : 'above') : 'above'
+    }
+    prevIdx = idx
+  }
+
+  return placement
 }

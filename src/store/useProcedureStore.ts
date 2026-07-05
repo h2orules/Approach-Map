@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import type { Procedure } from '../types/procedure'
+import type { ProcedureActivity } from '../geo/detectionMachine'
+import { approachRunwayKey } from '../geo/approachPriority'
 import { appendSamples, type DetectionSample } from '../utils/detectionHistory'
-import { DETECTION_HISTORY_WINDOW_MS } from '../config/constants'
+import { DETECTION_HISTORY_WINDOW_MS, AUTO_HIDE_DELAY_MS } from '../config/constants'
 
 /**
  * The dual visibility rule: an explicit user toggle wins, otherwise the
@@ -20,6 +22,13 @@ export function computeVisibility(
   return autoVisible[id] ?? false
 }
 
+/** Same elements in the same order — used to preserve array identity across polls. */
+function sameHexes(a: string[] | undefined, b: string[]): boolean {
+  if (!a || a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
 interface ProcedureStore {
   procedures: Procedure[]
   loading: boolean
@@ -35,6 +44,8 @@ interface ProcedureStore {
   lastDetectedAt: Record<string, number>
   // hex codes of aircraft currently matching each auto-detected approach
   detectedHexes: Record<string, string[]>
+  // hex → assigned approach procId (exactly one approach per aircraft)
+  aircraftAssignments: Record<string, string>
   // rolling window of detected-aircraft counts per procedure (see src/utils/detectionHistory.ts)
   detectionHistory: Record<string, DetectionSample[]>
 
@@ -43,11 +54,10 @@ interface ProcedureStore {
   setError: (error: string | null) => void
   setUserToggle: (id: string, visible: boolean) => void
   revertToAuto: (id: string) => void
-  updateAutoDetection: (
-    detected: Record<string, boolean>,
+  applyDetection: (
+    activity: Record<string, ProcedureActivity>,
+    assignments: Record<string, string>,
     nowMs: number,
-    hexes?: Record<string, string[]>,
-    immediateSuppress?: ReadonlySet<string>,
   ) => void
   isVisible: (id: string) => boolean
 }
@@ -61,6 +71,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
   autoShownIds: new Set(),
   lastDetectedAt: {},
   detectedHexes: {},
+  aircraftAssignments: {},
   detectionHistory: {},
 
   setProcedures: (procedures) =>
@@ -71,6 +82,7 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
       autoShownIds: new Set(),
       lastDetectedAt: {},
       detectedHexes: {},
+      aircraftAssignments: {},
       detectionHistory: {},
     }),
 
@@ -87,43 +99,76 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
       return { userToggles: next }
     }),
 
-  updateAutoDetection: (detected, nowMs, hexes = {}, immediateSuppress = new Set()) =>
+  applyDetection: (activity, assignments, nowMs) =>
     set((s) => {
       const autoVisible = { ...s.autoVisible }
       const lastDetectedAt = { ...s.lastDetectedAt }
       const autoShownIds = new Set(s.autoShownIds)
 
-      for (const [id, isDetected] of Object.entries(detected)) {
+      // Approach runway keys that currently hold ≥1 active aircraft — used to
+      // immediately hide a same-runway sibling that has lost all its traffic
+      // (e.g. ATIS flips mid-session from ILS to RNAV on the same runway).
+      const activeApproachRwys = new Set<string>()
+      for (const proc of s.procedures) {
+        if (proc.type === 'APPROACH' && (activity[proc.id]?.hexes.length ?? 0) > 0) {
+          activeApproachRwys.add(approachRunwayKey(proc))
+        }
+      }
+
+      for (const proc of s.procedures) {
+        const id = proc.id
+        const act = activity[id]
+        const detected = (act?.hexes.length ?? 0) > 0
         const userSet = s.userToggles[id] !== undefined
-        if (isDetected) {
-          lastDetectedAt[id] = nowMs
+
+        if (detected) {
+          lastDetectedAt[id] = act!.lastActiveMs
           if (!userSet && !autoVisible[id]) {
             autoVisible[id] = true
             autoShownIds.add(id)
           }
         } else if (autoShownIds.has(id) && !userSet) {
-          if (immediateSuppress.has(id)) {
-            // A winning approach is already active on this runway — hide now,
-            // don't wait for the grace period.
+          const siblingActive =
+            proc.type === 'APPROACH' && activeApproachRwys.has(approachRunwayKey(proc))
+          if (siblingActive) {
             autoVisible[id] = false
             autoShownIds.delete(id)
-          } else {
-            const timeSinceSeen = nowMs - (lastDetectedAt[id] ?? 0)
-            if (timeSinceSeen > 5 * 60 * 1000) {
-              autoVisible[id] = false
-              autoShownIds.delete(id)
-            }
+          } else if (nowMs - (lastDetectedAt[id] ?? 0) > AUTO_HIDE_DELAY_MS) {
+            autoVisible[id] = false
+            autoShownIds.delete(id)
           }
         }
       }
 
-      const counts: Record<string, number> = {}
-      for (const id of Object.keys(detected)) {
-        counts[id] = hexes[id]?.length ?? 0
+      // Detected-hex lists: only active procedures, preserving the previous
+      // array reference when unchanged so subscribers don't needlessly re-render.
+      const detectedHexes: Record<string, string[]> = {}
+      for (const [id, act] of Object.entries(activity)) {
+        detectedHexes[id] = sameHexes(s.detectedHexes[id], act.hexes) ? s.detectedHexes[id] : act.hexes
       }
-      const detectionHistory = appendSamples(s.detectionHistory, counts, nowMs, DETECTION_HISTORY_WINDOW_MS)
 
-      return { autoVisible, lastDetectedAt, autoShownIds, detectedHexes: hexes, detectionHistory }
+      // Zero samples for previously-sampled procedures keep their rolling
+      // average decaying once traffic leaves — otherwise a procedure that just
+      // went idle would hold its last nonzero average for the whole window and
+      // skew the safeAltitude sector ranking.
+      const counts: Record<string, number> = {}
+      for (const id of Object.keys(s.detectionHistory)) counts[id] = 0
+      for (const [id, act] of Object.entries(activity)) counts[id] = act.hexes.length
+      const detectionHistory = appendSamples(
+        s.detectionHistory,
+        counts,
+        nowMs,
+        DETECTION_HISTORY_WINDOW_MS,
+      )
+
+      return {
+        autoVisible,
+        lastDetectedAt,
+        autoShownIds,
+        detectedHexes,
+        aircraftAssignments: assignments,
+        detectionHistory,
+      }
     }),
 
   isVisible: (id) => {

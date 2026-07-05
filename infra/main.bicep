@@ -1,6 +1,6 @@
 // Azure resources for Approach Map: a single Static Web App (Free tier).
 //
-// The SPA is served as static assets and the six /api/* proxy routes run as
+// The SPA is served as static assets and the nine /api/* proxy routes run as
 // SWA-managed Azure Functions — no separate Functions app, storage account,
 // or App Service plan is needed. Deployments arrive via the GitHub Actions
 // workflow using the app's deployment token ("bring your own CI"), so no

@@ -3,29 +3,41 @@ export const ADSBX_SEARCH_RADIUS_NM = 50
 export const DEFAULT_POLL_INTERVAL_MS = 5_000
 export const STALE_AIRCRAFT_THRESHOLD_S = 60
 
-// SID/STAR cross-track tolerance: wider to catch traffic still navigating to the route.
-export const CROSS_TRACK_THRESHOLD_NM = 0.5
-// Approach cross-track tolerance: tighter so parallel runways are disambiguated by
-// lateral position. At KSEA 16L/16C spacing is ~0.13 nm; 0.25 nm keeps a comfortable
-// margin while still being well inside the closest pair.
-export const CROSS_TRACK_APPROACH_NM = 0.25
 // Max angle between an aircraft's track and the procedure's local direction for
 // it to count as "flying" that procedure. Rejects reciprocal-runway matches
 // (e.g. a rwy-16 arrival sitting on the shared rwy-34 approach centerline).
 // 45° covers the FAA's 30° ground-based navaid approach coverage plus a buffer
-// for wind correction.
+// for wind correction. Also used by flownSegment/activeSegments.
 export const DIRECTION_TOLERANCE_DEG = 45
-export const ALT_THRESHOLD_NEAR_FT = 250
-export const ALT_THRESHOLD_FAR_FT = 500
-// Tight altitude tolerance used when both bracketing waypoints have exact (AT or
-// BETWEEN) altitude constraints, or when on a precision GS segment.  Linear
-// interpolation / GS geometry is accurate to ~50 ft in those cases, so 100 ft
-// gives a comfortable margin without admitting adjacent-runway traffic.
-export const ALT_THRESHOLD_CONSTRAINED_FT = 100
 export const NEAR_AIRPORT_DISTANCE_NM = 5
 // 3° glide slope: sin(3°) × 6076 ft/nm ≈ 318 ft/nm.  Used to project expected
 // altitude on the GS segment of precision approaches.
 export const GS_FEET_PER_NM = 318
+
+// ── Time-confirmed detection machine (src/geo/detectionMachine.ts) ──────────
+// Loose per-poll "candidate" gates admit noisy/established traffic; a track only
+// becomes visible after it sustains matches over time (hysteresis). Confirmed
+// tracks are re-evaluated with widened gates so a level-off or transient jitter
+// doesn't shed the lock — only sustained lateral departure does.
+//
+// KSEA 16L/16C centerlines are ~0.13 nm apart, so the candidate approach gate
+// (0.35 nm) admits the neighbor; min-cross-track assignment plus the reassign
+// streak resolve which runway a plane is actually on. A perpendicular crosser
+// can't accumulate the required matches within the direction gate in 10 s.
+export const DETECT_CANDIDATE_XT_APPROACH_NM = 0.35
+export const DETECT_CANDIDATE_XT_SIDSTAR_NM = 0.8
+export const DETECT_CANDIDATE_DIR_DEG = 45
+export const DETECT_CANDIDATE_ALT_CONSTRAINED_FT = 200
+export const DETECT_CANDIDATE_ALT_NEAR_FT = 400
+export const DETECT_CANDIDATE_ALT_FAR_FT = 800
+export const DETECT_CONFIRMED_XT_APPROACH_NM = 0.6
+export const DETECT_CONFIRMED_XT_SIDSTAR_NM = 1.5
+export const DETECT_CONFIRMED_DIR_DEG = 60
+export const DETECT_CONFIRM_MIN_MATCHES = 3
+export const DETECT_CONFIRM_MIN_DURATION_MS = 10_000
+export const DETECT_CANDIDATE_TTL_MS = 15_000
+export const DETECT_CONFIRMED_TTL_MS = 30_000
+export const DETECT_REASSIGN_CLOSER_STREAK = 3
 
 export const AUTO_HIDE_DELAY_MS = 5 * 60 * 1_000
 
@@ -50,8 +62,10 @@ export const MSA_DEFAULT_RADIUS_NM = 25
 export const DETECTION_HISTORY_WINDOW_MS = 5 * 60 * 1000
 
 // Terrain hypsometric tint ramp (ft MSL → fill color), FAA-sectional-like.
+// Elevations below the first stop (1000 ft) get no tint at all — see
+// `hypsoStepExpression` in TerrainLayer.tsx, which uses fully-transparent
+// as the step base rather than the first stop's color.
 export const TERRAIN_HYPSO_STOPS: ReadonlyArray<readonly [number, string]> = [
-  [0, '#a9c799'],
   [1000, '#c5d59b'],
   [2000, '#e3dfa4'],
   [3000, '#f3d999'],
@@ -82,3 +96,51 @@ export const SAFE_ALT_COLOR = '#94a3b8'
 export const SAFE_ALT_FILL_OPACITY = 0.05
 export const SAFE_ALT_LINE_WIDTH = 1.2
 export const SAFE_ALT_LINE_OPACITY = 0.7
+// Sector boundary lines are solid white for both TAA and MSA.
+export const SAFE_ALT_LINE_COLOR = '#ffffff'
+
+// FAA-plate-style localizer "feather" symbol, drawn along the final approach
+// course of the selected LOC-based approach (ILS/LOC/LDA).
+export const LOC_FEATHER_LENGTH_NM = 9
+export const LOC_FEATHER_WIDTH_NM = 1.0
+export const LOC_FEATHER_NOTCH_NM = 0.7
+// Neutral slate so it reads on both dark and satellite basemaps without
+// competing with the green approach-procedure palette.
+export const LOC_FEATHER_COLOR = '#cbd5e1'
+
+// MVA (Minimum Vectoring Altitude) sector overlay styling. Kept visually
+// quiet (low fill opacity, thin lines) since sectors can be numerous/large
+// and shouldn't compete with terrain tinting or procedure lines.
+export const MVA_COLOR = '#e2e8f0'
+export const MVA_FILL_OPACITY = 0.04
+export const MVA_LINE_WIDTH = 1
+export const MVA_LINE_OPACITY = 0.55
+
+// Route enrichment (origin/destination lookup) cache behavior — see src/api/routes.ts.
+// Confirmed-unknown callsigns are negative-cached for this long before re-querying.
+export const ROUTE_NEGATIVE_TTL_MS = 10 * 60 * 1000
+// Transient provider failures (network/5xx) back off exponentially per callsign.
+export const ROUTE_RETRY_BASE_MS = 30_000
+export const ROUTE_RETRY_MAX_MS = 5 * 60 * 1000
+
+// Airspace (Class B/C/D/E) overlay, styled after FAA VFR sectional charts:
+// Class B & D use blue linework, Class C & E use magenta. B/C are solid,
+// D and Class-E-surface are dashed. The Class-E transition areas (700ft/1200ft
+// AGL floors) cover huge swaths of the chart, so they're drawn as a faint
+// boundary line ONLY — filling their interiors (as a paper sectional's soft
+// vignette can't be reproduced here) washes the whole basemap magenta.
+// Source: FAA AIS "Class_Airspace" ArcGIS FeatureServer (see
+// src/api/faaAirspace.ts / the /api/faa-airspace dev proxy in vite.config.ts).
+export const AIRSPACE_BLUE = '#5b8def'    // Class B (solid) and Class D (dashed)
+export const AIRSPACE_MAGENTA = '#d15fc4' // Class C (solid) and Class E (dashed/boundary)
+export const AIRSPACE_FILL_OPACITY = 0.05 // B / C / D / E-surface only (never the E transition areas)
+export const AIRSPACE_LINE_OPACITY = 0.85
+export const AIRSPACE_E_TRANS_LINE_OPACITY = 0.4 // faint boundary for the 700/1200ft AGL Class-E areas
+export const AIRSPACE_SOLID_LINE_WIDTH = 1.7 // Class B / C
+export const AIRSPACE_DASHED_LINE_WIDTH = 1.4 // Class D / E surface
+// Half-degree padded box fetched around the selected airport (≈ ±60 nm N/S,
+// widened E/W by 1/cos(lat) at query time so the box stays roughly square).
+export const AIRSPACE_FETCH_HALF_DEG = 1.0
+// Airspace changes on the 56-day chart cycle; 28 days is a conservative
+// "recheck occasionally" cache window (not tied to a published revision date).
+export const AIRSPACE_CACHE_MAX_AGE_MS = 28 * 24 * 60 * 60 * 1000

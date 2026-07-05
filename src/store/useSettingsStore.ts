@@ -13,6 +13,8 @@ interface SettingsStore {
   extendedCenterlineLengthNm: number
   showTerrain: boolean
   showSafeAltitudes: boolean
+  showMva: boolean
+  showAirspace: boolean
   /** Slider position (0–19) for the lower altitude filter handle. */
   altFilterMin: number
   /** Slider position (0–19) for the upper altitude filter handle. */
@@ -24,6 +26,8 @@ interface SettingsStore {
   setCenterlineLength: (nm: number) => void
   toggleTerrain: () => void
   toggleSafeAltitudes: () => void
+  toggleMva: () => void
+  toggleAirspace: () => void
   setAltFilterMin: (pos: number) => void
   setAltFilterMax: (pos: number) => void
 }
@@ -37,6 +41,8 @@ export const useSettingsStore = create<SettingsStore>()(
       extendedCenterlineLengthNm: EXTENDED_CENTERLINE_LENGTH_NM,
       showTerrain: false,
       showSafeAltitudes: false,
+      showMva: false,
+      showAirspace: false,
       altFilterMin: 0,
       altFilterMax: 19,
 
@@ -48,6 +54,8 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ extendedCenterlineLengthNm: Math.max(1, Math.min(50, nm)) }),
       toggleTerrain: () => set((s) => ({ showTerrain: !s.showTerrain })),
       toggleSafeAltitudes: () => set((s) => ({ showSafeAltitudes: !s.showSafeAltitudes })),
+      toggleMva: () => set((s) => ({ showMva: !s.showMva })),
+      toggleAirspace: () => set((s) => ({ showAirspace: !s.showAirspace })),
       setAltFilterMin: (pos) => set({ altFilterMin: Math.max(0, Math.min(19, pos)) }),
       setAltFilterMax: (pos) => set({ altFilterMax: Math.max(0, Math.min(19, pos)) }),
     }),

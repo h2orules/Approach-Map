@@ -10,9 +10,15 @@ import type { Procedure } from '../types/procedure'
  * show for the current selection:
  *
  *  - an explicitly-selected approach (`selected.kind === 'approach'`)
- *  - or, when an aircraft is selected, the first visible APPROACH that
- *    currently has that aircraft's hex in its `detectedHexes`
+ *  - or, when an aircraft is selected, the visible APPROACH the detection
+ *    engine has assigned that hex to (`aircraftAssignments[hex]`, sticky by
+ *    construction — see `detectionMachine.ts` — so no latch is needed here)
  *  - or null (panel closed) otherwise
+ *
+ * Note: assignment requires the detection engine's sustained-match
+ * confirmation, so the panel opens ~10-15s after an aircraft actually starts
+ * flying the approach. Accepted trade-off for eliminating flip-flop between
+ * sibling approaches (ILS / RNP Y / RNP Z to the same runway).
  *
  * Also kicks off the d-TPP metafile load (for amendment numbers) the moment
  * a procedure first becomes selected, since that fetch is only needed once
@@ -21,7 +27,7 @@ import type { Procedure } from '../types/procedure'
 export function useProfileProcedure(): Procedure | null {
   const selected = useSelectionStore((s) => s.selected)
   const procedures = useProcedureStore((s) => s.procedures)
-  const detectedHexes = useProcedureStore((s) => s.detectedHexes)
+  const aircraftAssignments = useProcedureStore((s) => s.aircraftAssignments)
   const userToggles = useProcedureStore((s) => s.userToggles)
   const autoVisible = useProcedureStore((s) => s.autoVisible)
   const effectiveDate = useCifpStore((s) => s.effectiveDate)
@@ -35,15 +41,12 @@ export function useProfileProcedure(): Procedure | null {
     }
 
     // selected.kind === 'aircraft'
-    const hex = selected.hex
-    const p = procedures.find(
-      (p) =>
-        p.type === 'APPROACH' &&
-        computeVisibility(userToggles, autoVisible, p.id) &&
-        (detectedHexes[p.id]?.includes(hex) ?? false),
-    )
-    return p ?? null
-  }, [selected, procedures, detectedHexes, userToggles, autoVisible])
+    const procId = aircraftAssignments[selected.hex]
+    if (!procId) return null
+    const p = procedures.find((p) => p.id === procId && p.type === 'APPROACH')
+    if (!p || !computeVisibility(userToggles, autoVisible, p.id)) return null
+    return p
+  }, [selected, procedures, aircraftAssignments, userToggles, autoVisible])
 
   const prevProcRef = useRef<Procedure | null>(null)
   useEffect(() => {

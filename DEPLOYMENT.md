@@ -1,7 +1,7 @@
 # Deploying Approach Map to Azure
 
 Approach Map deploys to **Azure Static Web Apps (Free tier)**: the Vite build
-is served as static assets from Azure's global edge, and the six `/api/*`
+is served as static assets from Azure's global edge, and the nine `/api/*`
 routes the SPA calls are handled by SWA-managed **Azure Functions** (the
 `api/` folder). Managed Functions mount at `/api` by default, so the client
 code calls the exact same relative paths in dev (Vite proxy) and production.
@@ -14,8 +14,8 @@ code calls the exact same relative paths in dev (Vite proxy) and production.
                        └───────┬────────────────────────────────────┘
                                │ server-side fetch (+ secret header for adsbx)
                                ▼
-   adsbexchange (RapidAPI) · aviationapi.com · aeronav.faa.gov (CIFP, d-TPP)
-   api.adsbdb.com · atis.info
+   adsbexchange (RapidAPI) · aviationapi.com · aeronav.faa.gov (CIFP, d-TPP, MVA)
+   api.adsbdb.com · api.adsb.lol · atis.info · services6.arcgis.com (airspace)
 ```
 
 Why this architecture (vs. App Service + Express or Container Apps):
@@ -41,9 +41,10 @@ Why this architecture (vs. App Service + Express or Container Apps):
 | `VITE_MAPBOX_TOKEN` | GitHub Actions secret, inlined at build time | Public token by design. Restrict it to your deployment URLs (Mapbox dashboard → token → URL restrictions: `https://approachmap.aquagnomeapps.com/*` and the `*.azurestaticapps.net` default hostname). |
 | `AZURE_STATIC_WEB_APPS_API_TOKEN` | GitHub Actions secret | Deployment credential for the workflow. Rotate/re-read with `scripts/azure/get-deploy-token.sh`. |
 
-The other five upstreams (aviationapi, FAA CIFP, adsbdb, dATIS, FAA d-TPP)
-are keyless; the Functions proxy exists for them because they're third-party
-hosts the browser can't call cross-origin.
+The other eight upstreams (aviationapi, FAA CIFP, adsbdb, adsb.lol, dATIS,
+FAA d-TPP, FAA MVA charts, FAA ArcGIS airspace) are keyless; the Functions
+proxy exists for them because they're third-party hosts the browser can't
+call cross-origin.
 
 ## One-time setup
 

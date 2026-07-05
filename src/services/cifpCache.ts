@@ -14,7 +14,9 @@ const STORE_NAME = 'cifp'
 // discarded and the CIFP is re-parsed even within the same AIRAC cycle.
 // v11: parser now emits CifpAirportData (procedures + safe altitudes + runway
 // info + magvar) instead of a bare Procedure[] per airport.
-const PARSER_VERSION = 11
+// v12: approach runways are also derived from the procedure ident (I16R →
+// 16R), fixing empty runways[] on approaches (TDZE/length + ILS GS lookups).
+const PARSER_VERSION = 12
 
 export type CifpStatus = 'idle' | 'fetching' | 'parsing' | 'ready' | 'error'
 

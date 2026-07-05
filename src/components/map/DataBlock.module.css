@@ -1,3 +1,19 @@
+/* This class is passed as the mapbox-gl Popup `className` option, which adds
+   it directly to `.mapboxgl-popup` — the library's own position:absolute,
+   z-index:auto container div. Neither that div nor react-map-gl's <Map>
+   wrapper (also position:relative, z-index:auto) establishes a stacking
+   context, so an auto z-index here would always lose to any sibling of
+   <Map> that sets an explicit z-index (e.g. AircraftOverlay's z-index:3),
+   regardless of DOM order — which is why the data block used to render
+   under the aircraft icons and waypoint markers. Giving it an explicit
+   z-index makes it a direct participant of that same shared stacking
+   context. Ladder (see AppMap.tsx): map layers < waypoint markers (auto) <
+   AircraftOverlay (3) < this popup (5) < AltitudeFilter/ActiveProceduresOverlay
+   (10) < ProfilePanel/TopBar (20). */
+.popup {
+  z-index: 5;
+}
+
 .popup :global(.mapboxgl-popup-content) {
   background: transparent;
   padding: 0;
@@ -13,7 +29,6 @@
   border: 1px solid rgba(100, 116, 139, 0.4);
   border-radius: 4px;
   padding: 5px 7px;
-  cursor: pointer;
   min-width: 120px;
   font-family: 'Roboto Mono', 'Courier New', monospace;
   font-size: 11px;
@@ -117,11 +132,4 @@
 
 .descending {
   color: #f87171;
-}
-
-.expandHint {
-  font-size: 9px;
-  color: #475569;
-  text-align: right;
-  margin-top: 2px;
 }

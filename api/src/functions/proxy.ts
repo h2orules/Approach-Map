@@ -20,8 +20,13 @@ const UPSTREAMS: Record<string, Upstream> = {
   aviationapi: { base: 'https://www.aviationapi.com/api/v1' },
   'faa-cifp': { base: 'https://aeronav.faa.gov/Upload_313-d/cifp' },
   adsbdb: { base: 'https://api.adsbdb.com/v0' },
+  adsblol: { base: 'https://api.adsb.lol/api/0' },
   datis: { base: 'https://atis.info/api' },
   dtpp: { base: 'https://aeronav.faa.gov/d-tpp' },
+  'faa-mva': { base: 'https://aeronav.faa.gov/MVA_Charts/aixm' },
+  'faa-airspace': {
+    base: 'https://services6.arcgis.com/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0',
+  },
 }
 
 // The largest proxied payloads (CIFP zip ~9MB, d-TPP metafile ~15MB) download
@@ -52,20 +57,33 @@ export async function proxy(
   const target = `${upstream.base}/${path}${search}`
 
   try {
+    // adsb.lol's /routeset is the one POST upstream (batched callsign lookup,
+    // JSON body). Forward the method, body, and content type; everything else
+    // is a plain GET.
+    const reqHeaders = { ...upstream.headers?.() }
+    let body: ArrayBuffer | undefined
+    if (request.method === 'POST') {
+      body = await request.arrayBuffer()
+      const contentType = request.headers.get('content-type')
+      if (contentType) reqHeaders['Content-Type'] = contentType
+    }
+
     const resp = await fetch(target, {
-      headers: upstream.headers?.(),
+      method: request.method,
+      headers: reqHeaders,
+      body,
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     })
 
-    const headers: Record<string, string> = {}
+    const respHeaders: Record<string, string> = {}
     for (const name of PASSTHROUGH_HEADERS) {
       const value = resp.headers.get(name)
-      if (value) headers[name] = value
+      if (value) respHeaders[name] = value
     }
 
     return {
       status: resp.status,
-      headers,
+      headers: respHeaders,
       body: Buffer.from(await resp.arrayBuffer()),
     }
   } catch (err) {
@@ -79,7 +97,7 @@ export async function proxy(
 }
 
 app.http('proxy', {
-  methods: ['GET'],
+  methods: ['GET', 'POST'],
   authLevel: 'anonymous',
   route: '{service}/{*path}',
   handler: proxy,

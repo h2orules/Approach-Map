@@ -83,6 +83,48 @@ describe('parseAtisText', () => {
     expect(info.depRunways).toEqual(['16L', '16C'])
   })
 
+  it('records both a concrete type and visual when one clause carries both (KSEA INFO B north flow)', () => {
+    const info = parseAtisText(
+      'ILS AND CHARTED VISUAL APPROACH RWYS 34L AND 34R , APCH IN USE.',
+    )
+    expect(info.runwayPrefs).toEqual({ '34L': ['I'], '34R': ['I'] })
+    expect(info.visualRunways).toEqual(['34L', '34R'])
+  })
+
+  it('scopes departures to their clause ("SIMUL ARRIVALS TO RWY 34L AND DEPARTURES TO RWY 34R")', () => {
+    const info = parseAtisText(
+      'SIMUL ARRIVALS TO RWY 34L AND DEPARTURES TO RWY 34R ARE IN USE.',
+    )
+    expect(info.depRunways).toEqual(['34R'])
+  })
+
+  it('ignores plan-and-brief advisory runways in departure clauses', () => {
+    const info = parseAtisText(
+      'DEPG RWY 34R, DEPG ACFT PLAN AND BRIEF NUMBERS FOR BOTH RWYS 34R AND 34C.',
+    )
+    expect(info.depRunways).toEqual(['34R'])
+  })
+
+  it('still catches trailing-keyword departures ("RWYS ... FOR DEPARTURES")', () => {
+    const info = parseAtisText('RWYS 08R AND 09 FOR DEPARTURES.')
+    expect(info.depRunways).toEqual(['08R', '09'])
+  })
+
+  it('parses the full KSEA INFO B broadcast correctly (real-world regression)', () => {
+    const info = parseAtisText(
+      'SEA ATIS INFO B 0153Z. 34007KT 10SM FEW038 21/11 A3012 (THREE ZERO ONE TWO). ' +
+      'ILS AND CHARTED VISUAL APPROACH RWYS 34L AND 34R , APCH IN USE. ' +
+      'DEPG RWY 34R, DEPG ACFT PLAN AND BRIEF NUMBERS FOR BOTH RWYS 34R AND 34C. ' +
+      'SIMUL ARRIVALS TO RWY 34L AND DEPARTURES TO RWY 34R ARE IN USE. ' +
+      'SIMUL APCHS IN USE TO PARA RYS. NOTAMS... BIRD ACTIVITY VICINITY ARPT. ' +
+      '...ADVS YOU HAVE INFO B.',
+    )
+    expect(info.code).toBe('B')
+    expect(info.runwayPrefs).toEqual({ '34L': ['I'], '34R': ['I'] })
+    expect(info.visualRunways).toEqual(['34L', '34R'])
+    expect(info.depRunways).toEqual(['34R'])
+  })
+
   it('returns code "?" for unparseable garbage without throwing', () => {
     expect(() => parseAtisText('asdf 1234 !!! not an atis at all')).not.toThrow()
     const info = parseAtisText('asdf 1234 !!! not an atis at all')

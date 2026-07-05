@@ -49,6 +49,10 @@ const RUNWAY_LIST_RE = /(?:RUNWAY|RWY)S?\s+((?:\d{2}[LCR]?)(?:\s*(?:,|AND|\/)\s*
 const RWY_KEYWORD = /\b(?:RUNWAY|RWY)S?\b/
 const DEP_KEYWORD = /\bDEP(?:G|ART(?:ING|URE|URES))?\b/
 const VISUAL_KEYWORD = /\bVISUALS?\b/
+// "DEPG ACFT PLAN AND BRIEF NUMBERS FOR BOTH RWYS 34R AND 34C" is briefing
+// advice, not a runway assignment — don't harvest dep runways from it.
+const ADVISORY_KEYWORD = /\bPLAN\b|\bBRIEF\b/
+const ARRIVAL_KEYWORD = /\bARR(?:IVAL)?S?\b|\bAPCH(?:S|ES)?\b|\bAPPROACH(?:ES)?\b/
 
 function isValidRunway(r: string): boolean {
   const n = parseInt(r.slice(0, 2), 10)
@@ -90,11 +94,14 @@ export function parseAtisText(text: string): AtisInfo {
     const s = rawSentence.trim()
     if (!s) continue
 
-    // ── Approach-in-use clauses ──────────────────────────────────────────────
-    // Each runway-list keyword ("RWY"/"RUNWAY") only picks up approach types
+    // ── Runway-list clauses ──────────────────────────────────────────────────
+    // Each runway-list keyword ("RWY"/"RUNWAY") only picks up context
     // mentioned since the previous runway-list match (or the sentence start),
-    // so "ILS RWY 16L, RNAV RWY 16R" doesn't broadcast ILS onto 16R.
+    // so "ILS RWY 16L, RNAV RWY 16R" doesn't broadcast ILS onto 16R and
+    // "SIMUL ARRIVALS TO RWY 34L AND DEPARTURES TO RWY 34R" doesn't mark the
+    // arrival runway as a departure runway.
     let prevEnd = 0
+    let depClauseSeen = false
     for (const m of s.matchAll(RUNWAY_LIST_RE)) {
       const matchIndex = m.index ?? 0
       const window = s.slice(prevEnd, matchIndex)
@@ -103,11 +110,22 @@ export function parseAtisText(text: string): AtisInfo {
 
       if (runways.length === 0) continue
 
+      if (DEP_KEYWORD.test(window)) {
+        depClauseSeen = true
+        if (!ADVISORY_KEYWORD.test(window)) {
+          for (const rwy of runways) {
+            if (!depRunways.includes(rwy)) depRunways.push(rwy)
+          }
+        }
+        continue
+      }
+
+      // Visual and a concrete type can share one clause ("ILS AND CHARTED
+      // VISUAL APPROACH RWYS 34L AND 34R") — record both, don't short-circuit.
       if (VISUAL_KEYWORD.test(window)) {
         for (const rwy of runways) {
           if (!visualRunways.includes(rwy)) visualRunways.push(rwy)
         }
-        continue
       }
 
       const prefixes = scanApproachTypes(window)
@@ -120,8 +138,18 @@ export function parseAtisText(text: string): AtisInfo {
       }
     }
 
-    // ── Departure-runway sentences ───────────────────────────────────────────
-    if (DEP_KEYWORD.test(s) && RWY_KEYWORD.test(s)) {
+    // ── Trailing-keyword departures ("RWYS 08R AND 09 FOR DEPARTURES") ──────
+    // Only when no clause put the keyword before a runway list, and only for
+    // sentences that are unambiguously about departures.
+    if (
+      !depClauseSeen &&
+      DEP_KEYWORD.test(s) &&
+      RWY_KEYWORD.test(s) &&
+      !ADVISORY_KEYWORD.test(s) &&
+      !ARRIVAL_KEYWORD.test(s) &&
+      !VISUAL_KEYWORD.test(s) &&
+      scanApproachTypes(s).length === 0
+    ) {
       for (const rwy of extractRunways(s)) {
         if (!depRunways.includes(rwy)) depRunways.push(rwy)
       }

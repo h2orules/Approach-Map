@@ -25,6 +25,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/adsbdb/, '/v0'),
       },
+      '/api/adsblol': {
+        target: 'https://api.adsb.lol',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/adsblol/, '/api/0'),
+      },
       '/api/datis': {
         target: 'https://atis.info',
         changeOrigin: true,

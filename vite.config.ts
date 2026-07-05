@@ -52,6 +52,20 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/faa-mva/, '/MVA_Charts/aixm'),
       },
+      // FAA AIS "Class_Airspace" ArcGIS FeatureServer (layer 0) — Class B/C/D/E
+      // boundaries with floor/ceiling altitudes, queried by bbox as GeoJSON.
+      // See src/api/faaAirspace.ts. The service sends CORS `*`, but we proxy it
+      // anyway to keep every upstream behind /api and future-proof against CORS
+      // changes.
+      '/api/faa-airspace': {
+        target: 'https://services6.arcgis.com',
+        changeOrigin: true,
+        rewrite: (path) =>
+          path.replace(
+            /^\/api\/faa-airspace/,
+            '/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0',
+          ),
+      },
     },
   },
   build: {

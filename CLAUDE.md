@@ -97,12 +97,14 @@ CIFP file facts (verified against live FAA data, June 2026):
 | Procedure geometry | FAA CIFP (ARINC 424, 28-day AIRAC cycle) | Proxied via `/api/faa-cifp`, parsed in worker, cached in IndexedDB |
 | dATIS | atis.info `/api` | Proxied via `/api/datis`, polled every 10 min |
 | Callsign routes | adsb.lol `/api/0/routeset` (primary), adsbdb.com fallback | Proxied via `/api/adsblol` + `/api/adsbdb`, keyless, batched, cached (see `src/api/routes.ts`) |
+| MVA/MIA sectors | FAA AIXM per-TRACON (`aeronav.faa.gov/MVA_Charts/aixm`) | Proxied via `/api/faa-mva`, parsed (`utils/aixmMva.ts`), cached in IndexedDB (`services/mvaData.ts`) |
+| Airspace (Class B/C/D/E) | FAA AIS `Class_Airspace` ArcGIS FeatureServer | Proxied via `/api/faa-airspace`, bbox GeoJSON query per airport (`api/faaAirspace.ts`), cached in IndexedDB (`services/airspaceData.ts`) |
 | Airport list | `public/data/airports.json` (88 major US airports) | Bundled; Fuse.js search |
 | Runway geometry | `public/data/runways.json` (85 airports) | Loaded on airport select (`useRunways`) |
 
 Dev proxies are defined in `vite.config.ts` (`/api/adsbx`, `/api/aviationapi`,
-`/api/faa-cifp`, `/api/adsblol`, `/api/adsbdb`, `/api/datis`) to avoid CORS in
-the browser.
+`/api/faa-cifp`, `/api/adsbdb`, `/api/datis`, `/api/dtpp`, `/api/faa-mva`,
+`/api/faa-airspace`) to avoid CORS in the browser.
 
 To expand runway/airport coverage, run:
 

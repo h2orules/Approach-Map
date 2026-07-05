@@ -122,3 +122,25 @@ export const ROUTE_NEGATIVE_TTL_MS = 10 * 60 * 1000
 // Transient provider failures (network/5xx) back off exponentially per callsign.
 export const ROUTE_RETRY_BASE_MS = 30_000
 export const ROUTE_RETRY_MAX_MS = 5 * 60 * 1000
+
+// Airspace (Class B/C/D/E) overlay, styled after FAA VFR sectional charts:
+// Class B & D use blue linework, Class C & E use magenta. B/C are solid,
+// D and Class-E-surface are dashed. The Class-E transition areas (700ft/1200ft
+// AGL floors) cover huge swaths of the chart, so they're drawn as a faint
+// boundary line ONLY — filling their interiors (as a paper sectional's soft
+// vignette can't be reproduced here) washes the whole basemap magenta.
+// Source: FAA AIS "Class_Airspace" ArcGIS FeatureServer (see
+// src/api/faaAirspace.ts / the /api/faa-airspace dev proxy in vite.config.ts).
+export const AIRSPACE_BLUE = '#5b8def'    // Class B (solid) and Class D (dashed)
+export const AIRSPACE_MAGENTA = '#d15fc4' // Class C (solid) and Class E (dashed/boundary)
+export const AIRSPACE_FILL_OPACITY = 0.05 // B / C / D / E-surface only (never the E transition areas)
+export const AIRSPACE_LINE_OPACITY = 0.85
+export const AIRSPACE_E_TRANS_LINE_OPACITY = 0.4 // faint boundary for the 700/1200ft AGL Class-E areas
+export const AIRSPACE_SOLID_LINE_WIDTH = 1.7 // Class B / C
+export const AIRSPACE_DASHED_LINE_WIDTH = 1.4 // Class D / E surface
+// Half-degree padded box fetched around the selected airport (≈ ±60 nm N/S,
+// widened E/W by 1/cos(lat) at query time so the box stays roughly square).
+export const AIRSPACE_FETCH_HALF_DEG = 1.0
+// Airspace changes on the 56-day chart cycle; 28 days is a conservative
+// "recheck occasionally" cache window (not tied to a published revision date).
+export const AIRSPACE_CACHE_MAX_AGE_MS = 28 * 24 * 60 * 60 * 1000

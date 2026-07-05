@@ -1,0 +1,45 @@
+/* FAA-sectional-style airspace altitude labels. Class B/C show a
+   ceiling-over-floor fraction; Class D shows a bracketed ceiling. Colors match
+   the linework: blue for B/D, magenta for C (see config/constants.ts). */
+
+.frac,
+.box {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1.05;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow:
+    0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14, 0 0 4px #0b0f14;
+}
+
+/* Ceiling-over-floor fraction with a thin divider bar between the two rows. */
+.frac {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ceil {
+  border-bottom: 1px solid currentColor;
+  padding: 0 2px 0.5px;
+}
+
+.floor {
+  padding: 0.5px 2px 0;
+}
+
+/* Class D bracketed ceiling, e.g. "[25]". */
+.box {
+  padding: 0 1px;
+}
+
+.classB,
+.classD {
+  color: #5b8def;
+}
+
+.classC {
+  color: #d15fc4;
+}

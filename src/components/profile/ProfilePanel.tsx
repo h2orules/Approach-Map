@@ -181,33 +181,36 @@ export function ProfilePanel({ mapRef }: Props) {
     return () => ro.disconnect()
   }, [rect.width, rect.height, model])
 
-  // ── Live aircraft position on the profile ──
-  const [liveAircraft, setLiveAircraft] = useState<LiveAircraft | null>(null)
+  // ── Live aircraft positions on the profile ──
+  // Shows every plane the detection engine currently has confirmed+assigned to
+  // this approach (`detectedHexes[procedure.id]`), not just a selected one — an
+  // explicitly-selected approach shows all confirmed traffic with nothing
+  // highlighted until/unless one of those planes is also the selection.
+  const [liveAircraft, setLiveAircraft] = useState<LiveAircraft[]>([])
   useEffect(() => {
-    if (!procedure || !transition || !selectedHex || !(detectedHexesForProc?.includes(selectedHex) ?? false)) {
-      setLiveAircraft(null)
+    if (!procedure || !transition || !detectedHexesForProc || detectedHexesForProc.length === 0) {
+      setLiveAircraft([])
       return
     }
 
     const tick = () => {
-      const ac = useAircraftStore.getState().aircraftMap.get(selectedHex)
-      if (!ac || ac.altBaro === 'ground') {
-        setLiveAircraft(null)
-        return
+      const aircraftMap = useAircraftStore.getState().aircraftMap
+      const next: LiveAircraft[] = []
+      for (const hex of detectedHexesForProc) {
+        const ac = aircraftMap.get(hex)
+        if (!ac || ac.altBaro === 'ground') continue
+        const { distNm, xtNm } = alongTrackNm(transition, ac.interpLat, ac.interpLon)
+        if (xtNm > 3) continue
+        const label = (ac.flight && ac.flight.trim()) || ac.registration || ac.hex.toUpperCase()
+        next.push({ hex, distNm, altFt: ac.altBaro, label, isSelected: hex === selectedHex })
       }
-      const { distNm, xtNm } = alongTrackNm(transition, ac.interpLat, ac.interpLon)
-      if (xtNm > 2) {
-        setLiveAircraft(null)
-        return
-      }
-      const label = (ac.flight && ac.flight.trim()) || ac.registration || ac.hex.toUpperCase()
-      setLiveAircraft({ distNm, altFt: ac.altBaro, label })
+      setLiveAircraft(next)
     }
 
     tick()
     const id = setInterval(tick, PROFILE_AIRCRAFT_UPDATE_MS)
     return () => clearInterval(id)
-  }, [procedure, transition, selectedHex, detectedHexesForProc])
+  }, [procedure, transition, detectedHexesForProc, selectedHex])
 
   if (!procedure) return null
 

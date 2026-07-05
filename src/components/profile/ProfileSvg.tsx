@@ -6,13 +6,14 @@ import {
   fixRenderAltitudes,
   segmentDistancesNm,
   labelStaggerOffsets,
+  placeProfileLabels,
 } from '../../geo/profileMath'
 import type { ProfileFix, ProfileModel, LiveAircraft } from '../../geo/profileMath'
 import styles from './ProfileSvg.module.css'
 
 interface Props {
   model: ProfileModel
-  liveAircraft?: LiveAircraft | null
+  liveAircraft?: LiveAircraft[]
   width: number
   height: number
 }
@@ -41,6 +42,8 @@ const GS_BOLT_TAIL = { dx: 18, dy: -22 }
 const GS_ALT_GAP = 6 // px between the bolt tail and the near edge of the altitude label
 const NAME_CHAR_W = 7.6 // px per char of a fix name at 12px bold Roboto Mono — for label de-collision
 const NAME_ROW_H = 15 // px a colliding fix name is pushed down to the next row
+const AIRCRAFT_LABEL_ABOVE_DY = -10 // px from the glyph center to the label baseline, above
+const AIRCRAFT_LABEL_BELOW_DY = 17 // px from the glyph center to the label baseline, below
 
 // ── scales ──────────────────────────────────────────────────────────────
 
@@ -154,11 +157,31 @@ function HoldGlyph({ x, y, isPi }: { x: number; y: number; isPi: boolean }) {
   )
 }
 
-function AircraftGlyph({ x, y, label }: { x: number; y: number; label: string }) {
+function AircraftGlyph({
+  x,
+  y,
+  label,
+  isSelected,
+  labelAbove,
+}: {
+  x: number
+  y: number
+  label: string
+  isSelected: boolean
+  labelAbove: boolean
+}) {
+  const labelY = y + (labelAbove ? AIRCRAFT_LABEL_ABOVE_DY : AIRCRAFT_LABEL_BELOW_DY)
   return (
-    <g>
+    <g className={isSelected ? undefined : styles.aircraftDimmed}>
       <polygon className={styles.aircraft} points={`${x - 7},${y + 5} ${x + 8},${y} ${x - 7},${y - 5} ${x - 3},${y}`} />
-      <text className={styles.aircraftLabel} x={x} y={y - 10} textAnchor="middle">{label}</text>
+      <text
+        className={isSelected ? styles.aircraftLabel : styles.aircraftLabelDimmed}
+        x={x}
+        y={labelY}
+        textAnchor="middle"
+      >
+        {label}
+      </text>
     </g>
   )
 }
@@ -215,7 +238,7 @@ function AltAnnotation({ f, x, y }: { f: ProfileFix; x: number; y: number }) {
 
 // Memoized: the live-aircraft tick re-renders the parent every second, but
 // the static profile geometry only depends on model/width/height.
-export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width, height }: Props) {
+export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], width, height }: Props) {
   if (model.fixes.length < 2) {
     return (
       <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -459,10 +482,23 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft, width,
         })}
       </g>
 
-      {/* live aircraft */}
-      {liveAircraft && (
-        <AircraftGlyph x={xScale(liveAircraft.distNm)} y={yScale(liveAircraft.altFt)} label={liveAircraft.label} />
-      )}
+      {/* live aircraft — one glyph per plane the detector currently has assigned
+          to this approach; the selected one (if any) gets accent styling, the
+          rest are dimmed. Labels alternate above/below when entries crowd. */}
+      {liveAircraft.length > 0 && (() => {
+        const nmPerPx = plotW > 0 ? approachNm / plotW : 1
+        const labelSides = placeProfileLabels(liveAircraft, nmPerPx)
+        return liveAircraft.map((ac, i) => (
+          <AircraftGlyph
+            key={ac.hex}
+            x={xScale(ac.distNm)}
+            y={yScale(ac.altFt)}
+            label={ac.label}
+            isSelected={ac.isSelected}
+            labelAbove={labelSides[i] === 'above'}
+          />
+        ))
+      })()}
     </svg>
   )
 })

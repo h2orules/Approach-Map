@@ -5,6 +5,7 @@ import { useAircraftStore } from '../../store/useAircraftStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useMapStore } from '../../store/useMapStore'
 import { arrivalSummary } from '../../api/datis'
+import { AUTO_HIDE_DELAY_MS } from '../../config/constants'
 import styles from './ActiveProceduresOverlay.module.css'
 
 function useHoverDelay(delayMs = 150) {
@@ -17,7 +18,7 @@ function useHoverDelay(delayMs = 150) {
 
 function formatRemaining(lastSeenMs: number | undefined): string | null {
   if (!lastSeenMs) return null
-  const remainingMs = lastSeenMs + 5 * 60 * 1000 - Date.now()
+  const remainingMs = lastSeenMs + AUTO_HIDE_DELAY_MS - Date.now()
   if (remainingMs <= 0) return null
   const roundedMs = Math.ceil(remainingMs / 15000) * 15000
   const totalS = Math.round(roundedMs / 1000)

@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../store/useSettingsStore'
 import { formatAltitude, formatSpeed, formatHeading } from '../../utils/formatters'
 import { altitudeColor } from '../../utils/colorScheme'
 import { positionToMinFt, positionToMaxFt } from '../../utils/altitudeFilter'
+import { VFR_SQUAWK } from '../../config/constants'
 import styles from './AircraftOverlay.module.css'
 
 interface Props {
@@ -48,7 +49,7 @@ export function AircraftOverlay({ mapRef }: Props) {
       const map = mapRef.current?.getMap()
       if (map) {
         const store = useAircraftStore.getState()
-        const { altFilterMin, altFilterMax } = useSettingsStore.getState()
+        const { altFilterMin, altFilterMax, showTisb, showVfr } = useSettingsStore.getState()
         const minFt = positionToMinFt(altFilterMin)
         const maxFt = positionToMaxFt(altFilterMax)
 
@@ -57,9 +58,15 @@ export function AircraftOverlay({ mapRef }: Props) {
           if (!ac) continue
 
           const alt = ac.altBaro as number
-          const inRange = alt >= minFt && alt <= maxFt
+          // Same imperative show/hide path as the altitude filter, so toggling
+          // these takes effect immediately without a React re-render.
+          const hidden =
+            alt < minFt ||
+            alt > maxFt ||
+            (!showTisb && hex.startsWith('~')) ||
+            (!showVfr && ac.squawk === VFR_SQUAWK)
 
-          if (!inRange) {
+          if (hidden) {
             node.style.display = 'none'
             continue
           }
@@ -92,7 +99,8 @@ export function AircraftOverlay({ mapRef }: Props) {
         const hasRoute = !!(ac.origin || ac.destination)
         const origin = ac.origin || 'Unkwn'
         const dest = ac.destination || 'Unkwn'
-        const isVfr = ac.squawk === '1200'
+        const isVfr = ac.squawk === VFR_SQUAWK
+        const isTisb = ac.hex.startsWith('~')
 
         return (
           <div
@@ -129,18 +137,22 @@ export function AircraftOverlay({ mapRef }: Props) {
                 {' '}
                 <span className={styles.heading}>{formatHeading(ac.track)}</span>
               </div>
-              {/* Line 3: VFR (squawk 1200) or ORIG→DEST, then TYPE */}
-              {(isVfr || hasRoute || ac.typeCode) && (
+              {/* Line 3: VFR (squawk 1200) or ORIG→DEST, then TYPE, then a
+                  TIS-B source tag for radar-rebroadcast (~hex) targets */}
+              {(isVfr || hasRoute || ac.typeCode || isTisb) && (
                 <div className={`${styles.line} ${styles.lineTight}`}>
                   {isVfr ? (
-                    <span className={styles.vfr}>VFR{ac.typeCode ? ' ' : ''}</span>
+                    <span className={styles.vfr}>VFR</span>
                   ) : (
                     hasRoute && (
-                      <span className={styles.route}>{origin}→{dest}{ac.typeCode ? ' ' : ''}</span>
+                      <span className={styles.route}>{origin}→{dest}</span>
                     )
                   )}
                   {ac.typeCode && (
-                    <span className={styles.type}>{ac.typeCode}</span>
+                    <span className={styles.type}>{isVfr || hasRoute ? ' ' : ''}{ac.typeCode}</span>
+                  )}
+                  {isTisb && (
+                    <span className={styles.tisb}>{isVfr || hasRoute || ac.typeCode ? ' ' : ''}TIS-B</span>
                   )}
                 </div>
               )}

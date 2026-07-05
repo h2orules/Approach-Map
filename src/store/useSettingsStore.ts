@@ -15,6 +15,10 @@ interface SettingsStore {
   showSafeAltitudes: boolean
   showMva: boolean
   showAirspace: boolean
+  /** Show radar-derived TIS-B targets (hex prefixed with '~'). */
+  showTisb: boolean
+  /** Show VFR traffic (squawking 1200). */
+  showVfr: boolean
   /** Slider position (0–19) for the lower altitude filter handle. */
   altFilterMin: number
   /** Slider position (0–19) for the upper altitude filter handle. */
@@ -28,6 +32,8 @@ interface SettingsStore {
   toggleSafeAltitudes: () => void
   toggleMva: () => void
   toggleAirspace: () => void
+  toggleTisb: () => void
+  toggleVfr: () => void
   setAltFilterMin: (pos: number) => void
   setAltFilterMax: (pos: number) => void
 }
@@ -43,6 +49,8 @@ export const useSettingsStore = create<SettingsStore>()(
       showSafeAltitudes: false,
       showMva: false,
       showAirspace: false,
+      showTisb: true,
+      showVfr: true,
       altFilterMin: 0,
       altFilterMax: 19,
 
@@ -56,6 +64,8 @@ export const useSettingsStore = create<SettingsStore>()(
       toggleSafeAltitudes: () => set((s) => ({ showSafeAltitudes: !s.showSafeAltitudes })),
       toggleMva: () => set((s) => ({ showMva: !s.showMva })),
       toggleAirspace: () => set((s) => ({ showAirspace: !s.showAirspace })),
+      toggleTisb: () => set((s) => ({ showTisb: !s.showTisb })),
+      toggleVfr: () => set((s) => ({ showVfr: !s.showVfr })),
       setAltFilterMin: (pos) => set({ altFilterMin: Math.max(0, Math.min(19, pos)) }),
       setAltFilterMax: (pos) => set({ altFilterMax: Math.max(0, Math.min(19, pos)) }),
     }),

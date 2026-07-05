@@ -37,11 +37,29 @@
   backdrop-filter: blur(4px);
 }
 
+.callsignRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .callsign {
   color: #38bdf8;
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.05em;
+}
+
+/* Radar-rebroadcast (TIS-B) source tag — muted amber pill next to the id. */
+.tisbBadge {
+  color: #d6a44c;
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  border: 1px solid rgba(214, 164, 76, 0.5);
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 13px;
 }
 
 .row {

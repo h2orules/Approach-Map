@@ -126,6 +126,21 @@
     0 0 3px #0b0f14;
 }
 
+/* Line 3: TIS-B source tag (radar-rebroadcast targets) — muted amber, so it
+   reads as a data-source note rather than an identity/route. */
+.tisb {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d6a44c;
+  text-shadow:
+    -1px -1px 0 #0b0f14,
+     1px -1px 0 #0b0f14,
+    -1px  1px 0 #0b0f14,
+     1px  1px 0 #0b0f14,
+    0 0 3px #0b0f14;
+}
+
 /* Line 3: aircraft type code — same color as heading */
 .type {
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;

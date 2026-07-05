@@ -14,7 +14,7 @@
 set -euo pipefail
 
 RESOURCE_GROUP="${RESOURCE_GROUP:-approach-map-rg}"
-LOCATION="${LOCATION:-eastus2}"
+LOCATION="${LOCATION:-westus2}"
 APP_NAME="${APP_NAME:-approach-map}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

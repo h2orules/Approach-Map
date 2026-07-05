@@ -72,6 +72,20 @@ describe('useProcedureStore.applyDetection', () => {
     expect(store().detectedHexes.I16C).toBe(ref1)
   })
 
+  it('appends zero-count history samples once a procedure goes idle', () => {
+    store().setProcedures([approach('I16C')])
+    store().applyDetection({ I16C: act(['a', 'b'], 1000) }, {}, 1000)
+    expect(store().detectionHistory.I16C).toEqual([{ t: 1000, count: 2 }])
+
+    // Traffic leaves: the next polls must record zeros so the rolling average
+    // decays instead of holding the last nonzero counts for the whole window.
+    store().applyDetection({}, {}, 2000)
+    expect(store().detectionHistory.I16C).toEqual([
+      { t: 1000, count: 2 },
+      { t: 2000, count: 0 },
+    ])
+  })
+
   it('does not override an explicit user toggle', () => {
     store().setProcedures([approach('I16C')])
     store().setUserToggle('I16C', false)

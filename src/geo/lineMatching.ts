@@ -8,6 +8,14 @@ export function bearingDelta(a: number, b: number): number {
 export interface LineMatchOptions {
   maxCrossTrackNm: number
   directionToleranceDeg: number
+  /**
+   * Reject a match whose nearest segment is zero-length (duplicate consecutive
+   * coords) instead of accepting it with the direction gate skipped. Detection
+   * accepts them (a restriction leg on the same fix is still evidence); the
+   * flown/active-segment renderers reject them (a zero-length highlight is
+   * useless and would bypass the reciprocal-direction check).
+   */
+  rejectZeroLength?: boolean
 }
 
 export interface LineMatch {
@@ -48,8 +56,9 @@ export function matchPointToLine(
   const segEnd = coords[Math.min(segIdx + 1, coords.length - 1)]
   const nearestCoords = nearest.geometry.coordinates as [number, number]
 
-  // Zero-length segment carries no direction — skip the gate.
+  // Zero-length segment carries no direction — skip the gate (or reject).
   const zeroLen = segStart === segEnd || (segStart[0] === segEnd[0] && segStart[1] === segEnd[1])
+  if (zeroLen && opts.rejectZeroLength) return null
   const segBearing = zeroLen
     ? track
     : turf.bearing(turf.point(segStart), turf.point(segEnd))

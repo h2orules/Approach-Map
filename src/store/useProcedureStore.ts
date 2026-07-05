@@ -147,7 +147,12 @@ export const useProcedureStore = create<ProcedureStore>((set, get) => ({
         detectedHexes[id] = sameHexes(s.detectedHexes[id], act.hexes) ? s.detectedHexes[id] : act.hexes
       }
 
+      // Zero samples for previously-sampled procedures keep their rolling
+      // average decaying once traffic leaves — otherwise a procedure that just
+      // went idle would hold its last nonzero average for the whole window and
+      // skew the safeAltitude sector ranking.
       const counts: Record<string, number> = {}
+      for (const id of Object.keys(s.detectionHistory)) counts[id] = 0
       for (const [id, act] of Object.entries(activity)) counts[id] = act.hexes.length
       const detectionHistory = appendSamples(
         s.detectionHistory,

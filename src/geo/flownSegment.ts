@@ -40,6 +40,7 @@ export function findFlownSegmentMatch(
       const match = matchPointToLine(coords, lat, lon, track, {
         maxCrossTrackNm: MAX_OFFSET_NM,
         directionToleranceDeg: DIRECTION_TOLERANCE_DEG,
+        rejectZeroLength: true,
       })
       if (!match) continue
       if (!best || match.crossTrackNm < best.dist) {

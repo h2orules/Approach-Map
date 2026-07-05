@@ -36,6 +36,7 @@ export function findActiveSegments(
         const match = matchPointToLine(coords, ac.interpLat, ac.interpLon, ac.track, {
           maxCrossTrackNm: MAX_OFFSET_NM,
           directionToleranceDeg: DIRECTION_TOLERANCE_DEG,
+          rejectZeroLength: true,
         })
         if (!match) continue
 

@@ -51,6 +51,17 @@ describe('matchPointToLine', () => {
     expect(m).not.toBeNull()
     expect(m!.segIdx).toBe(0)
   })
+
+  it('rejects a zero-length segment when rejectZeroLength is set', () => {
+    const degenerate: [number, number][] = [
+      [0, 0],
+      [0, 0],
+      [0, 1],
+    ]
+    // Same geometry as above, but the renderers' policy drops the match.
+    const m = matchPointToLine(degenerate, 0, 0, 200, { ...OPTS, rejectZeroLength: true })
+    expect(m).toBeNull()
+  })
 })
 
 describe('segmentFraction', () => {

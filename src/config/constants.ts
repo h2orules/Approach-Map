@@ -3,29 +3,41 @@ export const ADSBX_SEARCH_RADIUS_NM = 50
 export const DEFAULT_POLL_INTERVAL_MS = 5_000
 export const STALE_AIRCRAFT_THRESHOLD_S = 60
 
-// SID/STAR cross-track tolerance: wider to catch traffic still navigating to the route.
-export const CROSS_TRACK_THRESHOLD_NM = 0.5
-// Approach cross-track tolerance: tighter so parallel runways are disambiguated by
-// lateral position. At KSEA 16L/16C spacing is ~0.13 nm; 0.25 nm keeps a comfortable
-// margin while still being well inside the closest pair.
-export const CROSS_TRACK_APPROACH_NM = 0.25
 // Max angle between an aircraft's track and the procedure's local direction for
 // it to count as "flying" that procedure. Rejects reciprocal-runway matches
 // (e.g. a rwy-16 arrival sitting on the shared rwy-34 approach centerline).
 // 45° covers the FAA's 30° ground-based navaid approach coverage plus a buffer
-// for wind correction.
+// for wind correction. Also used by flownSegment/activeSegments.
 export const DIRECTION_TOLERANCE_DEG = 45
-export const ALT_THRESHOLD_NEAR_FT = 250
-export const ALT_THRESHOLD_FAR_FT = 500
-// Tight altitude tolerance used when both bracketing waypoints have exact (AT or
-// BETWEEN) altitude constraints, or when on a precision GS segment.  Linear
-// interpolation / GS geometry is accurate to ~50 ft in those cases, so 100 ft
-// gives a comfortable margin without admitting adjacent-runway traffic.
-export const ALT_THRESHOLD_CONSTRAINED_FT = 100
 export const NEAR_AIRPORT_DISTANCE_NM = 5
 // 3° glide slope: sin(3°) × 6076 ft/nm ≈ 318 ft/nm.  Used to project expected
 // altitude on the GS segment of precision approaches.
 export const GS_FEET_PER_NM = 318
+
+// ── Time-confirmed detection machine (src/geo/detectionMachine.ts) ──────────
+// Loose per-poll "candidate" gates admit noisy/established traffic; a track only
+// becomes visible after it sustains matches over time (hysteresis). Confirmed
+// tracks are re-evaluated with widened gates so a level-off or transient jitter
+// doesn't shed the lock — only sustained lateral departure does.
+//
+// KSEA 16L/16C centerlines are ~0.13 nm apart, so the candidate approach gate
+// (0.35 nm) admits the neighbor; min-cross-track assignment plus the reassign
+// streak resolve which runway a plane is actually on. A perpendicular crosser
+// can't accumulate the required matches within the direction gate in 10 s.
+export const DETECT_CANDIDATE_XT_APPROACH_NM = 0.35
+export const DETECT_CANDIDATE_XT_SIDSTAR_NM = 0.8
+export const DETECT_CANDIDATE_DIR_DEG = 45
+export const DETECT_CANDIDATE_ALT_CONSTRAINED_FT = 200
+export const DETECT_CANDIDATE_ALT_NEAR_FT = 400
+export const DETECT_CANDIDATE_ALT_FAR_FT = 800
+export const DETECT_CONFIRMED_XT_APPROACH_NM = 0.6
+export const DETECT_CONFIRMED_XT_SIDSTAR_NM = 1.5
+export const DETECT_CONFIRMED_DIR_DEG = 60
+export const DETECT_CONFIRM_MIN_MATCHES = 3
+export const DETECT_CONFIRM_MIN_DURATION_MS = 10_000
+export const DETECT_CANDIDATE_TTL_MS = 15_000
+export const DETECT_CONFIRMED_TTL_MS = 30_000
+export const DETECT_REASSIGN_CLOSER_STREAK = 3
 
 export const AUTO_HIDE_DELAY_MS = 5 * 60 * 1_000
 
@@ -103,3 +115,10 @@ export const MVA_COLOR = '#e2e8f0'
 export const MVA_FILL_OPACITY = 0.04
 export const MVA_LINE_WIDTH = 1
 export const MVA_LINE_OPACITY = 0.55
+
+// Route enrichment (origin/destination lookup) cache behavior — see src/api/routes.ts.
+// Confirmed-unknown callsigns are negative-cached for this long before re-querying.
+export const ROUTE_NEGATIVE_TTL_MS = 10 * 60 * 1000
+// Transient provider failures (network/5xx) back off exponentially per callsign.
+export const ROUTE_RETRY_BASE_MS = 30_000
+export const ROUTE_RETRY_MAX_MS = 5 * 60 * 1000

@@ -16,10 +16,10 @@ A localhost web app that visualizes live ADS-B aircraft positions relative to pu
 
 Copy `.env.example` to `.env.local` and fill in:
 
-- `VITE_MAPBOX_TOKEN` — Mapbox public token (account.mapbox.com, scopes: styles:read, tiles:read)
-- `VITE_ADSBX_API_KEY` — ADS-B Exchange supporter-tier API key (sent as `X-RapidAPI-Key`)
+- `VITE_MAPBOX_TOKEN` — Mapbox public token (account.mapbox.com, scopes: styles:read, tiles:read). Public by design; inlined into the client bundle.
+- `ADSBX_API_KEY` — ADS-B Exchange supporter-tier API key. Deliberately **not** `VITE_`-prefixed: it must never enter the client bundle. In dev the Vite proxy attaches it as `X-RapidAPI-Key` server-side (`vite.config.ts`); in production it's a Static Web App application setting read by the Functions proxy (`api/src/functions/proxy.ts`).
 
-The dATIS (atis.info) and adsbdb route-lookup APIs are keyless — no config needed.
+The dATIS (atis.info), adsbdb route-lookup, aviationapi, and FAA (CIFP/d-TPP) APIs are keyless — no config needed.
 
 ## Dev
 
@@ -34,6 +34,18 @@ npm run build-static-data # Regenerate public/data/*.json (see Data sources)
 
 There is no ESLint/Prettier config in the repo; match the surrounding code style
 (2-space indent, single quotes, no semicolons, CSS Modules per component).
+
+## Deployment
+
+Deploys to **Azure Static Web Apps (Free tier)** — static SPA + the six
+`/api/*` proxy routes as SWA-managed Azure Functions (`api/` folder, Node 20).
+GitHub Actions deploys on push to `main` and creates PR preview environments
+(`.github/workflows/azure-static-web-apps.yml`); `.github/workflows/ci.yml`
+runs typecheck + tests + build on every PR and main push and is the required
+status check for merging. Azure resources are defined in `infra/main.bicep`,
+provisioned via `scripts/azure/*.sh`. Shared VS Code debug/test configs are in
+`.vscode/`. See `DEPLOYMENT.md` for the full setup (secrets, custom domain,
+CI/branch protection, local debugging, limits, troubleshooting).
 
 ## Directory layout
 
@@ -50,7 +62,10 @@ src/
   types/         Shared TS types (aircraft, airport, procedure)
   utils/         Pure helpers + __tests__ (airac, arincCoords, altitude*, airlines, aircraftTypes, colorScheme, formatters, mapImages)
   workers/       cifpParser.worker.ts — parses ARINC 424 off the main thread
+api/             Azure Functions proxy for production (mirrors the vite.config.ts dev proxies)
+infra/           main.bicep — Azure resource definitions (Static Web App)
 scripts/         buildStaticData.ts — regenerates public/data/*.json
+scripts/azure/   az-cli scripts: provision, secrets, custom domain, teardown
 public/data/     airports.json (88 airports), runways.json (85 airports)
 ```
 
@@ -103,8 +118,11 @@ CIFP file facts (verified against live FAA data, June 2026):
 | Runway geometry | `public/data/runways.json` (85 airports) | Loaded on airport select (`useRunways`) |
 
 Dev proxies are defined in `vite.config.ts` (`/api/adsbx`, `/api/aviationapi`,
-`/api/faa-cifp`, `/api/adsbdb`, `/api/datis`, `/api/dtpp`, `/api/faa-mva`,
-`/api/faa-airspace`) to avoid CORS in the browser.
+`/api/faa-cifp`, `/api/adsbdb`, `/api/adsblol`, `/api/datis`, `/api/dtpp`,
+`/api/faa-mva`, `/api/faa-airspace`) to avoid CORS in the browser. In
+production the same `/api/*` paths are served by the Azure Functions
+catch-all proxy in `api/src/functions/proxy.ts` — when adding an upstream,
+update **both** route tables.
 
 To expand runway/airport coverage, run:
 

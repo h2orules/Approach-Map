@@ -1,82 +1,96 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      '/api/adsbx': {
-        target: 'https://adsbexchange-com1.p.rapidapi.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/adsbx/, '/v2'),
-      },
-      '/api/aviationapi': {
-        target: 'https://www.aviationapi.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/aviationapi/, '/api/v1'),
-      },
-      '/api/faa-cifp': {
-        target: 'https://aeronav.faa.gov',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/faa-cifp/, '/Upload_313-d/cifp'),
-      },
-      '/api/adsbdb': {
-        target: 'https://api.adsbdb.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/adsbdb/, '/v0'),
-      },
-      '/api/adsblol': {
-        target: 'https://api.adsb.lol',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/adsblol/, '/api/0'),
-      },
-      '/api/datis': {
-        target: 'https://atis.info',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/datis/, '/api'),
-      },
-      '/api/dtpp': {
-        target: 'https://aeronav.faa.gov',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/dtpp/, '/d-tpp'),
-      },
-      // MVA/MIA sector-chart AIXM XML, published per-TRACON by FAA AJV. The
-      // faa.gov digital_products/mva_mia page is just an HTML index; the
-      // actual `<FACILITY>_MVA_FUS3.xml` / `_FUS5.xml` files it links to are
-      // hosted on aeronav.faa.gov (verified by fetching the index page and
-      // inspecting its <a href> list directly, e.g. .../MVA_Charts/aixm/
-      // S46_MVA_FUS3.xml for Seattle) — a different host+path than
-      // faa-cifp's aeronav.faa.gov/Upload_313-d/cifp above.
-      '/api/faa-mva': {
-        target: 'https://aeronav.faa.gov',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/faa-mva/, '/MVA_Charts/aixm'),
-      },
-      // FAA AIS "Class_Airspace" ArcGIS FeatureServer (layer 0) — Class B/C/D/E
-      // boundaries with floor/ceiling altitudes, queried by bbox as GeoJSON.
-      // See src/api/faaAirspace.ts. The service sends CORS `*`, but we proxy it
-      // anyway to keep every upstream behind /api and future-proof against CORS
-      // changes.
-      '/api/faa-airspace': {
-        target: 'https://services6.arcgis.com',
-        changeOrigin: true,
-        rewrite: (path) =>
-          path.replace(
-            /^\/api\/faa-airspace/,
-            '/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0',
-          ),
-      },
-    },
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          mapbox: ['mapbox-gl'],
-          turf: ['@turf/turf'],
-          'react-vendor': ['react', 'react-dom', 'react-map-gl'],
+// Dev-only proxies for the nine upstream APIs. In production these same
+// /api/* paths are served by the Azure Functions proxy in api/ — keep the
+// two route tables in sync (see api/src/functions/proxy.ts).
+export default defineConfig(({ mode }) => {
+  // ADSBX_API_KEY is deliberately NOT VITE_-prefixed: it must never be
+  // inlined into the client bundle. The dev server attaches it here, on
+  // the server side of the proxy, exactly like the production Functions do.
+  const env = loadEnv(mode, process.cwd(), '')
+
+  return {
+    plugins: [react()],
+    server: {
+      proxy: {
+        '/api/adsbx': {
+          target: 'https://adsbexchange-com1.p.rapidapi.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/adsbx/, '/v2'),
+          headers: {
+            'X-RapidAPI-Key': env.ADSBX_API_KEY ?? '',
+            'X-RapidAPI-Host': 'adsbexchange-com1.p.rapidapi.com',
+          },
+        },
+        '/api/aviationapi': {
+          target: 'https://www.aviationapi.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/aviationapi/, '/api/v1'),
+        },
+        '/api/faa-cifp': {
+          target: 'https://aeronav.faa.gov',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/faa-cifp/, '/Upload_313-d/cifp'),
+        },
+        '/api/adsbdb': {
+          target: 'https://api.adsbdb.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/adsbdb/, '/v0'),
+        },
+        '/api/adsblol': {
+          target: 'https://api.adsb.lol',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/adsblol/, '/api/0'),
+        },
+        '/api/datis': {
+          target: 'https://atis.info',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/datis/, '/api'),
+        },
+        '/api/dtpp': {
+          target: 'https://aeronav.faa.gov',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/dtpp/, '/d-tpp'),
+        },
+        // MVA/MIA sector-chart AIXM XML, published per-TRACON by FAA AJV. The
+        // faa.gov digital_products/mva_mia page is just an HTML index; the
+        // actual `<FACILITY>_MVA_FUS3.xml` / `_FUS5.xml` files it links to are
+        // hosted on aeronav.faa.gov (verified by fetching the index page and
+        // inspecting its <a href> list directly, e.g. .../MVA_Charts/aixm/
+        // S46_MVA_FUS3.xml for Seattle) — a different host+path than
+        // faa-cifp's aeronav.faa.gov/Upload_313-d/cifp above.
+        '/api/faa-mva': {
+          target: 'https://aeronav.faa.gov',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/faa-mva/, '/MVA_Charts/aixm'),
+        },
+        // FAA AIS "Class_Airspace" ArcGIS FeatureServer (layer 0) — Class B/C/D/E
+        // boundaries with floor/ceiling altitudes, queried by bbox as GeoJSON.
+        // See src/api/faaAirspace.ts. The service sends CORS `*`, but we proxy it
+        // anyway to keep every upstream behind /api and future-proof against CORS
+        // changes.
+        '/api/faa-airspace': {
+          target: 'https://services6.arcgis.com',
+          changeOrigin: true,
+          rewrite: (path) =>
+            path.replace(
+              /^\/api\/faa-airspace/,
+              '/ssFJjBXIUyZDrSYZ/arcgis/rest/services/Class_Airspace/FeatureServer/0',
+            ),
         },
       },
     },
-  },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            mapbox: ['mapbox-gl'],
+            turf: ['@turf/turf'],
+            'react-vendor': ['react', 'react-dom', 'react-map-gl'],
+          },
+        },
+      },
+    },
+  }
 })

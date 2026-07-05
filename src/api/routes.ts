@@ -103,20 +103,39 @@ const adsbLolProvider: RouteProvider = {
   name: 'adsblol',
   async lookupBatch(queries) {
     if (queries.length === 0) return new Map()
+
+    // An empty Map returned here means "transient failure" to the caller, which
+    // backs the callsigns off WITHOUT cascading to adsbdb. Reserve that only for
+    // real transport failures (network error / non-2xx). A 2xx that carries no
+    // usable route data is a different case handled below.
+    let resp: Response
     try {
-      const resp = await fetch('/api/adsblol/routeset', {
+      resp = await fetch('/api/adsblol/routeset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           planes: queries.map((q) => ({ callsign: q.callsign, lat: q.lat, lng: q.lon })),
         }),
       })
-      if (!resp.ok) return new Map()
-      const json: unknown = await resp.json()
-      return parseRoutesetResponse(json)
     } catch {
-      return new Map()
+      return new Map() // network error -- transient, back off (no cascade)
     }
+    if (!resp.ok) return new Map() // non-2xx -- transient, back off (no cascade)
+
+    let json: unknown = null
+    try {
+      json = await resp.json()
+    } catch {
+      // 2xx with an empty/unparseable body -- observed when adsb.lol's routeset
+      // edge returns bare 201s. Not transient; fall through to cascade.
+    }
+    const parsed = parseRoutesetResponse(json)
+    if (parsed.size > 0) return parsed
+
+    // adsb.lol answered but gave us nothing usable for the entire batch. Mark
+    // every callsign unknown-here (not a transient miss) so they cascade to the
+    // adsbdb fallback instead of the outage silently suppressing all enrichment.
+    return new Map(queries.map((q) => [q.callsign.trim().toUpperCase(), null]))
   },
 }
 

@@ -16,8 +16,13 @@ dist-ssr/
 .env.*.local
 
 # Editor
+# Keep the shared debug/build configs in version control; ignore everything
+# else under .vscode (personal, machine-specific settings).
 .vscode/*
 !.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
 .idea
 .DS_Store
 *.suo
@@ -28,3 +33,8 @@ dist-ssr/
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Azureite storage simulator
+__blobstorage__/
+__queuestorage__/
+__azurite_db*

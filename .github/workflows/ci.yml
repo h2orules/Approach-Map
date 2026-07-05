@@ -1,0 +1,45 @@
+# Validation for pull requests and pushes to main: typecheck, unit tests,
+# and a full production build of both the SPA and the Functions API. This is
+# the status check to require in branch protection before a PR can merge
+# (see DEPLOYMENT.md > Continuous integration & branch protection).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A newer push to the same branch/PR cancels the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npx vitest run
+
+      # `npm run build` is `tsc -b && vite build`, so this covers the SPA
+      # typecheck and bundle. No secrets needed — the build succeeds without
+      # VITE_MAPBOX_TOKEN (the token only affects runtime map tiles).
+      - name: Typecheck and build SPA
+        run: npm run build
+
+      - name: Install and build Functions API
+        run: npm ci && npm run build
+        working-directory: api

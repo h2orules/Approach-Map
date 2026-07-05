@@ -1,0 +1,21 @@
+{
+  "name": "approach-map-api",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Azure Functions proxy layer for Approach Map's upstream APIs",
+  "main": "dist/functions/*.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^5.5.3"
+  }
+}

@@ -25,6 +25,9 @@ export interface LineMatch {
   segEnd: [number, number]
   segBearing: number
   nearestCoords: [number, number]
+  /** Distance (nm) from the line's start to the nearest point — the aircraft's
+   *  along-track position. Lets the detection machine require net progress. */
+  alongTrackNm: number
 }
 
 /**
@@ -50,6 +53,7 @@ export function matchPointToLine(
   const nearest = turf.nearestPointOnLine(line, acPt, { units: 'nauticalmiles' })
   const crossTrackNm = nearest.properties.dist ?? Infinity
   if (crossTrackNm > opts.maxCrossTrackNm) return null
+  const alongTrackNm = nearest.properties.location ?? 0
 
   const segIdx = nearest.properties.index ?? 0
   const segStart = coords[segIdx]
@@ -64,7 +68,7 @@ export function matchPointToLine(
     : turf.bearing(turf.point(segStart), turf.point(segEnd))
   if (!zeroLen && bearingDelta(track, segBearing) > opts.directionToleranceDeg) return null
 
-  return { crossTrackNm, segIdx, segStart, segEnd, segBearing, nearestCoords }
+  return { crossTrackNm, segIdx, segStart, segEnd, segBearing, nearestCoords, alongTrackNm }
 }
 
 /**

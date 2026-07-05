@@ -35,9 +35,24 @@ export const DETECT_CONFIRMED_XT_SIDSTAR_NM = 1.5
 export const DETECT_CONFIRMED_DIR_DEG = 60
 export const DETECT_CONFIRM_MIN_MATCHES = 3
 export const DETECT_CONFIRM_MIN_DURATION_MS = 10_000
+// SID/STAR confirmation additionally requires this much net along-track
+// progress between the first and confirming match. Time-based hysteresis alone
+// can't reject VFR traffic circling near a leg: one standard-rate lap keeps the
+// track inside the direction gate for ~30 s (enough matches over enough time)
+// while covering almost no distance along the line. A real SID/STAR flyer
+// advances continuously; 1.5 nm delays a 200 kt confirmation by ~15 s and holds
+// out a 90 kt trainer's aligned arc (~0.7 nm per lap). Approaches are exempt —
+// they're already gated by glideslope/altitude and the MAP rules, and short
+// finals may not have 1.5 nm of line left to cover.
+export const DETECT_CONFIRM_MIN_PROGRESS_NM = 1.5
 export const DETECT_CANDIDATE_TTL_MS = 15_000
 export const DETECT_CONFIRMED_TTL_MS = 30_000
 export const DETECT_REASSIGN_CLOSER_STREAK = 3
+// US VFR squawk. Aircraft squawking this are never on an IFR clearance, so the
+// detection machine ignores them entirely (a 1200 squawker shooting a practice
+// approach isn't "using" the procedure). VFR flight-following traffic carries a
+// discrete code and remains detectable — geometry gates must handle it.
+export const VFR_SQUAWK = '1200'
 
 export const AUTO_HIDE_DELAY_MS = 5 * 60 * 1_000
 

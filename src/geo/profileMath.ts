@@ -17,9 +17,12 @@ const HOLD_PATH_TERMS = new Set(['HM', 'HF', 'HA', 'PI'])
 
 /** A live aircraft's position on the profile (see ProfilePanel/ProfileSvg). */
 export interface LiveAircraft {
+  hex: string
   distNm: number
   altFt: number
   label: string
+  /** Whether this is the currently-selected aircraft (drawn in accent styling; others are dimmed). */
+  isSelected: boolean
 }
 
 export interface ProfileFix {
@@ -334,4 +337,34 @@ export function alongTrackNm(t: ProcedureTransition, lat: number, lon: number): 
   const pt = turf.point([lon, lat])
   const nearest = turf.nearestPointOnLine(line, pt, NM)
   return { distNm: nearest.properties.location ?? 0, xtNm: nearest.properties.dist ?? 0 }
+}
+
+/**
+ * Label anti-collision for the live-aircraft glyphs on the profile: decides
+ * whether each entry's callsign label should sit 'above' or 'below' its dot.
+ * Entries are walked in `distNm` order; when two consecutive entries would sit
+ * closer than `minGapPx` on screen (`nmPerPx` converts the along-track domain
+ * to pixels, matching the caller's x-scale), the later one flips to the
+ * opposite side of its predecessor so the labels don't overlap. Widely-spaced
+ * entries all default to 'above'. Returned in the same order as `entries`
+ * (not the sorted order used internally) and is a pure function of its inputs.
+ */
+export function placeProfileLabels(
+  entries: { distNm: number }[],
+  nmPerPx: number,
+  minGapPx = 40,
+): Array<'above' | 'below'> {
+  const order = entries.map((_, i) => i).sort((a, b) => entries[a].distNm - entries[b].distNm)
+  const placement: Array<'above' | 'below'> = entries.map(() => 'above')
+
+  let prevIdx: number | null = null
+  for (const idx of order) {
+    if (prevIdx !== null) {
+      const gapPx = nmPerPx > 0 ? Math.abs(entries[idx].distNm - entries[prevIdx].distNm) / nmPerPx : Infinity
+      placement[idx] = gapPx < minGapPx ? (placement[prevIdx] === 'above' ? 'below' : 'above') : 'above'
+    }
+    prevIdx = idx
+  }
+
+  return placement
 }

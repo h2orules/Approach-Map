@@ -9,6 +9,7 @@ import {
   fixRenderAltitudes,
   segmentDistancesNm,
   labelStaggerOffsets,
+  placeProfileLabels,
 } from '../profileMath'
 import type { ProfileFix, ProfileModel } from '../profileMath'
 import type { Procedure, ProcedureLeg, ProcedureTransition } from '../../types/procedure'
@@ -380,5 +381,23 @@ describe('labelStaggerOffsets', () => {
 
   it('is stable (all zero offset) when every fix shares the same altitude', () => {
     expect(labelStaggerOffsets([2000, 2000], 40)).toEqual([0, 0])
+  })
+})
+
+describe('placeProfileLabels', () => {
+  it('places every label above when entries are spread out', () => {
+    const entries = [{ distNm: 0 }, { distNm: 10 }, { distNm: 20 }]
+    expect(placeProfileLabels(entries, 0.01)).toEqual(['above', 'above', 'above'])
+  })
+
+  it('alternates label placement for two closely-spaced entries', () => {
+    const entries = [{ distNm: 0 }, { distNm: 0.05 }]
+    expect(placeProfileLabels(entries, 0.01)).toEqual(['above', 'below'])
+  })
+
+  it('resets to above once spacing widens again, independent of input order', () => {
+    // Sorted by distNm: idx1 (0) -> idx2 (0.05, close -> flips) -> idx0 (5, far -> resets to above).
+    const entries = [{ distNm: 5 }, { distNm: 0 }, { distNm: 0.05 }]
+    expect(placeProfileLabels(entries, 0.01)).toEqual(['above', 'above', 'below'])
   })
 })

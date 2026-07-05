@@ -64,6 +64,16 @@
   color: #cbd5e1;
 }
 
+/* Secondary "plan and brief" departure runways — de-emphasized so they read
+   as advisory, not primary. */
+.atisValueAdvisory {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  color: #94a3b8;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+
 .atisFullText {
   position: absolute;
   left: calc(100% + 10px);

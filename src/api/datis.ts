@@ -9,10 +9,12 @@ export interface AtisInfo {
   runwayPrefs: Record<string, string[]>
   /** Departure runways mentioned in the ATIS (e.g. ["16L"]). */
   depRunways: string[]
+  /** Runways called out for visual approaches (not a specific CIFP type). */
+  visualRunways: string[]
   raw: string
 }
 
-interface DatisEntry {
+export interface DatisEntry {
   airport: string
   type: string   // 'combined' | 'arr' | 'dep'
   code: string   // single letter
@@ -20,50 +22,97 @@ interface DatisEntry {
 }
 
 // Map ATIS approach-type keywords → CIFP procedure name prefix.
-// Order matters: ILS must come before LOC so "ILS OR LOC" maps to ['I','L'].
-const APPROACH_TYPE_MAP: Array<{ re: RegExp; prefix: string }> = [
-  { re: /\bILS\b/, prefix: 'I' },
-  { re: /\bLOC\b/, prefix: 'L' },
-  { re: /\bRNAV\b|\bGPS\b/, prefix: 'R' },
-  { re: /\bLDA\b|\bSDF\b/, prefix: 'H' },
-  { re: /\bVOR\b/, prefix: 'V' },
-  { re: /\bNDB\b/, prefix: 'N' },
-]
+const APPROACH_TOKEN_PREFIX: Record<string, string> = {
+  ILS: 'I',
+  LOC: 'L',
+  RNAV: 'R',
+  GPS: 'R',
+  RNP: 'R',
+  LDA: 'H',
+  SDF: 'H',
+  VOR: 'V',
+  NDB: 'N',
+}
 
 /** Human-readable labels for CIFP approach type prefixes. */
 export const PREFIX_READABLE: Record<string, string> = {
   I: 'ILS', L: 'LOC', R: 'RNAV', H: 'LDA', V: 'VOR', N: 'NDB',
 }
 
-const RWY_KEYWORD = /\b(?:RUNWAY|RWY)S?\b/
-const DEP_KEYWORD = /\bDEP(?:G|ARTING|ARTURE)?\b/
+// Matches any approach-type keyword; iterated in text order so "ILS OR LOC" → ['I','L'].
+const APPROACH_TOKEN_RE = /\bILS\b|\bLOC\b|\bRNAV\b|\bGPS\b|\bRNP\b|\bLDA\b|\bSDF\b|\bVOR\b|\bNDB\b/g
 
-/** Extract runway designators (01–36 + optional L/C/R) from a string. */
+// A runway-list clause: "RWY 16L", "RWYS 16L AND 16C", "RUNWAY 34C/34R", etc.
+// Captures the runway list so individual designators can be pulled out separately.
+const RUNWAY_LIST_RE = /(?:RUNWAY|RWY)S?\s+((?:\d{2}[LCR]?)(?:\s*(?:,|AND|\/)\s*\d{2}[LCR]?)*)/g
+
+const RWY_KEYWORD = /\b(?:RUNWAY|RWY)S?\b/
+const DEP_KEYWORD = /\bDEP(?:G|ART(?:ING|URE|URES))?\b/
+const VISUAL_KEYWORD = /\bVISUALS?\b/
+
+function isValidRunway(r: string): boolean {
+  const n = parseInt(r.slice(0, 2), 10)
+  return n >= 1 && n <= 36
+}
+
+/** Pull individual runway designators (01–36 + optional L/C/R) out of a runway-list clause. */
+function parseRunwayList(list: string): string[] {
+  return [...list.matchAll(/\d{2}[LCR]?/g)]
+    .map((m) => m[0])
+    .filter(isValidRunway)
+}
+
+/** Extract runway designators (01–36 + optional L/C/R) anywhere in a string. */
 function extractRunways(s: string): string[] {
   return [...s.matchAll(/\b(\d{2}[LCR]?)\b/g)]
     .map((m) => m[1])
-    .filter((r) => {
-      const n = parseInt(r.slice(0, 2), 10)
-      return n >= 1 && n <= 36
-    })
+    .filter(isValidRunway)
+}
+
+/** Approach-type prefixes present in text, in the order they occur (first occurrence wins ties). */
+function scanApproachTypes(window: string): string[] {
+  const prefixes: string[] = []
+  for (const m of window.matchAll(APPROACH_TOKEN_RE)) {
+    const prefix = APPROACH_TOKEN_PREFIX[m[0]]
+    if (prefix && !prefixes.includes(prefix)) prefixes.push(prefix)
+  }
+  return prefixes
 }
 
 export function parseAtisText(text: string): AtisInfo {
   const upper = text.toUpperCase()
   const code = upper.match(/\bINFO\s+([A-Z])\b/)?.[1] ?? '?'
   const runwayPrefs: Record<string, string[]> = {}
+  const visualRunways: string[] = []
   const depRunways: string[] = []
 
-  for (const rawSentence of upper.split('.')) {
+  for (const rawSentence of upper.split(/[.;]/)) {
     const s = rawSentence.trim()
+    if (!s) continue
 
-    // ── Approach-in-use sentences ────────────────────────────────────────────
-    const prefixes: string[] = []
-    for (const { re, prefix } of APPROACH_TYPE_MAP) {
-      if (re.test(s) && !prefixes.includes(prefix)) prefixes.push(prefix)
-    }
-    if (prefixes.length > 0 && RWY_KEYWORD.test(s)) {
-      for (const rwy of extractRunways(s)) {
+    // ── Approach-in-use clauses ──────────────────────────────────────────────
+    // Each runway-list keyword ("RWY"/"RUNWAY") only picks up approach types
+    // mentioned since the previous runway-list match (or the sentence start),
+    // so "ILS RWY 16L, RNAV RWY 16R" doesn't broadcast ILS onto 16R.
+    let prevEnd = 0
+    for (const m of s.matchAll(RUNWAY_LIST_RE)) {
+      const matchIndex = m.index ?? 0
+      const window = s.slice(prevEnd, matchIndex)
+      const runways = parseRunwayList(m[1])
+      prevEnd = matchIndex + m[0].length
+
+      if (runways.length === 0) continue
+
+      if (VISUAL_KEYWORD.test(window)) {
+        for (const rwy of runways) {
+          if (!visualRunways.includes(rwy)) visualRunways.push(rwy)
+        }
+        continue
+      }
+
+      const prefixes = scanApproachTypes(window)
+      if (prefixes.length === 0) continue
+      for (const rwy of runways) {
         if (!runwayPrefs[rwy]) runwayPrefs[rwy] = []
         for (const p of prefixes) {
           if (!runwayPrefs[rwy].includes(p)) runwayPrefs[rwy].push(p)
@@ -71,7 +120,7 @@ export function parseAtisText(text: string): AtisInfo {
       }
     }
 
-    // ── Departure-runway sentences ────────────────────────────────────────────
+    // ── Departure-runway sentences ───────────────────────────────────────────
     if (DEP_KEYWORD.test(s) && RWY_KEYWORD.test(s)) {
       for (const rwy of extractRunways(s)) {
         if (!depRunways.includes(rwy)) depRunways.push(rwy)
@@ -79,13 +128,14 @@ export function parseAtisText(text: string): AtisInfo {
     }
   }
 
-  return { code, runwayPrefs, depRunways, raw: text }
+  return { code, runwayPrefs, depRunways, visualRunways, raw: text }
 }
 
 /**
  * Build a compact arrival summary string from ATIS info.
  * e.g. { "16R": ["I"], "16L": ["I"] } → "ILS 16R 16L"
  *      { "28R": ["I"], "28L": ["R"] } → "ILS 28R · RNAV 28L"
+ * Visual runways (if any) are appended as a trailing "VIS 28L 28R" segment.
  */
 export function arrivalSummary(info: AtisInfo): string {
   const byType: Record<string, string[]> = {}
@@ -94,9 +144,52 @@ export function arrivalSummary(info: AtisInfo): string {
     if (!byType[t]) byType[t] = []
     byType[t].push(rwy)
   }
-  return Object.entries(byType)
-    .map(([t, rwys]) => `${PREFIX_READABLE[t] ?? t} ${rwys.join(' ')}`)
-    .join(' · ')
+  const segments = Object.entries(byType).map(
+    ([t, rwys]) => `${PREFIX_READABLE[t] ?? t} ${rwys.join(' ')}`,
+  )
+  if (info.visualRunways.length > 0) {
+    segments.push(`VIS ${info.visualRunways.join(' ')}`)
+  }
+  return segments.join(' · ')
+}
+
+/**
+ * Combine one or more D-ATIS entries (split arr/dep, or a single combined
+ * broadcast) into one AtisInfo. Approach info and code come from the arrival
+ * entry when present (including any dep runways mentioned within it);
+ * departure runways from a separate dep entry are unioned in.
+ */
+export function parseDatisEntries(entries: DatisEntry[]): AtisInfo | null {
+  if (entries.length === 0) return null
+
+  const arrEntry = entries.find((e) => e.type === 'arr')
+  const depEntry = entries.find((e) => e.type === 'dep')
+
+  if (arrEntry || depEntry) {
+    const arrInfo = arrEntry ? parseAtisText(arrEntry.datis) : null
+    const depInfo = depEntry ? parseAtisText(depEntry.datis) : null
+
+    const depRunways = [...(arrInfo?.depRunways ?? [])]
+    for (const rwy of depInfo?.depRunways ?? []) {
+      if (!depRunways.includes(rwy)) depRunways.push(rwy)
+    }
+
+    const raw = arrEntry && depEntry
+      ? `${arrEntry.datis}\n\n${depEntry.datis}`
+      : (arrEntry ?? depEntry)!.datis
+
+    return {
+      code: arrInfo?.code ?? depInfo?.code ?? '?',
+      runwayPrefs: arrInfo?.runwayPrefs ?? {},
+      depRunways,
+      visualRunways: arrInfo?.visualRunways ?? [],
+      raw,
+    }
+  }
+
+  // Combined-only (or unrecognized type) — parse whichever entry is available.
+  const entry = entries.find((e) => e.type === 'combined') ?? entries[0]
+  return parseAtisText(entry.datis)
 }
 
 export async function fetchDatis(icao: string): Promise<AtisInfo | null> {
@@ -107,14 +200,7 @@ export async function fetchDatis(icao: string): Promise<AtisInfo | null> {
     const data: unknown = await resp.json()
     if (!Array.isArray(data) || data.length === 0) return null
 
-    const entries = data as DatisEntry[]
-    // Prefer arrival ATIS (has approach info), then combined, then first available.
-    const entry =
-      entries.find((e) => e.type === 'arr') ??
-      entries.find((e) => e.type === 'combined') ??
-      entries[0]
-
-    return parseAtisText(entry.datis)
+    return parseDatisEntries(data as DatisEntry[])
   } catch {
     return null
   }

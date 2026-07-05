@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import type { AltConstraint } from '../../types/procedure'
-import { BoltGlyph, DmeD, dmeGlyphWidth } from '../map/glyphs'
+import { BoltGlyph, DmeD, dmeGlyphWidth, MALTESE_PATH } from '../map/glyphs'
 import {
   descentProfilePoints,
   fixRenderAltitudes,
@@ -106,21 +106,8 @@ function ProfileBolt({ x, y }: { x: number; y: number }) {
   return <BoltGlyph from={{ x: x + GS_BOLT_TAIL.dx, y: y + GS_BOLT_TAIL.dy }} to={{ x, y }} standalone={false} />
 }
 
-// A proper FAA "maltese cross" (cross patée): four arms narrow at the waist,
-// flaring wide at the tips, each tip cut with a V-notch — not a plain plus.
-const MALTESE_PATH = (() => {
-  const w = 1.7 // half-width at the waist (center)
-  const t = 4.8 // half-width at each arm tip
-  const L = 7.5 // arm length from center
-  const n = 2.0 // tip V-notch depth
-  return (
-    `M ${-w} ${-w} L ${-t} ${-L} L 0 ${-L + n} L ${t} ${-L} L ${w} ${-w} ` +
-    `L ${L} ${-t} L ${L - n} 0 L ${L} ${t} L ${w} ${w} ` +
-    `L ${t} ${L} L 0 ${L - n} L ${-t} ${L} L ${-w} ${w} ` +
-    `L ${-L} ${t} L ${-L + n} 0 L ${-L} ${-t} Z`
-  )
-})()
-
+// The FAF maltese cross (cross patée) is shared with the map FAF marker —
+// geometry lives in ../map/glyphs (MALTESE_PATH), drawn upright and rotated here.
 function MalteseCross({ x, y }: { x: number; y: number }) {
   return (
     <g className={styles.malteseCross} transform={`translate(${x} ${y}) rotate(45)`}>

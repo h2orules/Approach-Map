@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as turf from '@turf/turf'
 import { Marker, useMap } from 'react-map-gl'
 import type { Procedure, WaypointSymbol, AltConstraint } from '../../types/procedure'
-import { BoltGlyph, DmeD, dmeGlyphWidth, type Pt } from './glyphs'
+import { BoltGlyph, DmeD, dmeGlyphWidth, MALTESE_PATH, type Pt } from './glyphs'
 import styles from './WaypointMarkers.module.css'
 
 interface Props {
@@ -32,10 +32,12 @@ function WpIcon({ s, size = 26 }: { s: WaypointSymbol; size?: number }) {
   const fo = s.flyover
 
   if (s.role === 'faf') {
+    // Maltese cross (cross patée), 45°-rotated — the same FAF symbol the
+    // vertical profile draws (shared MALTESE_PATH in glyphs.tsx).
     return (
       <svg width={size} height={size} viewBox="0 0 26 26">
         {fo && <Ring cx={13} cy={13} r={12} color="#f0abfc" />}
-        <path d="M13 2 L15.6 8 L13 10.2 L10.4 8 Z M13 24 L15.6 18 L13 15.8 L10.4 18 Z M2 13 L8 10.4 L10.2 13 L8 15.6 Z M24 13 L18 10.4 L15.8 13 L18 15.6 Z" fill="#f0abfc" {...halo} />
+        <path d={MALTESE_PATH} transform="translate(13 13) rotate(45)" fill="#f0abfc" {...halo} />
       </svg>
     )
   }

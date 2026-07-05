@@ -24,6 +24,26 @@ export interface Pt { x: number; y: number }
 
 const RESTRICTION_COLOR = '#fde68a'
 
+// ---- FAF "maltese cross" (cross patée) ------------------------------------
+// FAA final-approach-fix symbol: four arms narrow at the waist, flaring wide at
+// the tips, each tip cut with a V-notch — not a plain plus/pointed star. Drawn
+// centered on the origin and UPRIGHT; callers apply their own
+// `translate(...) rotate(45)` and fill/stroke. Shared so the map FAF marker
+// (WaypointMarkers) and the vertical profile (ProfileSvg) render the identical
+// shape. Spans ≈ ±8.7px from center once rotated 45°.
+export const MALTESE_PATH = (() => {
+  const w = 1.7 // half-width at the waist (center)
+  const t = 4.8 // half-width at each arm tip
+  const L = 7.5 // arm length from center
+  const n = 2.0 // tip V-notch depth
+  return (
+    `M ${-w} ${-w} L ${-t} ${-L} L 0 ${-L + n} L ${t} ${-L} L ${w} ${-w} ` +
+    `L ${L} ${-t} L ${L - n} 0 L ${L} ${t} L ${w} ${w} ` +
+    `L ${t} ${L} L 0 ${L - n} L ${-t} ${L} L ${-w} ${w} ` +
+    `L ${-L} ${t} L ${-L + n} 0 L ${-L} ${-t} Z`
+  )
+})()
+
 // ---- glideslope-intercept bolt --------------------------------------------
 
 interface BoltGlyphProps {

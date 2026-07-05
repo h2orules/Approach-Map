@@ -7,8 +7,14 @@ export interface AtisInfo {
    * Values are CIFP approach name prefixes in preference order (e.g. ["I", "L"]).
    */
   runwayPrefs: Record<string, string[]>
-  /** Departure runways mentioned in the ATIS (e.g. ["16L"]). */
+  /** Primary in-use departure runways (e.g. ["16L"]). */
   depRunways: string[]
+  /**
+   * Secondary "plan and brief" departure runways — ATC asks crews to be ready
+   * for these but they aren't the primary departure runway. Never overlaps
+   * `depRunways` (a runway listed as both is treated as primary).
+   */
+  depRunwaysAdvisory: string[]
   /** Runways called out for visual approaches (not a specific CIFP type). */
   visualRunways: string[]
   raw: string
@@ -89,6 +95,7 @@ export function parseAtisText(text: string): AtisInfo {
   const runwayPrefs: Record<string, string[]> = {}
   const visualRunways: string[] = []
   const depRunways: string[] = []
+  const depRunwaysAdvisory: string[] = []
 
   for (const rawSentence of upper.split(/[.;]/)) {
     const s = rawSentence.trim()
@@ -112,10 +119,9 @@ export function parseAtisText(text: string): AtisInfo {
 
       if (DEP_KEYWORD.test(window)) {
         depClauseSeen = true
-        if (!ADVISORY_KEYWORD.test(window)) {
-          for (const rwy of runways) {
-            if (!depRunways.includes(rwy)) depRunways.push(rwy)
-          }
+        const bucket = ADVISORY_KEYWORD.test(window) ? depRunwaysAdvisory : depRunways
+        for (const rwy of runways) {
+          if (!bucket.includes(rwy)) bucket.push(rwy)
         }
         continue
       }
@@ -156,7 +162,10 @@ export function parseAtisText(text: string): AtisInfo {
     }
   }
 
-  return { code, runwayPrefs, depRunways, visualRunways, raw: text }
+  // A runway called out as both primary and "plan and brief" is primary.
+  const advisoryOnly = depRunwaysAdvisory.filter((r) => !depRunways.includes(r))
+
+  return { code, runwayPrefs, depRunways, depRunwaysAdvisory: advisoryOnly, visualRunways, raw: text }
 }
 
 /**
@@ -201,6 +210,10 @@ export function parseDatisEntries(entries: DatisEntry[]): AtisInfo | null {
     for (const rwy of depInfo?.depRunways ?? []) {
       if (!depRunways.includes(rwy)) depRunways.push(rwy)
     }
+    const depRunwaysAdvisory: string[] = []
+    for (const rwy of [...(arrInfo?.depRunwaysAdvisory ?? []), ...(depInfo?.depRunwaysAdvisory ?? [])]) {
+      if (!depRunways.includes(rwy) && !depRunwaysAdvisory.includes(rwy)) depRunwaysAdvisory.push(rwy)
+    }
 
     const raw = arrEntry && depEntry
       ? `${arrEntry.datis}\n\n${depEntry.datis}`
@@ -210,6 +223,7 @@ export function parseDatisEntries(entries: DatisEntry[]): AtisInfo | null {
       code: arrInfo?.code ?? depInfo?.code ?? '?',
       runwayPrefs: arrInfo?.runwayPrefs ?? {},
       depRunways,
+      depRunwaysAdvisory,
       visualRunways: arrInfo?.visualRunways ?? [],
       raw,
     }

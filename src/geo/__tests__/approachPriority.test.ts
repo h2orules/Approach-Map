@@ -19,7 +19,7 @@ function proc(name: string, runways: string[] = []): Procedure {
 }
 
 function atis(runwayPrefs: Record<string, string[]>): AtisInfo {
-  return { code: 'A', runwayPrefs, depRunways: [], visualRunways: [], raw: '' }
+  return { code: 'A', runwayPrefs, depRunways: [], depRunwaysAdvisory: [], visualRunways: [], raw: '' }
 }
 
 describe('approachRunwayKey', () => {

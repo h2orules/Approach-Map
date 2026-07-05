@@ -98,11 +98,13 @@ describe('parseAtisText', () => {
     expect(info.depRunways).toEqual(['34R'])
   })
 
-  it('ignores plan-and-brief advisory runways in departure clauses', () => {
+  it('splits plan-and-brief runways into depRunwaysAdvisory, keeping primaries out of it', () => {
     const info = parseAtisText(
       'DEPG RWY 34R, DEPG ACFT PLAN AND BRIEF NUMBERS FOR BOTH RWYS 34R AND 34C.',
     )
     expect(info.depRunways).toEqual(['34R'])
+    // 34R is primary so it must not also appear as advisory; only 34C is advisory-only.
+    expect(info.depRunwaysAdvisory).toEqual(['34C'])
   })
 
   it('still catches trailing-keyword departures ("RWYS ... FOR DEPARTURES")', () => {
@@ -123,6 +125,7 @@ describe('parseAtisText', () => {
     expect(info.runwayPrefs).toEqual({ '34L': ['I'], '34R': ['I'] })
     expect(info.visualRunways).toEqual(['34L', '34R'])
     expect(info.depRunways).toEqual(['34R'])
+    expect(info.depRunwaysAdvisory).toEqual(['34C'])
   })
 
   it('returns code "?" for unparseable garbage without throwing', () => {
@@ -131,6 +134,7 @@ describe('parseAtisText', () => {
     expect(info.code).toBe('?')
     expect(info.runwayPrefs).toEqual({})
     expect(info.depRunways).toEqual([])
+    expect(info.depRunwaysAdvisory).toEqual([])
     expect(info.visualRunways).toEqual([])
   })
 })

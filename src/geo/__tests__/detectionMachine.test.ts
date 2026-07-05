@@ -87,7 +87,7 @@ function plane(hex: string, lat: number, lon: number, track = 180): Interpolated
 }
 
 function atis(runwayPrefs: Record<string, string[]>): AtisInfo {
-  return { code: 'A', runwayPrefs, depRunways: [], visualRunways: [], raw: '' }
+  return { code: 'A', runwayPrefs, depRunways: [], depRunwaysAdvisory: [], visualRunways: [], raw: '' }
 }
 
 interface Poll {

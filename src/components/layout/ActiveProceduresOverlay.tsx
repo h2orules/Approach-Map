@@ -105,6 +105,9 @@ export function ActiveProceduresOverlay() {
   const depSummary = hasAtis && atisInfo.depRunways.length > 0
     ? atisInfo.depRunways.join(' ')
     : ''
+  const depAdvisory = hasAtis && atisInfo.depRunwaysAdvisory.length > 0
+    ? atisInfo.depRunwaysAdvisory.join(' ')
+    : ''
 
   return (
     <div className={styles.overlay} data-map-overlay="">
@@ -123,7 +126,7 @@ export function ActiveProceduresOverlay() {
       </div>
 
       {/* ── ATIS approach/departure summary ────────────────────────── */}
-      {hasAtis && (arrSummary || depSummary) && (
+      {hasAtis && (arrSummary || depSummary || depAdvisory) && (
         <div
           className={styles.atisSection}
           onMouseEnter={atisHover.show}
@@ -135,10 +138,15 @@ export function ActiveProceduresOverlay() {
               <span className={styles.atisValue}>{arrSummary}</span>
             </div>
           )}
-          {depSummary && (
+          {(depSummary || depAdvisory) && (
             <div className={styles.atisSummaryRow}>
               <span className={styles.atisLabel}>DEP</span>
-              <span className={styles.atisValue}>{depSummary}</span>
+              {depSummary && <span className={styles.atisValue}>{depSummary}</span>}
+              {depAdvisory && (
+                <span className={styles.atisValueAdvisory} title="Plan and brief — not the primary departure runway">
+                  ({depAdvisory})
+                </span>
+              )}
             </div>
           )}
           {atisHover.open && (

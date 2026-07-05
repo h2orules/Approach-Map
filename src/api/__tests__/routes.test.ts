@@ -145,6 +145,41 @@ describe('lookupRoutes', () => {
     })
   })
 
+  it('cascades to adsbdb when routeset returns a 2xx with an empty/unparseable body', async () => {
+    // adsb.lol's routeset edge has returned bare 201s with an empty body; the
+    // response is `ok` but `.json()` throws. This must degrade to adsbdb rather
+    // than being treated as a transient failure that suppresses the fallback.
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/api/adsblol/routeset') {
+        return {
+          ok: true,
+          status: 201,
+          json: async () => {
+            throw new SyntaxError('Unexpected end of JSON input')
+          },
+        } as unknown as Response
+      }
+      if (url === '/api/adsbdb/callsign/AAL100') {
+        return jsonResponse({
+          response: { flightroute: { origin: { icao_code: 'KJFK' }, destination: { icao_code: 'EGLL' } } },
+        })
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+
+    const result = await lookupRoutes([{ callsign: 'AAL100', lat: 40.6, lon: -73.7 }])
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/adsbdb/callsign/AAL100')
+    expect(result.get('AAL100')).toEqual({
+      callsign: 'AAL100',
+      origin: 'KJFK',
+      destination: 'EGLL',
+      plausible: null,
+      source: 'adsbdb',
+    })
+  })
+
   it('negative-caches a confirmed miss and re-queries only after the TTL expires', async () => {
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>
     fetchMock.mockImplementation(async (url: string) => {

@@ -33,3 +33,8 @@ dist-ssr/
 
 # TypeScript cache
 *.tsbuildinfo
+
+# Azureite storage simulator
+__blobstorage__/
+__queuestorage__/
+__azurite_db*

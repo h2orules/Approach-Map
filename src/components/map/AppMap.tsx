@@ -15,6 +15,7 @@ import { ExtendedCenterlineLayer } from './ExtendedCenterlineLayer'
 import { TerrainLayer } from './TerrainLayer'
 import { SafeAltitudeLayer } from './SafeAltitudeLayer'
 import { MvaLayer } from './MvaLayer'
+import { AirspaceLayer } from './AirspaceLayer'
 import { LocFeatherLayer } from './LocFeatherLayer'
 import { WaypointMarkers } from './WaypointMarkers'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
@@ -142,6 +143,8 @@ export function AppMap() {
         <SafeAltitudeLayer items={safeAltItems} />
 
         <MvaLayer />
+
+        <AirspaceLayer />
 
         <LocFeatherLayer />
 

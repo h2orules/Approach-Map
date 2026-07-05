@@ -26,6 +26,7 @@ export function DataBlock({ aircraft, onClose }: Props) {
   const originAirport = aircraft.origin ? getAirportByIcao(aircraft.origin) : undefined
   const destAirport = aircraft.destination ? getAirportByIcao(aircraft.destination) : undefined
   const friendlyType = decodeAircraftType(aircraft.typeCode)
+  const isVfr = aircraft.squawk === '1200'
 
   return (
     <Popup
@@ -46,21 +47,27 @@ export function DataBlock({ aircraft, onClose }: Props) {
           <span className={styles.type}>{aircraft.typeCode || '???'}</span>
         </div>
 
-        {(aircraft.origin || aircraft.destination) && (
+        {isVfr ? (
           <div className={styles.route}>
-            {aircraft.origin && (
-              <>
-                <span className={styles.routeLabel}>FROM</span>
-                <span className={styles.routeCode}>{aircraft.origin}</span>
-              </>
-            )}
-            {aircraft.destination && (
-              <>
-                <span className={styles.routeLabel}>TO</span>
-                <span className={styles.routeCode}>{aircraft.destination}</span>
-              </>
-            )}
+            <span className={styles.vfr}>VFR</span>
           </div>
+        ) : (
+          (aircraft.origin || aircraft.destination) && (
+            <div className={styles.route}>
+              {aircraft.origin && (
+                <>
+                  <span className={styles.routeLabel}>FROM</span>
+                  <span className={styles.routeCode}>{aircraft.origin}</span>
+                </>
+              )}
+              {aircraft.destination && (
+                <>
+                  <span className={styles.routeLabel}>TO</span>
+                  <span className={styles.routeCode}>{aircraft.destination}</span>
+                </>
+              )}
+            </div>
+          )
         )}
 
         <div className={styles.expanded}>

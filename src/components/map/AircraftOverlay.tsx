@@ -92,6 +92,7 @@ export function AircraftOverlay({ mapRef }: Props) {
         const hasRoute = !!(ac.origin || ac.destination)
         const origin = ac.origin || 'Unkwn'
         const dest = ac.destination || 'Unkwn'
+        const isVfr = ac.squawk === '1200'
 
         return (
           <div
@@ -128,11 +129,15 @@ export function AircraftOverlay({ mapRef }: Props) {
                 {' '}
                 <span className={styles.heading}>{formatHeading(ac.track)}</span>
               </div>
-              {/* Line 3: ORIG→DEST TYPE (shown when either route or type is known) */}
-              {(hasRoute || ac.typeCode) && (
+              {/* Line 3: VFR (squawk 1200) or ORIG→DEST, then TYPE */}
+              {(isVfr || hasRoute || ac.typeCode) && (
                 <div className={`${styles.line} ${styles.lineTight}`}>
-                  {hasRoute && (
-                    <span className={styles.route}>{origin}→{dest}{ac.typeCode ? ' ' : ''}</span>
+                  {isVfr ? (
+                    <span className={styles.vfr}>VFR{ac.typeCode ? ' ' : ''}</span>
+                  ) : (
+                    hasRoute && (
+                      <span className={styles.route}>{origin}→{dest}{ac.typeCode ? ' ' : ''}</span>
+                    )
                   )}
                   {ac.typeCode && (
                     <span className={styles.type}>{ac.typeCode}</span>

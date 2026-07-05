@@ -112,6 +112,20 @@
     0 0 3px #0b0f14;
 }
 
+/* Line 3: VFR indicator (squawk 1200) — green, in the slot ORIG→DEST would use */
+.vfr {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: #4ade80;
+  text-shadow:
+    -1px -1px 0 #0b0f14,
+     1px -1px 0 #0b0f14,
+    -1px  1px 0 #0b0f14,
+     1px  1px 0 #0b0f14,
+    0 0 3px #0b0f14;
+}
+
 /* Line 3: aircraft type code — same color as heading */
 .type {
   font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;

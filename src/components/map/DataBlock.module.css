@@ -82,6 +82,13 @@
   margin-right: 4px;
 }
 
+.vfr {
+  color: #4ade80;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
 .expanded {
   margin-top: 5px;
   border-top: 1px solid rgba(100, 116, 139, 0.3);

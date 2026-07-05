@@ -106,13 +106,15 @@ export const PROFILE_AIRCRAFT_UPDATE_MS = 1000
 export const FEET_PER_METER = 3.28084
 export const FEET_PER_NM = 6076.12
 
-// TAA/MSA safe-altitude overlay styling.
+// TAA/MSA safe-altitude overlay styling. The neutral slate fill reads on both
+// basemaps, but the boundary lines must invert with the map theme (a white
+// line vanishes on the light basemap, a dark one on the dark basemap).
 export const SAFE_ALT_COLOR = '#94a3b8'
 export const SAFE_ALT_FILL_OPACITY = 0.05
 export const SAFE_ALT_LINE_WIDTH = 1.2
 export const SAFE_ALT_LINE_OPACITY = 0.7
-// Sector boundary lines are solid white for both TAA and MSA.
-export const SAFE_ALT_LINE_COLOR = '#ffffff'
+export const SAFE_ALT_LINE_COLOR = '#ffffff' // on dark/satellite basemaps
+export const SAFE_ALT_LINE_COLOR_LIGHT = '#1e293b' // on the light basemap
 
 // FAA-plate-style localizer "feather" symbol, drawn along the final approach
 // course of the selected LOC-based approach (ILS/LOC/LDA).
@@ -125,8 +127,10 @@ export const LOC_FEATHER_COLOR = '#cbd5e1'
 
 // MVA (Minimum Vectoring Altitude) sector overlay styling. Kept visually
 // quiet (low fill opacity, thin lines) since sectors can be numerous/large
-// and shouldn't compete with terrain tinting or procedure lines.
-export const MVA_COLOR = '#e2e8f0'
+// and shouldn't compete with terrain tinting or procedure lines. The near-white
+// fill+line must invert with the map theme to stay visible on the light basemap.
+export const MVA_COLOR = '#e2e8f0' // on dark/satellite basemaps
+export const MVA_COLOR_LIGHT = '#334155' // on the light basemap
 export const MVA_FILL_OPACITY = 0.04
 export const MVA_LINE_WIDTH = 1
 export const MVA_LINE_OPACITY = 0.55

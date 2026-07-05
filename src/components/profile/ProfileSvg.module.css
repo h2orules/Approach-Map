@@ -146,27 +146,41 @@
 }
 
 /* ── live aircraft ────────────────────────────────────────────────── */
+/* Selected target: bright accent cyan. paint-order:stroke draws the dark
+   outline behind the fill as a halo, so the glyph reads over the light
+   glideslope line and the dark background alike. */
 .aircraft {
   fill: #38bdf8;
   stroke: #0b0f14;
-  stroke-width: 0.8;
+  stroke-width: 1.4;
+  paint-order: stroke;
 }
 
 .aircraftLabel {
-  fill: #38bdf8;
+  fill: #7dd3fc;
   font-size: 10px;
   font-weight: 700;
+  stroke: #0b0f14;
+  stroke-width: 2.5px;
+  paint-order: stroke;
 }
 
-/* Non-selected planes sharing the same approach — dimmed so the selected one
-   (if any) still reads as the primary target. */
-.aircraftDimmed {
-  opacity: 0.5;
+/* Non-selected planes sharing the same approach. Full opacity with a strong
+   dark halo (previously a flat 0.5 opacity, which vanished against both the
+   background and the glide line). A neutral slate fill keeps them clearly
+   secondary to the cyan selected target without sacrificing legibility. */
+.aircraftInactive {
+  fill: #cbd5e1;
+  stroke: #0b0f14;
+  stroke-width: 1.7;
+  paint-order: stroke;
 }
 
 .aircraftLabelDimmed {
-  fill: #38bdf8;
+  fill: #cbd5e1;
   font-size: 8.5px;
-  font-weight: 600;
-  opacity: 0.75;
+  font-weight: 700;
+  stroke: #0b0f14;
+  stroke-width: 2.5px;
+  paint-order: stroke;
 }

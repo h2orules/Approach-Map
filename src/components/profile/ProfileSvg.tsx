@@ -171,12 +171,16 @@ function AircraftGlyph({
   labelAbove: boolean
 }) {
   const labelY = y + (labelAbove ? AIRCRAFT_LABEL_ABOVE_DY : AIRCRAFT_LABEL_BELOW_DY)
+  // Feather points RIGHT with its tip at (x, y). The tip — not the body center —
+  // is the reference point for both lateral (distance) and vertical (altitude)
+  // position, so the body extends left from it. Label centers over the body.
+  const points = `${x - 15},${y + 5} ${x},${y} ${x - 15},${y - 5} ${x - 11},${y}`
   return (
-    <g className={isSelected ? undefined : styles.aircraftDimmed}>
-      <polygon className={styles.aircraft} points={`${x - 7},${y + 5} ${x + 8},${y} ${x - 7},${y - 5} ${x - 3},${y}`} />
+    <g>
+      <polygon className={isSelected ? styles.aircraft : styles.aircraftInactive} points={points} />
       <text
         className={isSelected ? styles.aircraftLabel : styles.aircraftLabelDimmed}
-        x={x}
+        x={x - 7}
         y={labelY}
         textAnchor="middle"
       >

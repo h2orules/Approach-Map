@@ -11,10 +11,22 @@ import {
   parseMsaRecord,
   parseTaaRecord,
   buildSafeAltitudeAreas,
+  magneticToTrue,
   type MsaRawRecord,
   type TaaRawRecord,
   type IlsGsFields,
 } from '../utils/arincRecords'
+import {
+  parseProcRecord,
+  legRole,
+  parseLegLen,
+  parseVertAngleDeg,
+  derivePi,
+  computeNoPtTransitionIds,
+  deriveVdaGpaDeg,
+  deriveCourseReversal,
+  deriveHoldInLieu,
+} from './cifpParseCore'
 import { holdTrack, procedureTurn } from '../geo/procedureShapes'
 
 export interface ParseRequest {
@@ -44,87 +56,9 @@ interface WaypointRecord {
   navaidType: NavaidType
 }
 
-type SectionCode = 'P' | 'E' | 'D'
-type SubSectionCode = string
-
-interface Record424 {
-  sectionCode: SectionCode
-  subSectionCode: SubSectionCode
-  airportIcao: string
-  procedureId: string
-  transitionId: string
-  sequenceNumber: number
-  fixId: string
-  altDescriptor: string
-  alt1: string
-  alt2: string
-  pathTerm: string // path & terminator, cols 48-49 (e.g. CF, TF, HM, HF, PI)
-  descCode4: string // waypoint description code position 4, col 43 (A/F/M/H)
-  flyover: boolean  // waypoint description code position 2, col 41 ('Y' = flyover)
-  turnDir: string // col 44 (L/R)
-  recNav: string // cols 51-54 (recommended navaid — the DME reference)
-  rho: string    // cols 67-70 (DME distance to fix from navaid, tenths of nm)
-  magCourse: string // cols 71-74 (tenths of a degree)
-  legLen: string // cols 75-78 (route distance / holding leg)
-  speedLimit: string // cols 100-102 (knots, a maximum)
-}
-
-function parseProcRecord(line: string): Record424 | null {
-  if (line.length < 132) return null
-  const sectionCode = line[4] as SectionCode
-  if (sectionCode !== 'P') return null
-  // Airport-section subsection is at column 13 (index 12):
-  //   D = SID, E = STAR, F = Approach. Everything else (C terminal waypoint,
-  //   G runway, I ILS, P path point, S MSA) is not a procedure leg.
-  const subSection = line[12]
-  if (!'DEF'.includes(subSection)) return null
-
-  const airportIcao = line.slice(6, 10).trim()
-  if (!airportIcao) return null
-
-  return {
-    sectionCode,
-    subSectionCode: subSection,
-    airportIcao,
-    procedureId: line.slice(13, 19).trim(),
-    transitionId: line.slice(20, 25).trim(),
-    sequenceNumber: parseInt(line.slice(26, 29).trim()) || 0,
-    fixId: line.slice(29, 34).trim(),
-    altDescriptor: line.slice(82, 83),
-    alt1: line.slice(84, 89).trim(),
-    alt2: line.slice(89, 94).trim(),
-    pathTerm: line.slice(47, 49).trim(),
-    descCode4: line[42] ?? ' ',
-    flyover: (line[40] ?? ' ') === 'Y',
-    turnDir: line[43] ?? ' ',
-    recNav: line.slice(50, 54).trim(),
-    rho: line.slice(66, 70).trim(),
-    magCourse: line.slice(70, 74).trim(),
-    legLen: line.slice(74, 78).trim(),
-    speedLimit: line.slice(99, 102).trim(),
-  }
-}
-
 // One parsed leg of a transition is the exported `ProcedureLeg` (shape-identical
 // to the former internal `Leg`), so transitions can be surfaced on the Procedure.
-
-function legRole(descCode4: string, pathTerm: string): WaypointRole {
-  if (descCode4 === 'A') return 'iaf'
-  if (descCode4 === 'F') return 'faf'
-  if (descCode4 === 'M') return 'map'
-  if (descCode4 === 'H' || pathTerm === 'HM' || pathTerm === 'HF' || pathTerm === 'HA') return 'hold'
-  return 'normal'
-}
-
-/** Parse the holding/PT leg length: "T010" = 1.0 min (→ ~4nm), "0040" = 4.0nm. */
-function parseLegLen(legLen: string): number {
-  if (!legLen) return 0
-  if (legLen[0] === 'T') {
-    const minutes = (parseInt(legLen.slice(1)) || 0) / 10
-    return minutes * 4 // ~4nm per minute at holding speed
-  }
-  return (parseInt(legLen) || 0) / 10
-}
+// The pure per-line parsers/derivations live in ./cifpParseCore for testability.
 
 function classifyProcedure(subSection: string): ProcedureType | null {
   if (subSection === 'D') return 'SID'
@@ -150,8 +84,43 @@ function lineFeature(coords: Coord[], props: Record<string, unknown>): AnyFeatur
  * Every feature gets a `transitionId` property so the renderer can style
  * opposite-direction SID runway transitions as dotted lines.
  */
-function buildProcedureFeatures(transitions: Array<{ id: string; legs: ProcedureLeg[] }>): AnyFeature[] {
+/** How close (nm) a procedure-turn fix must be to the final FAF to anchor the
+ *  drawn PT onto the final path (matches the LOM collocation radius). */
+const PT_FAF_COLLOCATE_NM = 0.5
+
+function buildProcedureFeatures(
+  transitions: Array<{ id: string; legs: ProcedureLeg[] }>,
+  magVarDeg: number | null,
+): AnyFeature[] {
   const features: AnyFeature[] = []
+
+  // Final-approach FAF (a `faf` leg on the transition that also reaches the MAP)
+  // — the on-path fix a collocated procedure turn is anchored to so its outbound
+  // leg lies exactly along the drawn final course rather than the (possibly
+  // slightly offset) NDB/PI fix.
+  let fafFix: { lat: number; lon: number } | null = null
+  for (const { legs } of transitions) {
+    const faf = legs.find((l) => l.role === 'faf')
+    if (faf && legs.some((l) => l.role === 'map')) {
+      fafFix = { lat: faf.lat, lon: faf.lon }
+      break
+    }
+  }
+
+  // A missed-approach hold (HM) that coincides with a hold-in-lieu (HF) on a
+  // transition segment — same fix, course, and turn — is the same charted
+  // racetrack (e.g. KAWO R34: HILPT at SAVOY, missed approach holds at SAVOY).
+  // Emit only the solid transition-segment one; a second dash-dot copy on top
+  // just muddies the line.
+  const holdKey = (l: ProcedureLeg) => `${l.fixId}:${Math.round(l.course * 10)}:${l.turnRight ? 'R' : 'L'}`
+  const transitionHoldKeys = new Set<string>()
+  for (const { legs } of transitions) {
+    const mapIdx = legs.findIndex((l) => l.role === 'map')
+    legs.forEach((l, i) => {
+      const isHold = l.pathTerm === 'HM' || l.pathTerm === 'HF' || l.pathTerm === 'HA'
+      if (isHold && !(mapIdx >= 0 && i > mapIdx)) transitionHoldKeys.add(holdKey(l))
+    })
+  }
 
   for (const { id: transitionId, legs } of transitions) {
     const mapIdx = legs.findIndex((l) => l.role === 'map')
@@ -172,11 +141,47 @@ function buildProcedureFeatures(transitions: Array<{ id: string; legs: Procedure
       const l = legs[i]
       const segment = mapIdx >= 0 && i > mapIdx ? 'missed' : 'transition'
       if (l.pathTerm === 'HM' || l.pathTerm === 'HF' || l.pathTerm === 'HA') {
-        const track = holdTrack(l.lat, l.lon, l.course, l.turnRight, l.legNm)
-        features.push(lineFeature(track, { kind: 'hold', segment, transitionId }))
+        // Skip a missed-segment hold that duplicates a transition-segment one.
+        if (segment === 'missed' && transitionHoldKeys.has(holdKey(l))) continue
+        // Shape geometry works in TRUE bearings; l.course is the MAGNETIC inbound.
+        const track = holdTrack(l.lat, l.lon, magneticToTrue(l.course, magVarDeg), l.turnRight, l.legNm)
+        features.push(
+          lineFeature(track, {
+            kind: 'hold',
+            segment,
+            transitionId,
+            fixId: l.fixId,
+            inboundCourseMag: l.course,
+            turnRight: l.turnRight,
+            alt: l.altConstraint,
+          }),
+        )
       } else if (l.pathTerm === 'PI') {
-        const barb = procedureTurn(l.lat, l.lon, l.course, l.turnRight, l.legNm)
-        features.push(lineFeature(barb, { kind: 'pt', segment, transitionId }))
+        // The raw magCourse on a PI leg is the barb course, not the outbound
+        // course — use the derived outbound (magnetic → true for drawing), and
+        // pass the "remain within" limit as the drawn length (shape clamps it).
+        const outMag = l.pi ? l.pi.outboundCourseMag : l.course
+        const inMag = l.pi ? l.pi.inboundCourseMag : (l.course + 180) % 360
+        const limitNm = l.pi ? l.pi.limitNm : l.legNm
+        // Anchor the barb on the final path when the PI fix is collocated with
+        // the FAF (e.g. KAWO AW ≈ WATON) so the outbound leg lies on the final
+        // course line instead of drifting off it.
+        const anchor =
+          fafFix && approxDistNm(l.lat, l.lon, fafFix.lat, fafFix.lon) <= PT_FAF_COLLOCATE_NM
+            ? fafFix
+            : { lat: l.lat, lon: l.lon }
+        const barb = procedureTurn(anchor.lat, anchor.lon, magneticToTrue(outMag, magVarDeg), l.turnRight, limitNm)
+        features.push(
+          lineFeature(barb, {
+            kind: 'pt',
+            segment,
+            transitionId,
+            fixId: l.fixId,
+            outboundCourseMag: outMag,
+            inboundCourseMag: inMag,
+            turnRight: l.turnRight,
+          }),
+        )
       }
     }
   }
@@ -427,6 +432,9 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
       }
 
       const rhoRaw = parseInt(rec.rho) || 0
+      const courseMag = (parseInt(rec.magCourse) || 0) / 10
+      const legNm = parseLegLen(rec.legLen)
+      const turnRight = rec.turnDir !== 'L'
       transition.set(rec.sequenceNumber, {
         seq: rec.sequenceNumber,
         fixId: rec.fixId,
@@ -437,12 +445,16 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         pathTerm: rec.pathTerm,
         role: legRole(rec.descCode4, rec.pathTerm),
         flyover: rec.flyover,
-        turnRight: rec.turnDir !== 'L',
-        course: (parseInt(rec.magCourse) || 0) / 10,
-        legNm: parseLegLen(rec.legLen),
+        turnRight,
+        course: courseMag,
+        legNm,
         speedKt: parseInt(rec.speedLimit) || 0,
         dmeNm: rhoRaw > 0 ? rhoRaw / 10 : null,
         recNavId: rec.recNav,
+        vertAngleDeg: parseVertAngleDeg(rec.vertAngle),
+        // On a PI leg the coded magCourse is the barb course and legLen the
+        // "remain within" limit — derive the real outbound/inbound courses.
+        ...(rec.pathTerm === 'PI' ? { pi: derivePi(courseMag, turnRight, legNm) } : {}),
       })
     }
 
@@ -463,6 +475,9 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
 
     for (const [icao, airportMap] of procGroups) {
       const procedures: Procedure[] = []
+      // Airport magnetic variation (east +), used to convert coded magnetic
+      // courses to true for the hold/procedure-turn shape geometry.
+      const magVarDeg = magVarByAirport.get(icao) ?? null
       // Fix id → approach idents referencing it (fix or recommended navaid), so
       // an MSA centered on that fix can list the approaches it serves.
       const centerFixToApproaches = new Map<string, Set<string>>()
@@ -471,9 +486,13 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
 
         // Each transition becomes its own ordered leg list, keyed by its id so
         // the GeoJSON builder can tag features for opposite-direction SID dashing.
+        // Single-leg transitions are kept: a hold-in-lieu-of-PT (HILPT) is coded
+        // as its own one-leg HF transition (e.g. KAWO R34's "SAVOY"), which
+        // draws no path line but must still emit its racetrack, feed NoPT
+        // inference, and surface the hold's constraint.
         const transitionEntries = Array.from(group.transitions.entries())
           .map(([id, seqMap]) => ({ id, legs: Array.from(seqMap.values()).sort((a, b) => a.seq - b.seq) }))
-          .filter(({ legs }) => legs.length >= 2)
+          .filter(({ legs }) => legs.length >= 1)
 
         if (transitionEntries.length === 0) continue
 
@@ -486,7 +505,7 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         // Precision approaches (ILS, procedure id starting "I") mark the FAF as
         // the glideslope intercept — drawn with a lightning bolt, not a cross.
         const isPrecision = group.type === 'APPROACH' && name[0] === 'I'
-        const ROLE_RANK: Record<WaypointRole, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
+        const ROLE_RANK: Record<WaypointRole, number> = { map: 6, faf: 5, iaf: 4, if: 3, hold: 2, normal: 1 }
         const symbolMap = new Map<string, WaypointSymbol>()
         // Recommended-navaid ids referenced by DME fixes; each is emitted as its
         // own symbol below so the DME reference point is visible on the map.
@@ -543,8 +562,11 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         // compass locator) as an outer marker. The CIFP has no marker-beacon
         // records, so a collocated locator is the only signal — this reliably
         // catches LOMs (e.g. KAWO LOC 34 FAF WATON over the AWO NDB) but not
-        // markerless OM/MM/IM. markerLocator drives the NDB overlay.
-        if (group.type === 'APPROACH') {
+        // markerless OM/MM/IM. markerLocator drives the NDB overlay. RNAV/RNP
+        // procedures ('R'/'H' idents) are excluded: their plates never chart
+        // marker beacons, and an RNAV FAF placed beside a locator (KAWO R34
+        // YAYKU next to the AW NDB) is not a LOM.
+        if (group.type === 'APPROACH' && name[0] !== 'R' && name[0] !== 'H') {
           const MARKER_COLLOCATE_NM = 0.5
           const syms = Array.from(symbolMap.values())
           for (const faf of syms) {
@@ -572,15 +594,29 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
           }
         }
 
-        const features = buildProcedureFeatures(transitionEntries)
+        const features = buildProcedureFeatures(transitionEntries, magVarDeg)
 
         // Surface each transition's ordered legs (ProcedureLeg[]) for profile
-        // rendering, and resolve the approach's published glide path.
-        const transitions: ProcedureTransition[] = transitionEntries.map(({ id, legs }) => ({ id, legs }))
+        // rendering, tagging NoPT routes, and resolve the published glide path.
+        const noPtIds = computeNoPtTransitionIds(transitionEntries, group.type === 'APPROACH')
+        const transitions: ProcedureTransition[] = transitionEntries.map(({ id, legs }) => ({
+          id,
+          legs,
+          ...(noPtIds.has(id) ? { noPt: true } : {}),
+        }))
 
         let gpaDeg: number | null | undefined
         let tchFt: number | null | undefined
+        let gsSource: Procedure['gsSource'] = 'default'
+        let courseReversal: Procedure['courseReversal']
+        let holdInLieu: Procedure['holdInLieu']
         if (group.type === 'APPROACH') {
+          // Course-reversal (procedure turn) metadata: the PI leg's derived
+          // outbound/inbound courses plus the turn constraint (its own alt) and
+          // the entry alt (the IF leg at the same fix in the same transition).
+          courseReversal = deriveCourseReversal(transitionEntries) ?? undefined
+          // Hold-in-lieu-of-PT (HF leg) — the racetrack course reversal.
+          holdInLieu = deriveHoldInLieu(transitionEntries) ?? undefined
           // Approach transitions are named by IAF, not runway, so the
           // transition-id scrape above misses them — the runway is encoded in
           // the procedure ident itself (e.g. I16R → 16R). Without this, the
@@ -602,19 +638,32 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
             }
           }
           // RNAV approaches carry a path point; ILS ('I…') fall back to the
-          // localizer glide slope for the runway they serve; others have none.
+          // localizer glide slope for the runway they serve; non-precision
+          // approaches fall back to the final-approach leg's coded vertical
+          // descent angle (VDA); otherwise no published glide path.
           const pp = pathPointByKey.get(`${icao}:${name}`)
           if (pp) {
             gpaDeg = pp.gpaDeg
             tchFt = pp.tchFt
+            if (gpaDeg != null) gsSource = 'pathPoint'
           } else if (name[0] === 'I') {
             for (const rw of group.runways) {
               const gs = ilsGsByRunway.get(`${icao}:${rw}`)
               if (gs && gs.gsAngleDeg != null) {
                 gpaDeg = gs.gsAngleDeg
                 tchFt = gs.gsTchFt
+                gsSource = 'ilsGs'
                 break
               }
+            }
+          }
+          if (gpaDeg == null) {
+            // VDA fallback: a leg vertical angle on/before the MAP (typically
+            // the runway/MAP leg on non-precision approaches, e.g. KAWO LOC 34).
+            const vda = deriveVdaGpaDeg(transitionEntries)
+            if (vda != null) {
+              gpaDeg = vda
+              gsSource = 'vda'
             }
           }
         }
@@ -634,12 +683,15 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
           transitions,
           ...(gpaDeg !== undefined ? { gpaDeg } : {}),
           ...(tchFt !== undefined ? { tchFt } : {}),
+          ...(group.type === 'APPROACH' ? { gsSource } : {}),
+          ...(magVarDeg != null ? { magVarDeg } : {}),
+          ...(courseReversal ? { courseReversal } : {}),
+          ...(holdInLieu ? { holdInLieu } : {}),
         })
       }
 
       if (procedures.length === 0) continue
 
-      const magVarDeg = magVarByAirport.get(icao) ?? null
       const airportRef = airportRefDb.get(icao)
       const resolveFix = (fixId: string): { lat: number; lon: number } | null => {
         const r =

@@ -11,7 +11,7 @@ const NM = { units: 'nauticalmiles' as const }
 // second leg record at the same point as the course leg.
 const SAME_FIX_EPS_NM = 0.02
 
-const ROLE_RANK: Record<WaypointRole, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
+const ROLE_RANK: Record<WaypointRole, number> = { map: 6, faf: 5, iaf: 4, if: 3, hold: 2, normal: 1 }
 
 const HOLD_PATH_TERMS = new Set(['HM', 'HF', 'HA', 'PI'])
 
@@ -51,6 +51,51 @@ export interface ProfileHold {
   kind: 'HM' | 'HF' | 'HA' | 'PI'
 }
 
+/**
+ * A charted course reversal (procedure turn) rendered as an excursion to the
+ * left of an anchor fix on the profile. Domain-level (altitudes + which fix it
+ * hangs off of); the pixel geometry of the barb is left to ProfileSvg.
+ */
+export interface ProfileCourseReversal {
+  /** Index into ProfileModel.fixes of the fix the reversal hangs off of. */
+  anchorFixIdx: number
+  /** True when we anchored at the FAF because the reversal's own fix isn't a
+   *  profile fix (a collocated IAF, e.g. the AW NDB at KAWO WATON) — the anchor
+   *  is then also tagged IAF, since the turn is entered there. */
+  anchorIsIaf: boolean
+  /** Arrival (entry) altitude constraint, drawn at the top of the excursion. */
+  entryConstraint: AltConstraint | null
+  entryAltFt: number | null
+  /** PT-completion altitude constraint, drawn at the left vertex. */
+  vertexConstraint: AltConstraint | null
+  vertexAltFt: number | null
+  /** Outbound / inbound magnetic courses (chart display values). */
+  outboundCourse: number
+  inboundCourse: number
+  turnRight: boolean
+  /** "Remain within N NM" excursion limit. */
+  limitNm: number
+}
+
+/**
+ * A hold-in-lieu-of-PT (HILPT) rendered as the FAA-plate horizontal racetrack
+ * segment hanging off an anchor fix: an outbound line (away from the runway)
+ * over an inbound line (toward it), courses labeled, with the hold's own
+ * altitude constraint. Domain-level; pixel geometry is left to ProfileSvg.
+ */
+export interface ProfileHoldInLieu {
+  /** Index into ProfileModel.fixes of the fix the hold hangs off of. */
+  anchorFixIdx: number
+  /** Inbound / outbound magnetic courses (chart display values). */
+  inboundCourse: number
+  outboundCourse: number
+  /** The HF leg's own crossing constraint (e.g. ≥2000 at KAWO SAVOY). */
+  alt: AltConstraint | null
+  altFt: number | null
+  /** Straight-leg length, nm (drives the "N NM Holding Pattern" note). */
+  legNm: number
+}
+
 export interface ProfileModel {
   procedureId: string
   name: string
@@ -63,6 +108,18 @@ export interface ProfileModel {
   runwayLengthFt: number | null
   totalNm: number
   holds: ProfileHold[]
+  /** Final approach course (magnetic), from the MAP leg; null when unknown. */
+  appCourseMag: number | null
+  /**
+   * True only when the approach has genuinely charted vertical guidance
+   * (RNAV path point or ILS glide slope). Gates the 34:1 clear-surface wedge —
+   * a coded VDA / 3° fallback does NOT earn one.
+   */
+  hasChartedVerticalGuidance: boolean
+  /** Course-reversal excursion to render, or null. */
+  courseReversal: ProfileCourseReversal | null
+  /** Hold-in-lieu-of-PT racetrack segment to render, or null. */
+  holdInLieu: ProfileHoldInLieu | null
 }
 
 /**
@@ -133,6 +190,97 @@ function mergeGroup(legs: ProcedureLeg[]): MergedGroup {
   return { fixId: legs[0].fixId, role, pathTerm, constraint, speedKt, dmeNm, dmeNavaidId, flyover, isDmeArc }
 }
 
+/** Final approach course (magnetic): the MAP leg's course, else the leg after
+ *  the FAF, else null. */
+function approachCourseMag(legs: ProcedureLeg[]): number | null {
+  const mapLeg = legs.find((l) => l.role === 'map')
+  if (mapLeg) return mapLeg.course
+  const fafIdx = legs.findIndex((l) => l.role === 'faf')
+  if (fafIdx !== -1 && fafIdx + 1 < legs.length) return legs[fafIdx + 1].course
+  return null
+}
+
+/** Locate the fix a course reversal hangs off of: its own fix by id, else the
+ *  FAF (the reversal fix is a collocated IAF that isn't a distinct profile fix). */
+function resolveReversalAnchor(
+  fixes: ProfileFix[],
+  reversal: NonNullable<Procedure['courseReversal']>,
+): { idx: number; viaFallback: boolean } | null {
+  const byId = fixes.findIndex((f) => f.fixId === reversal.fixId)
+  if (byId !== -1) return { idx: byId, viaFallback: false }
+  const fafIdx = fixes.findIndex((f) => f.role === 'faf')
+  if (fafIdx !== -1) return { idx: fafIdx, viaFallback: true }
+  return null
+}
+
+/**
+ * FAA charting rule for a course reversal: pre-anchor fixes whose plotted
+ * altitude equals the PT-completion altitude add nothing to the vertical story
+ * (they're flat at the same altitude the turn ends on) and are dropped, leaving
+ * room to the left of the anchor for the excursion. Returns a keep-mask
+ * (true = keep) the same length as `fixes`. Pre-anchor fixes with a DIFFERENT
+ * (or absent) altitude are kept.
+ */
+export function ptKeepMask(fixes: ProfileFix[], reversal: Procedure['courseReversal'] | null | undefined): boolean[] {
+  const keep = fixes.map(() => true)
+  if (!reversal) return keep
+  const anchor = resolveReversalAnchor(fixes, reversal)
+  if (!anchor) return keep
+  const ptAlt = resolveAltConstraint(reversal.alt)
+  if (ptAlt == null) return keep
+  for (let i = 0; i < anchor.idx; i++) {
+    if (fixes[i].plotAltFt === ptAlt) keep[i] = false
+  }
+  return keep
+}
+
+/**
+ * Build the ProfileCourseReversal for a (post-drop) fix list, or null when the
+ * approach has no reversal / no anchor fix. Pure — the pixel barb is drawn by
+ * ProfileSvg from these domain values.
+ */
+export function courseReversalProfile(
+  fixes: ProfileFix[],
+  reversal: Procedure['courseReversal'] | null | undefined,
+): ProfileCourseReversal | null {
+  if (!reversal) return null
+  const anchor = resolveReversalAnchor(fixes, reversal)
+  if (!anchor) return null
+  return {
+    anchorFixIdx: anchor.idx,
+    anchorIsIaf: anchor.viaFallback,
+    entryConstraint: reversal.entryAlt,
+    entryAltFt: resolveAltConstraint(reversal.entryAlt),
+    vertexConstraint: reversal.alt,
+    vertexAltFt: resolveAltConstraint(reversal.alt),
+    outboundCourse: reversal.outboundCourseMag,
+    inboundCourse: reversal.inboundCourseMag,
+    turnRight: reversal.turnRight,
+    limitNm: reversal.limitNm,
+  }
+}
+
+/**
+ * Build the ProfileHoldInLieu for a fix list, or null when the approach has no
+ * HILPT or its fix isn't a profile fix. Pure — pixels are ProfileSvg's job.
+ */
+export function holdInLieuProfile(
+  fixes: ProfileFix[],
+  hold: Procedure['holdInLieu'] | null | undefined,
+): ProfileHoldInLieu | null {
+  if (!hold) return null
+  const anchorFixIdx = fixes.findIndex((f) => f.fixId === hold.fixId)
+  if (anchorFixIdx === -1) return null
+  return {
+    anchorFixIdx,
+    inboundCourse: hold.inboundCourseMag,
+    outboundCourse: hold.outboundCourseMag,
+    alt: hold.alt,
+    altFt: resolveAltConstraint(hold.alt),
+    legNm: hold.legNm,
+  }
+}
+
 /**
  * Build the vertical-profile model for one procedure transition: cumulative
  * along-track distance, per-fix altitude/speed constraints, the MAP split,
@@ -195,17 +343,40 @@ export function buildProfileModel(p: Procedure, t: ProcedureTransition, rwy: Cif
 
   const mapIdx = allFixes.findIndex((f) => f.role === 'map')
   const splitIdx = mapIdx === -1 ? allFixes.length - 1 : mapIdx
-  const fixes = allFixes.slice(0, splitIdx + 1)
+  const fixesPreDrop = allFixes.slice(0, splitIdx + 1)
   const missed = allFixes.slice(splitIdx + 1)
 
-  const holds: ProfileHold[] = []
+  const holdsPreDrop: ProfileHold[] = []
   for (let i = 0; i < groups.length; i++) {
     const holdLeg = groups[i].find((l) => HOLD_PATH_TERMS.has(l.pathTerm))
     if (!holdLeg) continue
     const inMissed = i > splitIdx
     const atFixIdx = inMissed ? i - splitIdx - 1 : i
-    holds.push({ atFixIdx, inMissed, kind: holdLeg.pathTerm as ProfileHold['kind'] })
+    holdsPreDrop.push({ atFixIdx, inMissed, kind: holdLeg.pathTerm as ProfileHold['kind'] })
   }
+
+  // ── PT-aware fix selection: drop pre-anchor fixes that are flat at the PT
+  //    altitude, then remap non-missed hold indices onto the surviving fixes. ──
+  const keep = ptKeepMask(fixesPreDrop, p.courseReversal)
+  const fixes = fixesPreDrop.filter((_, i) => keep[i])
+  const origToNew: (number | null)[] = []
+  let newIdx = 0
+  for (let i = 0; i < fixesPreDrop.length; i++) {
+    if (keep[i]) origToNew[i] = newIdx++
+    else origToNew[i] = null
+  }
+  const holds: ProfileHold[] = []
+  for (const h of holdsPreDrop) {
+    if (h.inMissed) {
+      holds.push(h)
+      continue
+    }
+    const remapped = origToNew[h.atFixIdx]
+    if (remapped != null) holds.push({ ...h, atFixIdx: remapped })
+  }
+
+  const courseReversal = courseReversalProfile(fixes, p.courseReversal)
+  const holdInLieu = holdInLieuProfile(fixes, p.holdInLieu)
 
   const gsAngleDeg = p.gpaDeg ?? 3.0
   const usedFallbackGs = p.gpaDeg == null
@@ -213,6 +384,8 @@ export function buildProfileModel(p: Procedure, t: ProcedureTransition, rwy: Cif
   const tdzeFt = rwy?.thresholdElevFt ?? null
   const runwayLengthFt = rwy?.lengthFt ?? null
   const totalNm = allFixes.reduce((max, f) => Math.max(max, f.distNm), 0)
+  const appCourseMag = approachCourseMag(legs)
+  const hasChartedVerticalGuidance = p.gsSource === 'pathPoint' || p.gsSource === 'ilsGs'
 
   return {
     procedureId: p.id,
@@ -226,6 +399,10 @@ export function buildProfileModel(p: Procedure, t: ProcedureTransition, rwy: Cif
     runwayLengthFt,
     totalNm,
     holds,
+    appCourseMag,
+    hasChartedVerticalGuidance,
+    courseReversal,
+    holdInLieu,
   }
 }
 

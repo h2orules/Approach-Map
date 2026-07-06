@@ -20,7 +20,27 @@ const STORE_NAME = 'cifp'
 // tagged as outer markers (LOM) via WaypointSymbol.marker/markerLocator.
 // v14: collocated NDB symbols are snapped onto the LOM FAF so they render at
 // the same point (they're cataloged ~100 ft apart).
-const PARSER_VERSION = 14
+// v15: new 'if' waypoint role (desc-code B/I; C/D now map to 'iaf'); NoPT
+// transitions inferred and tagged (ProcedureTransition.noPt); PI legs decoded
+// per ARINC 424 semantics (coded course = barb, legLen = remain-within limit →
+// ProcedureLeg.pi with real outbound/inbound courses); hold/PT shapes drawn
+// with true courses (magnetic + airport magvar); leg vertical descent angle
+// parsed (ProcedureLeg.vertAngleDeg) with VDA fallback for gpaDeg
+// (Procedure.gsSource); Procedure.magVarDeg and Procedure.courseReversal added.
+// v16: procedure-turn barb anchored on the final path when its fix is collocated
+// with the FAF (outbound leg no longer drifts off the final course); barb now
+// includes a half-arrowhead at its outer tip.
+// v17: shortened the procedure-turn barb half-arrowhead for cleaner proportions.
+// v18: skip ARINC continuation records (col 39 > '1') — the SBAS FAS 'W'
+// continuation on RNAV FAF legs was overwriting the primary leg, erasing the
+// FAF role and its altitude constraint (e.g. KAWO R34 YAYKU 1700').
+// v19: LOM detection no longer applies to RNAV/RNP approaches (their plates
+// don't chart marker beacons — KAWO R34 YAYKU beside the AW NDB is not a LOM).
+// v20: single-leg transitions kept (a HILPT is its own one-leg HF transition —
+// KAWO R34 "SAVOY"), so the racetrack renders and NoPT inference sees it;
+// Procedure.holdInLieu derived from the HF leg; hold features carry the leg's
+// alt constraint; missed-approach holds duplicating a transition hold dropped.
+const PARSER_VERSION = 20
 
 export type CifpStatus = 'idle' | 'fetching' | 'parsing' | 'ready' | 'error'
 

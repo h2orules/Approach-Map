@@ -20,18 +20,20 @@ interface Props {
 
 // ── layout constants (module-local — do not confuse with config/constants.ts) ──
 const MARGIN = { top: 4, right: 20, bottom: 4, left: 16 }
-const TOP_BAND_H = 64 // fix names + DME boxes, staggered following the descent
+const TOP_BAND_H = 36 // fix names (the DME chip rides inline beside the name), staggered following the descent
 const BOTTOM_BAND_H = 26 // inter-fix distance scale
 const NAME_TOP_PAD = 14 // px from the top of the band to the highest fix's label baseline
-const LABEL_STAGGER_MAX = 26 // px the label baseline steps down inside the top band
-const DME_ROW_GAP = 15 // px from the name baseline down to the DME ident/glyph row
-const DME_SCALE = 0.92 // scale the shared DmeD glyph to fit the label band
+const LABEL_STAGGER_MAX = 14 // px the label baseline steps down inside the top band
+const DME_SCALE = 0.8 // scale the shared DmeD glyph to sit inline beside the 12px fix name
+const DME_H_PX = 14 // px intrinsic height of the shared DmeD glyph (glyphs.tsx DME_H) — for inline baseline alignment
+const DME_INLINE_GAP = 5 // px between the fix name's right edge and the inline ident/DME chip
+const DME_IDENT_CHAR_W = 5.2 // px per char of the 8.5px mono DME ident — inline layout + collision width
 const WEDGE_HALF_WIDTH_PX = 15 // 34:1 clear-surface wedge half-height at the FAF end
 const WEDGE_TIP_HALF_WIDTH_PX = 3 // half-height at the threshold end (not a perfect point — stays visible)
 const WEDGE_NOTCH_PX = 7 // forked-tail notch depth, cut into the wide (FAF) end
 const X_INSET_LEFT = 34 // horizontal room inside the left margin so the first fix label (name + speed) doesn't clip
 const X_INSET_RIGHT = 76 // larger right inset: the last fix's label PLUS the TDZE note (which sits past the threshold) must fit — keeps the drawn profile visually centered
-const ALT_HEADROOM = 30 // vertical room above the highest fix so its altitude label clears the name band
+const ALT_HEADROOM = 16 // vertical room above the highest fix so its altitude label clears the name band
 const ALT_CHAR_W = 7 // px per char of an altitude label at 11.5px Roboto Mono — sizes the over/under bars to the text
 const ALT_CY_OFFSET = 17 // px the altitude label's vertical center sits above the fix point
 const ALT_BAR_HALF_GAP = 7.5 // px from the altitude label center up/down to each over/under bar
@@ -44,6 +46,16 @@ const NAME_CHAR_W = 7.6 // px per char of a fix name at 12px bold Roboto Mono �
 const NAME_ROW_H = 15 // px a colliding fix name is pushed down to the next row
 const MARKER_LABEL_H = 10 // px added to the name band (and the fix name lifted by this) for a marker fix's second label line (OM/MM/IM)
 const MARKER_CONE_HALF_W = 9 // px half-width of the marker's dotted cone at the top of the plot
+// ── course-reversal (procedure-turn) excursion, drawn left of the anchor fix ──
+const REVERSAL_VERTEX_INSET = 24 // px from the plot's left edge the excursion vertex sits (when there's room)
+const REVERSAL_ARROW_LEN = 8 // px arrowhead length along each reversal leg
+const REVERSAL_ARROW_HALF = 4 // px arrowhead half-width
+const REVERSAL_COURSE_OFFSET = 11 // px the course label's center sits perpendicular off its leg (clear of the stroke)
+const ROLE_TAG_H = 9 // px lifted off the name baseline for an IAF/IF role tag line
+// ── hold-in-lieu-of-PT (HILPT) racetrack segment, drawn left of its anchor fix ──
+const HOLD_LINE_GAP = 12 // px between the outbound (upper) and inbound (lower) lines
+const HOLD_EXT_W = 88 // px the racetrack lines extend left of the anchor fix
+const HOLD_EXTRA_INSET = 96 // extra left inset reserved so the figure (plus its alt label) fits
 // Aircraft glyph scale — bumped up from the original size for legibility;
 // body dimensions, label offset, and label text size (CSS) all scale with it
 // so the callsign stays proportional to the feather it's labeling.
@@ -65,10 +77,19 @@ function computeYDomain(model: ProfileModel): [number, number] {
   for (const f of model.fixes) {
     if (f.plotAltFt != null) alts.push(f.plotAltFt)
   }
+  // The course-reversal excursion climbs well above the final-segment fixes
+  // (e.g. a 6000 entry over a 1700 FAF) — include it or the barb clips the top.
+  if (model.courseReversal) {
+    if (model.courseReversal.entryAltFt != null) alts.push(model.courseReversal.entryAltFt)
+    if (model.courseReversal.vertexAltFt != null) alts.push(model.courseReversal.vertexAltFt)
+  }
+  if (model.holdInLieu?.altFt != null) alts.push(model.holdInLieu.altFt)
   if (alts.length === 0) alts.push(0, 3000)
   const lo = Math.min(...alts)
   const hi = Math.max(...alts)
-  return [lo - 300, hi + 500]
+  // Tight padding so the plotted path stretches over the available height —
+  // labels above the top fix render into the ALT_HEADROOM band instead.
+  return [lo - 150, hi + 250]
 }
 
 interface PxPt {
@@ -237,6 +258,197 @@ function AltAnnotation({ f, x, y }: { f: ProfileFix; x: number; y: number }) {
   )
 }
 
+/**
+ * Altitude number centered at (cx, cy) with FAA over/under bars derived from
+ * the constraint type (overline = at-or-below max, underline = at-or-above
+ * min, both = mandatory). Shared by the course-reversal excursion.
+ */
+function ConstraintText({ constraint, cx, cy }: { constraint: AltConstraint; cx: number; cy: number }) {
+  const label = altNumberOnly(constraint)
+  const halfW = (label.length * ALT_CHAR_W) / 2
+  const type = constraint.type
+  const showAbove = type === 'AT_OR_BELOW' || type === 'AT' || type === 'BETWEEN'
+  const showBelow = type === 'AT_OR_ABOVE' || type === 'AT' || type === 'BETWEEN'
+  return (
+    <g>
+      {showAbove && (
+        <line className={styles.altBar} x1={cx - halfW} y1={cy - ALT_BAR_HALF_GAP} x2={cx + halfW} y2={cy - ALT_BAR_HALF_GAP} />
+      )}
+      <text className={styles.altText} x={cx} y={cy} textAnchor="middle" dominantBaseline="central">{label}</text>
+      {showBelow && (
+        <line className={styles.altBar} x1={cx - halfW} y1={cy + ALT_BAR_HALF_GAP} x2={cx + halfW} y2={cy + ALT_BAR_HALF_GAP} />
+      )}
+    </g>
+  )
+}
+
+/** Arrowhead polygon points: tip at (tx,ty), pointing along unit vector (ux,uy). */
+function arrowHeadPoints(tx: number, ty: number, ux: number, uy: number): string {
+  const bx = tx - ux * REVERSAL_ARROW_LEN
+  const by = ty - uy * REVERSAL_ARROW_LEN
+  const px = -uy
+  const py = ux
+  return (
+    `${tx},${ty} ` +
+    `${bx + px * REVERSAL_ARROW_HALF},${by + py * REVERSAL_ARROW_HALF} ` +
+    `${bx - px * REVERSAL_ARROW_HALF},${by - py * REVERSAL_ARROW_HALF}`
+  )
+}
+
+/**
+ * FAA-plate course-reversal (procedure-turn) excursion, drawn to the LEFT of
+ * the anchor fix: an upper (outbound) leg from the entry altitude sloping down
+ * to a left vertex at the PT-completion altitude, then a lower (inbound) leg
+ * back down to the anchor fix, where the normal descent resumes. Courses are
+ * labeled with arrows (outbound away from the fix, inbound toward it).
+ */
+function CourseReversalExcursion({
+  reversal,
+  anchorX,
+  vertexX,
+  entryY,
+  vertexY,
+  rejoinY,
+}: {
+  reversal: NonNullable<ProfileModel['courseReversal']>
+  anchorX: number
+  vertexX: number
+  entryY: number
+  vertexY: number
+  rejoinY: number
+}) {
+  // Upper leg: entry (anchorX, entryY) → vertex (vertexX, vertexY).
+  const upDx = vertexX - anchorX
+  const upDy = vertexY - entryY
+  const upLen = Math.hypot(upDx, upDy) || 1
+  const upUx = upDx / upLen
+  const upUy = upDy / upLen
+  // Lower leg: vertex (vertexX, vertexY) → rejoin (anchorX, rejoinY).
+  const dnDx = anchorX - vertexX
+  const dnDy = rejoinY - vertexY
+  const dnLen = Math.hypot(dnDx, dnDy) || 1
+  const dnUx = dnDx / dnLen
+  const dnUy = dnDy / dnLen
+
+  // Course labels sit at each leg's midpoint, offset perpendicular to the leg
+  // (up for the outbound/upper leg, down for the inbound/lower leg) so the
+  // path stroke never crosses the text. Both use the same font size.
+  const perp = (ux: number, uy: number, up: boolean): PxPt => {
+    const n = { x: -uy, y: ux } // one of the two unit normals
+    const wantNeg = up // screen-up = negative y
+    return (wantNeg ? n.y <= 0 : n.y > 0) ? n : { x: uy, y: -ux }
+  }
+  const upN = perp(upUx, upUy, true)
+  const dnN = perp(dnUx, dnUy, false)
+  const outMid = {
+    x: (anchorX + vertexX) / 2 + upN.x * REVERSAL_COURSE_OFFSET,
+    y: (entryY + vertexY) / 2 + upN.y * REVERSAL_COURSE_OFFSET,
+  }
+  const inMid = {
+    x: (vertexX + anchorX) / 2 + dnN.x * REVERSAL_COURSE_OFFSET,
+    y: (vertexY + rejoinY) / 2 + dnN.y * REVERSAL_COURSE_OFFSET,
+  }
+  const pad = (n: number) => String(Math.round(n)).padStart(3, '0')
+
+  return (
+    <g>
+      <path
+        className={styles.reversalPath}
+        d={`M ${anchorX} ${entryY} L ${vertexX} ${vertexY} L ${anchorX} ${rejoinY}`}
+        fill="none"
+      />
+      {/* outbound arrow (points away from the fix, at the vertex end) */}
+      <polygon className={styles.reversalArrow} points={arrowHeadPoints(vertexX, vertexY, upUx, upUy)} />
+      {/* inbound arrow (points toward the fix, at the anchor end) */}
+      <polygon className={styles.reversalArrow} points={arrowHeadPoints(anchorX, rejoinY, dnUx, dnUy)} />
+
+      <text className={styles.reversalCourse} x={outMid.x} y={outMid.y} textAnchor="middle" dominantBaseline="central">
+        {`${pad(reversal.outboundCourse)}°`}
+      </text>
+      <text className={styles.reversalCourse} x={inMid.x} y={inMid.y} textAnchor="middle" dominantBaseline="central">
+        {`${pad(reversal.inboundCourse)}°`}
+      </text>
+
+      {reversal.entryConstraint && <ConstraintText constraint={reversal.entryConstraint} cx={anchorX} cy={entryY - ALT_CY_OFFSET} />}
+      {reversal.vertexConstraint && <ConstraintText constraint={reversal.vertexConstraint} cx={vertexX} cy={vertexY - ALT_CY_OFFSET} />}
+
+      <text className={styles.reversalNote} x={vertexX} y={vertexY + 16} textAnchor="middle">
+        {`Remain within ${reversal.limitNm} NM`}
+      </text>
+    </g>
+  )
+}
+
+/**
+ * FAA-plate hold-in-lieu-of-PT (HILPT) figure, drawn to the LEFT of its anchor
+ * fix (mirroring the plate, where the hold extends away from the runway): an
+ * upper outbound line with an arrow pointing away from the fix, a lower
+ * inbound line arrowed toward it, both courses labeled, the hold's altitude
+ * constraint stacked at the open (far) end, and an "N NM Holding Pattern"
+ * note above — matching the plate's profile-view hold depiction.
+ */
+function HoldInLieuFigure({
+  hold,
+  anchorX,
+  extLeft,
+  y,
+}: {
+  hold: NonNullable<ProfileModel['holdInLieu']>
+  anchorX: number
+  extLeft: number
+  y: number
+}) {
+  const yIn = y // inbound line rides at the anchor's path altitude
+  const yOut = y - HOLD_LINE_GAP
+  const midX = (extLeft + anchorX) / 2
+  const pad = (n: number) => String(Math.round(n)).padStart(3, '0')
+
+  // Constraint at the open end: a BETWEEN splits plate-style (max with its
+  // overbar on the outbound row, min underlined on the inbound row); a single
+  // constraint centers between the two lines.
+  const alt = hold.alt
+  const altLabelX = (label: string) => extLeft - (label.length * ALT_CHAR_W) / 2 - 8
+  const constraint = !alt ? null : alt.type === 'BETWEEN' ? (
+    <g>
+      <ConstraintText
+        constraint={{ type: 'AT_OR_BELOW', low: alt.high ?? alt.low }}
+        cx={altLabelX(altNumberOnly({ type: 'AT_OR_BELOW', low: alt.high ?? alt.low }))}
+        cy={yOut}
+      />
+      <ConstraintText
+        constraint={{ type: 'AT_OR_ABOVE', low: alt.low }}
+        cx={altLabelX(altNumberOnly({ type: 'AT_OR_ABOVE', low: alt.low }))}
+        cy={yIn}
+      />
+    </g>
+  ) : (
+    <ConstraintText constraint={alt} cx={altLabelX(altNumberOnly(alt))} cy={(yIn + yOut) / 2} />
+  )
+
+  return (
+    <g>
+      <line className={styles.reversalPath} x1={anchorX} y1={yOut} x2={extLeft} y2={yOut} />
+      <line className={styles.reversalPath} x1={extLeft} y1={yIn} x2={anchorX - 2} y2={yIn} />
+      {/* outbound arrow (away from the fix), inbound arrow (toward it) */}
+      <polygon className={styles.reversalArrow} points={arrowHeadPoints(extLeft, yOut, -1, 0)} />
+      <polygon className={styles.reversalArrow} points={arrowHeadPoints(anchorX - 2, yIn, 1, 0)} />
+
+      <text className={styles.reversalCourse} x={midX} y={yOut - 6} textAnchor="middle">
+        {`${pad(hold.outboundCourse)}°`}
+      </text>
+      <text className={styles.reversalCourse} x={midX} y={yIn + 12} textAnchor="middle">
+        {`${pad(hold.inboundCourse)}°`}
+      </text>
+
+      {constraint}
+
+      <text className={styles.reversalNote} x={midX} y={yOut - 18} textAnchor="middle">
+        {`${hold.legNm % 1 === 0 ? hold.legNm : hold.legNm.toFixed(1)} NM Holding Pattern`}
+      </text>
+    </g>
+  )
+}
+
 // ── main component ─────────────────────────────────────────────────────
 
 // Memoized: the live-aircraft tick re-renders the parent every second, but
@@ -274,9 +486,13 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
   // sit on the descent line rather than dropping to the runway elevation.
   const fixAlts = fixRenderAltitudes(model)
 
+  // A HILPT anchored at the profile's first fix draws its racetrack figure to
+  // the LEFT of that fix — reserve the room for it in the left inset.
+  const holdAtStart = model.holdInLieu && model.holdInLieu.anchorFixIdx === 0 ? model.holdInLieu : null
+
   // Inset the horizontal domain so the first/last fix labels (centered on their
   // ticks, and widened by an inline speed restriction) don't clip at the edges.
-  const plotLeft = MARGIN.left + X_INSET_LEFT
+  const plotLeft = MARGIN.left + X_INSET_LEFT + (holdAtStart ? HOLD_EXTRA_INSET : 0)
   const plotRight = Math.max(width - MARGIN.right - X_INSET_RIGHT, plotLeft + 1)
   const plotW = plotRight - plotLeft
 
@@ -333,7 +549,39 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
   })()
 
   // ── 34:1 clear-surface wedge (FAF → threshold), forked tail at the FAF end ──
-  const wedgePath = gsAnchorPx ? buildWedgePath(gsAnchorPx, thresholdPx) : null
+  // Only drawn for genuinely charted vertical guidance (RNAV path point / ILS
+  // glide slope); a coded VDA or the 3° fallback does not earn a clear surface.
+  const wedgePath = gsAnchorPx && model.hasChartedVerticalGuidance ? buildWedgePath(gsAnchorPx, thresholdPx) : null
+
+  // ── course-reversal (procedure-turn) excursion geometry, drawn into the
+  //    empty space left of the anchor fix (where the flat pre-FAF fixes were
+  //    dropped). The vertex sits near the plot's left edge. ──
+  const reversalGeom = (() => {
+    const rev = model.courseReversal
+    if (!rev) return null
+    const anchor = model.fixes[rev.anchorFixIdx]
+    if (!anchor) return null
+    const anchorX = xScale(anchor.distNm)
+    const leftGap = anchorX - plotLeft
+    if (leftGap < 12) return null // no room to draw the excursion — skip cleanly
+    const vertexX = plotLeft + Math.min(REVERSAL_VERTEX_INSET, leftGap * 0.35)
+    const rejoinY = yScale(fixAlts[rev.anchorFixIdx])
+    const entryY = yScale(rev.entryAltFt ?? fixAlts[rev.anchorFixIdx])
+    const vertexY = yScale(rev.vertexAltFt ?? fixAlts[rev.anchorFixIdx])
+    return { rev, anchorX, vertexX, entryY, vertexY, rejoinY }
+  })()
+
+  // ── hold-in-lieu-of-PT racetrack figure, left of its anchor fix (only drawn
+  //    when the hold anchors the profile's first fix — the HILPT entry). ──
+  const holdGeom = (() => {
+    if (!holdAtStart) return null
+    const anchor = model.fixes[holdAtStart.anchorFixIdx]
+    if (!anchor) return null
+    const anchorX = xScale(anchor.distNm)
+    const extLeft = Math.max(anchorX - HOLD_EXT_W, MARGIN.left + 6)
+    if (anchorX - extLeft < 24) return null // no room — skip cleanly
+    return { hold: holdAtStart, anchorX, extLeft, y: yScale(fixAlts[holdAtStart.anchorFixIdx]) }
+  })()
 
   // ── top-band fix-name labels, staggered downward following the descent,
   //    then de-collided: a name that would overlap its neighbour horizontally
@@ -344,9 +592,18 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
     const chars = f.fixId.length + (f.speedKt > 0 ? String(f.speedKt).length + 2 : 0)
     return (chars * NAME_CHAR_W) / 2
   }
+  // The inline ident + DME chip extends the label to the RIGHT of the centered
+  // fix name — used for both rendering and collision math.
+  const dmeInlineW = (f: ProfileFix) => {
+    if (f.dmeNm == null) return 0
+    const identChars = f.dmeNavaidId ? f.dmeNavaidId.length + (f.isDmeArc ? 4 : 0) : 0
+    const identW = identChars > 0 ? identChars * DME_IDENT_CHAR_W + 3 : 0
+    return DME_INLINE_GAP + identW + dmeGlyphWidth(f.dmeNm) * DME_SCALE
+  }
   for (let i = 1; i < model.fixes.length; i++) {
     const gap = xScale(model.fixes[i].distNm) - xScale(model.fixes[i - 1].distNm)
-    const need = nameHalfW(model.fixes[i]) + nameHalfW(model.fixes[i - 1]) + 4
+    const prev = model.fixes[i - 1]
+    const need = nameHalfW(model.fixes[i]) + nameHalfW(prev) + dmeInlineW(prev) + 4
     if (gap < need && nameOffsets[i] - nameOffsets[i - 1] < NAME_ROW_H) {
       nameOffsets[i] = nameOffsets[i - 1] + NAME_ROW_H
     }
@@ -402,6 +659,23 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
       {/* primary descent path: linear through the fixes, glideslope to the threshold */}
       <path className={styles.descentPath} d={mainPath} />
 
+      {/* course-reversal (procedure-turn) excursion left of the anchor fix */}
+      {reversalGeom && (
+        <CourseReversalExcursion
+          reversal={reversalGeom.rev}
+          anchorX={reversalGeom.anchorX}
+          vertexX={reversalGeom.vertexX}
+          entryY={reversalGeom.entryY}
+          vertexY={reversalGeom.vertexY}
+          rejoinY={reversalGeom.rejoinY}
+        />
+      )}
+
+      {/* hold-in-lieu-of-PT racetrack segment left of its anchor fix */}
+      {holdGeom && (
+        <HoldInLieuFigure hold={holdGeom.hold} anchorX={holdGeom.anchorX} extLeft={holdGeom.extLeft} y={holdGeom.y} />
+      )}
+
       {gsAnchorPx && gsLabelPos && (
         <g>
           <text className={styles.gsLabel} x={gsLabelPos.x} y={gsLabelPos.y} textAnchor="middle">
@@ -423,21 +697,29 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
         </g>
       )}
 
-      {/* top band: fix names + DME boxes, dashed vertical ticks down to the path */}
+      {/* top band: fix names (+ inline DME chip), dashed vertical ticks down to the path */}
       {model.fixes.map((f, i) => {
         const x = xScale(f.distNm)
         const nameY = MARGIN.top + NAME_TOP_PAD + markerBandExtra + nameOffsets[i]
-        const dmeY = nameY + DME_ROW_GAP
         const pathY = yScale(fixAlts[i])
-        const dmeW = f.dmeNm != null ? dmeGlyphWidth(f.dmeNm) * DME_SCALE : 0
         // Marker fix: lift the name by one line and put the marker type (OM/…)
         // on a second line centered under it, at the name's normal baseline.
         const nameBaselineY = f.marker ? nameY - MARKER_LABEL_H : nameY
+        // IAF/IF role tag, drawn as a small line above the fix name. The course
+        // reversal's anchor is tagged IAF too (the turn is entered there).
+        const anchorIsIaf =
+          model.courseReversal?.anchorIsIaf === true && i === model.courseReversal.anchorFixIdx
+        const roleTag = f.role === 'iaf' || anchorIsIaf ? 'IAF' : f.role === 'if' ? 'IF' : null
 
         return (
           <g key={`name-${f.fixId}-${i}`}>
             <line className={styles.tick} x1={x} y1={nameY + 4} x2={x} y2={pathY} />
 
+            {roleTag && (
+              <text className={styles.roleTag} x={x} y={nameBaselineY - ROLE_TAG_H} textAnchor="middle">
+                {roleTag}
+              </text>
+            )}
             <text className={styles.fixName} x={x} y={nameBaselineY} textAnchor="middle">
               {f.fixId}
               {f.speedKt > 0 && <tspan className={styles.speedInline}> {f.speedKt}K</tspan>}
@@ -448,18 +730,27 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
               </text>
             )}
 
-            {f.dmeNm != null && (
-              <g transform={`translate(${x - dmeW / 2} ${dmeY})`}>
-                {f.dmeNavaidId && (
-                  <text className={styles.dmeIdent} x={dmeW / 2} y={-2} textAnchor="middle">
-                    {f.dmeNavaidId}{f.isDmeArc ? ' ARC' : ''}
-                  </text>
-                )}
-                <g transform={`scale(${DME_SCALE})`}>
-                  <DmeD nm={f.dmeNm} standalone={false} />
+            {/* Ident + DME chip inline, to the right of the fix name (reclaims
+                the vertical row the stacked chip used to occupy). Vertically
+                centered against the name's cap height. */}
+            {f.dmeNm != null && (() => {
+              const startX = x + nameHalfW(f) + DME_INLINE_GAP
+              const ident = f.dmeNavaidId ? `${f.dmeNavaidId}${f.isDmeArc ? ' ARC' : ''}` : ''
+              const identW = ident ? ident.length * DME_IDENT_CHAR_W + 3 : 0
+              const glyphTop = nameBaselineY - 4.5 - (DME_H_PX * DME_SCALE) / 2
+              return (
+                <g>
+                  {ident && (
+                    <text className={styles.dmeIdent} x={startX} y={nameBaselineY} textAnchor="start">
+                      {ident}
+                    </text>
+                  )}
+                  <g transform={`translate(${startX + identW} ${glyphTop}) scale(${DME_SCALE})`}>
+                    <DmeD nm={f.dmeNm} standalone={false} />
+                  </g>
                 </g>
-              </g>
-            )}
+              )
+            })()}
           </g>
         )
       })}
@@ -480,7 +771,14 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
             {f.isGsIntercept && <ProfileBolt x={x} y={y} />}
             {f.role === 'faf' && <MalteseCross x={x} y={y} />}
             {f.role === 'map' && <MapGlyph x={x} y={y} />}
-            {hold && <HoldGlyph x={x} y={y} isPi={hold.kind === 'PI'} />}
+            {/* Suppress the tiny PI barb / HF racetrack glyphs when the full
+                course-reversal excursion or HILPT figure is drawn at this fix,
+                so the maneuver isn't depicted twice. */}
+            {hold &&
+              !(hold.kind === 'PI' && reversalGeom) &&
+              !(hold.kind === 'HF' && holdGeom && holdGeom.hold.anchorFixIdx === i) && (
+                <HoldGlyph x={x} y={y} isPi={hold.kind === 'PI'} />
+              )}
           </g>
         )
       })}

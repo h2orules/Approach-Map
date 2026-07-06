@@ -64,6 +64,15 @@ export function ProfileHeader({ procedure, model }: Props) {
           </span>
         </div>
 
+        {model.appCourseMag != null && (
+          <div className={styles.box}>
+            <span className={styles.boxLabel}>App CRS</span>
+            <span className={styles.boxValue}>
+              {`${String(Math.round(model.appCourseMag)).padStart(3, '0')}°`}
+            </span>
+          </div>
+        )}
+
         <div className={styles.box}>
           <span className={styles.boxLabel}>TDZE / RWY</span>
           <span className={styles.boxValue}>
@@ -84,7 +93,7 @@ export function ProfileHeader({ procedure, model }: Props) {
           {isRnpAr && <span className={styles.chip}>RNP AR</span>}
           {hasGs && (
             <span>
-              {`GS ${model.gsAngleDeg.toFixed(1)}°${model.usedFallbackGs ? '*' : ''}`}
+              {`GS ${model.gsAngleDeg.toFixed(2).replace(/0$/, '')}°${model.usedFallbackGs ? '*' : ''}`}
               {model.tchFt != null ? ` · TCH ${model.tchFt}′` : ''}
             </span>
           )}

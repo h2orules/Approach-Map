@@ -165,3 +165,52 @@
   text-shadow:
     0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
 }
+
+/* IAF/IF chip appended after a fix name on approaches. */
+.roleTag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #cbd5e1;
+  border: 1px solid rgba(203, 213, 225, 0.7);
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 1.35;
+  align-self: center;
+}
+
+/* Rotated magnetic-course label printed along an approach segment. Same family
+   as the distance labels but distinguishable (lighter weight, slight tracking). */
+.courseLabel {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow:
+    0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
+}
+
+/* Hold course label container: the rotated course text on a racetrack straight
+   leg, with the hold's own altitude restriction (when shown) centered under it. */
+.holdCourseLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  pointer-events: none;
+}
+
+/* Procedure-turn barb heading labels: small rotated course values sitting on
+   the barb tick (barb course on the tip side, reciprocal on the inner side). */
+.barbLabel {
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow:
+    0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
+}

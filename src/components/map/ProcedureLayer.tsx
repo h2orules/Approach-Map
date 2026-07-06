@@ -170,15 +170,29 @@ export function ProcedureLayer({ procedure }: Props) {
             layout={{ 'line-join': 'round', 'line-cap': 'round' }}
           />
         )}
-        {/* Inbound path + holds + procedure turns: solid */}
+        {/* Inbound path + holds: solid (procedure-turn barbs drawn separately below) */}
         <Layer
           id={`proc-line-${procedure.id}`}
           type="line"
-          filter={['==', ['get', 'segment'], 'transition']}
+          filter={['all', ['==', ['get', 'segment'], 'transition'], ['!=', ['get', 'kind'], 'pt']]}
           paint={{
             'line-color': lineColor,
             'line-width': baseWidth,
             'line-opacity': 0.9,
+          }}
+          layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+        />
+        {/* Procedure-turn barb: slightly wider than the base line so the 45°
+            tick stays legible where the outbound leg hides under the final
+            approach course and the tick crosses hold/centerline geometry. */}
+        <Layer
+          id={`proc-pt-${procedure.id}`}
+          type="line"
+          filter={['==', ['get', 'kind'], 'pt']}
+          paint={{
+            'line-color': lineColor,
+            'line-width': baseWidth + 1,
+            'line-opacity': 0.95,
           }}
           layout={{ 'line-join': 'round', 'line-cap': 'round' }}
         />

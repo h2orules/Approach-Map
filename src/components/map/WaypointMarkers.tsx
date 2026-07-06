@@ -557,9 +557,9 @@ export function WaypointMarkers({ procedures }: Props) {
             : s.alt
         const boltFrom = s.gsFaf ? nearestPointToFix(dx, dy, w, h) : null
         const dme = s.dmeNm ?? null
-        // IAF/IF chip — approaches only (task 6).
+        // IAF/IF/FAF chip — approaches only.
         const roleTag =
-          approachSymKeys.has(symKey(s)) && (s.role === 'iaf' || s.role === 'if')
+          approachSymKeys.has(symKey(s)) && (s.role === 'iaf' || s.role === 'if' || s.role === 'faf')
             ? s.role.toUpperCase()
             : null
 

@@ -722,7 +722,8 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
         // reversal's anchor is tagged IAF too (the turn is entered there).
         const anchorIsIaf =
           model.courseReversal?.anchorIsIaf === true && i === model.courseReversal.anchorFixIdx
-        const roleTag = f.role === 'iaf' || anchorIsIaf ? 'IAF' : f.role === 'if' ? 'IF' : null
+        const roleTag =
+          f.role === 'iaf' || anchorIsIaf ? 'IAF' : f.role === 'if' ? 'IF' : f.role === 'faf' ? 'FAF' : null
 
         return (
           <g key={`name-${f.fixId}-${i}`}>

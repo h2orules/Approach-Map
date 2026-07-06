@@ -1,11 +1,9 @@
 /* ── Altitude range slider ───────────────────────────────────────────────── */
 /*  Styled to match the Mapbox NavigationControl box (white, 4px radius,     */
-/*  2px rgba shadow).  Positioned bottom-right, above NavigationControl.      */
+/*  2px rgba shadow).  Positioning is owned by the bottom-right control stack */
+/*  in AppMap (shared with TrafficFilter); this box just sizes to content.    */
 
 .container {
-  position: absolute;
-  right: 10px;
-  bottom: 110px;
   background: #fff;
   border-radius: 4px;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
@@ -16,7 +14,6 @@
   gap: 6px;
   pointer-events: all;
   user-select: none;
-  z-index: 10;
 }
 
 /* Summary badge — shown only when filter is non-default */

@@ -16,7 +16,11 @@ const STORE_NAME = 'cifp'
 // info + magvar) instead of a bare Procedure[] per airport.
 // v12: approach runways are also derived from the procedure ident (I16R →
 // 16R), fixing empty runways[] on approaches (TDZE/length + ILS GS lookups).
-const PARSER_VERSION = 12
+// v13: terminal NDBs (P/N) parsed; approach FAFs collocated with an NDB are
+// tagged as outer markers (LOM) via WaypointSymbol.marker/markerLocator.
+// v14: collocated NDB symbols are snapped onto the LOM FAF so they render at
+// the same point (they're cataloged ~100 ft apart).
+const PARSER_VERSION = 14
 
 export type CifpStatus = 'idle' | 'fetching' | 'parsing' | 'ready' | 'error'
 

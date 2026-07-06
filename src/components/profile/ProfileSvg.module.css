@@ -42,6 +42,23 @@
   font-weight: 600;
 }
 
+/* Marker-beacon type (OM/MM/IM) — second label line under the fix name. */
+.markerType {
+  fill: #fbbf24;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* Marker-beacon cone — a faint dotted triangle rising from the ground at the
+   fix, behind every other layer. */
+.markerCone {
+  fill: rgba(251, 191, 36, 0.06);
+  stroke: rgba(251, 191, 36, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
 .missedFixName {
   fill: #94a3b8;
   font-size: 9px;
@@ -146,27 +163,43 @@
 }
 
 /* ── live aircraft ────────────────────────────────────────────────── */
+/* Selected target: bright accent cyan. paint-order:stroke draws the dark
+   outline behind the fill as a halo, so the glyph reads over the light
+   glideslope line and the dark background alike. */
+/* Sizes here scale with AIRCRAFT_GLYPH_SCALE (1.4) in ProfileSvg.tsx — keep
+   the two in sync if either changes. */
 .aircraft {
   fill: #38bdf8;
   stroke: #0b0f14;
-  stroke-width: 0.8;
+  stroke-width: 2px;
+  paint-order: stroke;
 }
 
 .aircraftLabel {
-  fill: #38bdf8;
-  font-size: 10px;
+  fill: #7dd3fc;
+  font-size: 14px;
   font-weight: 700;
+  stroke: #0b0f14;
+  stroke-width: 3.5px;
+  paint-order: stroke;
 }
 
-/* Non-selected planes sharing the same approach — dimmed so the selected one
-   (if any) still reads as the primary target. */
-.aircraftDimmed {
-  opacity: 0.5;
+/* Non-selected planes sharing the same approach. Full opacity with a strong
+   dark halo (previously a flat 0.5 opacity, which vanished against both the
+   background and the glide line). A neutral slate fill keeps them clearly
+   secondary to the cyan selected target without sacrificing legibility. */
+.aircraftInactive {
+  fill: #cbd5e1;
+  stroke: #0b0f14;
+  stroke-width: 2.4px;
+  paint-order: stroke;
 }
 
 .aircraftLabelDimmed {
-  fill: #38bdf8;
-  font-size: 8.5px;
-  font-weight: 600;
-  opacity: 0.75;
+  fill: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  stroke: #0b0f14;
+  stroke-width: 3.5px;
+  paint-order: stroke;
 }

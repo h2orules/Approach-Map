@@ -66,7 +66,7 @@ export function useProcedureDetection() {
     )
     stateRef.current = state
 
-    const activity = deriveProcedureActivity(state, procedures)
+    const activity = deriveProcedureActivity(state)
     applyDetection(activity, state.assignments, nowMs)
 
     if (import.meta.env.DEV && events.length) {

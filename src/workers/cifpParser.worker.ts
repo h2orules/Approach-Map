@@ -184,6 +184,13 @@ function buildProcedureFeatures(transitions: Array<{ id: string; legs: Procedure
   return features
 }
 
+/** Cheap equirectangular distance in nm — fine for the sub-nm collocation test. */
+function approxDistNm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLat = lat1 - lat2
+  const dLon = (lon1 - lon2) * Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180)
+  return Math.hypot(dLat, dLon) * 60
+}
+
 self.onmessage = function (e: MessageEvent<ParseRequest>) {
   if (e.data.type !== 'parse') return
 
@@ -197,6 +204,11 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
     // runway identifiers like RW34C repeat across airports and must not collide.
     const waypointDb = new Map<string, WaypointRecord>()
     const runwayDb = new Map<string, WaypointRecord>()
+    // NDB positions (enroute D/B + airport-terminal P/N records), used to detect
+    // a Locator Outer Marker: an approach FAF collocated with an NDB. The FAA
+    // CIFP carries no marker-beacon records, so a collocated locator is the only
+    // available signal for a marker on the procedure. See markerForFaf below.
+    const ndbCoords: Array<{ lat: number; lon: number }> = []
     // ILS localizer positions, keyed by `${icao}:${locId}`. Localizer ids (e.g.
     // IPAE) repeat across airports and serve as the DME reference for ILS legs.
     const localizerDb = new Map<string, WaypointRecord>()
@@ -326,12 +338,27 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
         const coords = parseLatLon(latStr, lonStr)
         if (fixId && coords) waypointDb.set(fixId, { ...coords, navaidType: 'VOR' })
       } else if (sc === 'D' && ss === 'B') {
-        // NDB
+        // NDB (enroute)
         const fixId = line.slice(13, 17).trim()
         const latStr = line.slice(32, 41).trim()
         const lonStr = line.slice(41, 51).trim()
         const coords = parseLatLon(latStr, lonStr)
-        if (fixId && coords) waypointDb.set(fixId, { ...coords, navaidType: 'NDB' })
+        if (fixId && coords) {
+          waypointDb.set(fixId, { ...coords, navaidType: 'NDB' })
+          ndbCoords.push(coords)
+        }
+      } else if (sc === 'P' && ss === 'N') {
+        // Airport-terminal NDB (compass locator). Uses the enroute-style layout
+        // (subsection at col 6, coords at cols 33-51). These are the locators
+        // that make an outer marker a LOM — the collocation the marker detection
+        // relies on. Don't clobber an enroute fix of the same ident already in
+        // waypointDb; the coords still feed ndbCoords for collocation.
+        const fixId = line.slice(13, 17).trim()
+        const coords = parseLatLon(line.slice(32, 41).trim(), line.slice(41, 51).trim())
+        if (fixId && coords) {
+          if (!waypointDb.has(fixId)) waypointDb.set(fixId, { ...coords, navaidType: 'NDB' })
+          ndbCoords.push(coords)
+        }
       }
     }
 
@@ -510,6 +537,39 @@ self.onmessage = function (e: MessageEvent<ParseRequest>) {
             role: 'normal', alt: null, speedKt: null, gsFaf: false,
             flyover: false, dmeNm: null, dmeNavaid: null, isDmeSource: true,
           })
+        }
+
+        // LOM detection: mark an approach FAF that sits on top of an NDB (a
+        // compass locator) as an outer marker. The CIFP has no marker-beacon
+        // records, so a collocated locator is the only signal — this reliably
+        // catches LOMs (e.g. KAWO LOC 34 FAF WATON over the AWO NDB) but not
+        // markerless OM/MM/IM. markerLocator drives the NDB overlay.
+        if (group.type === 'APPROACH') {
+          const MARKER_COLLOCATE_NM = 0.5
+          const syms = Array.from(symbolMap.values())
+          for (const faf of syms) {
+            if (faf.role !== 'faf') continue
+            const isLocator =
+              faf.navaidType === 'NDB' ||
+              ndbCoords.some((n) => approxDistNm(faf.lat, faf.lon, n.lat, n.lon) <= MARKER_COLLOCATE_NM)
+            if (!isLocator) continue
+            faf.marker = 'OM'
+            faf.markerLocator = true
+            // The FAF fix and the locator NDB are cataloged ~100 ft apart but are
+            // the same LOM point — snap any collocated NDB symbol (e.g. the
+            // missed-approach hold at the locator) onto the FAF so the two render
+            // coincident rather than drifting apart when zoomed in.
+            for (const sym of syms) {
+              if (
+                sym !== faf &&
+                sym.navaidType === 'NDB' &&
+                approxDistNm(faf.lat, faf.lon, sym.lat, sym.lon) <= MARKER_COLLOCATE_NM
+              ) {
+                sym.lat = faf.lat
+                sym.lon = faf.lon
+              }
+            }
+          }
         }
 
         const features = buildProcedureFeatures(transitionEntries)

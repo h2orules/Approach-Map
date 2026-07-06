@@ -4,6 +4,7 @@ import type { FeatureCollection } from 'geojson'
 import type { Procedure } from '../../types/procedure'
 import { useProcedureStore } from '../../store/useProcedureStore'
 import { useAircraftStore } from '../../store/useAircraftStore'
+import { useAirportStore } from '../../store/useAirportStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 
 interface Props {
@@ -14,12 +15,27 @@ function bearingDelta(a: number, b: number): number {
   return Math.abs(((a - b + 540) % 360) - 180)
 }
 
+function runwayHeading(rwy: string): number {
+  return parseInt(rwy.slice(0, 2), 10) * 10
+}
+
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
 /**
- * For SID procedures: identify RW* transition features whose runway direction
- * does not match any currently flying aircraft. Returns the set of transitionIds
- * to render as dotted, or null if no dashing is needed.
+ * For SIDs that serve more than one departure flow direction (e.g. BANGR9 at
+ * KSEA has separate RW16-series and RW34-series transitions, each running
+ * independently out to the fix where they converge — the convergence portion
+ * itself lives in a separate non-runway transition, so dashing only the
+ * runway-specific features already stops exactly at that fix with no extra
+ * truncation logic needed): identify which flow direction is NOT currently in
+ * use, so its runway-specific legs can be
+ * rendered dimmer/dashed. ATIS-reported departure runways are authoritative
+ * when they disambiguate this SID's directions (same ATIS-informed pattern as
+ * approach priority, src/geo/approachPriority.ts). Otherwise fall back to the
+ * track heading of aircraft the detection engine has already confirmed as
+ * flying this specific procedure (useProcedureStore.detectedHexes) — not just
+ * any airborne aircraft, so unrelated traffic elsewhere can't false-positive a
+ * direction as active.
  */
 function inactiveRwTransitions(procedure: Procedure): Set<string> | null {
   if (procedure.type !== 'SID') return null
@@ -31,7 +47,7 @@ function inactiveRwTransitions(procedure: Procedure): Set<string> | null {
     const tid: string | undefined = (f as any).properties?.transitionId
     if (!tid) continue
     const m = tid.match(/^RW(\d{2})/)
-    if (m) rwHeadings.set(tid, parseInt(m[1]) * 10)
+    if (m) rwHeadings.set(tid, parseInt(m[1], 10) * 10)
   }
 
   // Need at least two RW transitions to potentially have opposite directions.
@@ -42,19 +58,43 @@ function inactiveRwTransitions(procedure: Procedure): Set<string> | null {
   const allSameDir = headings.every((h) => bearingDelta(h, headings[0]) <= 45)
   if (allSameDir) return null
 
-  // Which runway directions have aircraft flying them?
-  const aircraft = Array.from(useAircraftStore.getState().aircraftMap.values()).filter(
-    (ac) => ac.altBaro !== 'ground',
-  )
-  if (aircraft.length === 0) return null // no data yet — show everything solid
-
-  const inactive = new Set<string>()
-  for (const [tid, heading] of rwHeadings) {
-    const active = aircraft.some((ac) => bearingDelta(ac.track, heading) <= 45)
-    if (!active) inactive.add(tid)
+  const buildInactiveSet = (activeHeadings: number[]): Set<string> => {
+    const inactive = new Set<string>()
+    for (const [tid, heading] of rwHeadings) {
+      const active = activeHeadings.some((ah) => bearingDelta(ah, heading) <= 45)
+      if (!active) inactive.add(tid)
+    }
+    return inactive
   }
 
-  // If everything is active (or nothing is active) there's nothing to dash.
+  // Primary: ATIS-reported departure runways, when they disambiguate this
+  // SID's directions (i.e. at least one reported runway matches one of this
+  // SID's runway headings — a mismatch means ATIS is talking about a runway
+  // complex this SID doesn't serve, so it can't tell us anything here).
+  const atisDepRunways = useAirportStore.getState().atisInfo?.depRunways ?? []
+  const atisHeadings = atisDepRunways.map(runwayHeading)
+  const atisDisambiguates =
+    atisHeadings.length > 0 && headings.some((h) => atisHeadings.some((ah) => bearingDelta(ah, h) <= 45))
+
+  if (atisDisambiguates) {
+    const inactive = buildInactiveSet(atisHeadings)
+    if (inactive.size === 0 || inactive.size === rwHeadings.size) return null
+    return inactive
+  }
+
+  // Fallback: track heading of aircraft the detection engine has already
+  // confirmed as flying this SID.
+  const hexes = useProcedureStore.getState().detectedHexes[procedure.id] ?? []
+  if (hexes.length === 0) return null // no confirmed traffic yet — show everything solid
+
+  const aircraftMap = useAircraftStore.getState().aircraftMap
+  const tracks = hexes
+    .map((hex) => aircraftMap.get(hex))
+    .filter((ac): ac is NonNullable<typeof ac> => !!ac && ac.altBaro !== 'ground')
+    .map((ac) => ac.track)
+  if (tracks.length === 0) return null
+
+  const inactive = buildInactiveSet(tracks)
   if (inactive.size === 0 || inactive.size === rwHeadings.size) return null
   return inactive
 }
@@ -102,8 +142,11 @@ export function ProcedureLayer({ procedure }: Props) {
             type="line"
             paint={{
               'line-color': lineColor,
-              'line-width': 1.5,
-              'line-dasharray': [1, 2.5],
+              'line-width': 2,
+              // Near-zero dash length + round cap = a round dot rather than a
+              // short dash; a wide gap keeps the dots clearly separated
+              // instead of reading as a slightly-textured solid line.
+              'line-dasharray': [0.01, 2.5],
               'line-opacity': 0.5,
             }}
             layout={{ 'line-join': 'round', 'line-cap': 'round' }}

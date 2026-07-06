@@ -12,6 +12,7 @@ import {
 import { decodeCallsign, airlineLogoUrl } from '../../utils/airlines'
 import { decodeAircraftType } from '../../utils/aircraftTypes'
 import { getAirportByIcao } from '../../hooks/useAirportSearch'
+import { VFR_SQUAWK } from '../../config/constants'
 import styles from './DataBlock.module.css'
 
 interface Props {
@@ -26,6 +27,8 @@ export function DataBlock({ aircraft, onClose }: Props) {
   const originAirport = aircraft.origin ? getAirportByIcao(aircraft.origin) : undefined
   const destAirport = aircraft.destination ? getAirportByIcao(aircraft.destination) : undefined
   const friendlyType = decodeAircraftType(aircraft.typeCode)
+  const isVfr = aircraft.squawk === VFR_SQUAWK
+  const isTisb = aircraft.hex.startsWith('~')
 
   return (
     <Popup
@@ -39,28 +42,37 @@ export function DataBlock({ aircraft, onClose }: Props) {
       offset={[8, -8] as [number, number]}
     >
       <div className={styles.block}>
-        <div className={styles.callsign}>{formatCallsign(aircraft.flight)}</div>
+        <div className={styles.callsignRow}>
+          <span className={styles.callsign}>{formatCallsign(aircraft.flight)}</span>
+          {isTisb && <span className={styles.tisbBadge}>TIS-B</span>}
+        </div>
         <div className={styles.row}>
           <span className={styles.alt}>{formatAltitude(aircraft.altBaro)}</span>
           <span className={styles.speed}>{formatSpeed(aircraft.groundspeed)}</span>
           <span className={styles.type}>{aircraft.typeCode || '???'}</span>
         </div>
 
-        {(aircraft.origin || aircraft.destination) && (
+        {isVfr ? (
           <div className={styles.route}>
-            {aircraft.origin && (
-              <>
-                <span className={styles.routeLabel}>FROM</span>
-                <span className={styles.routeCode}>{aircraft.origin}</span>
-              </>
-            )}
-            {aircraft.destination && (
-              <>
-                <span className={styles.routeLabel}>TO</span>
-                <span className={styles.routeCode}>{aircraft.destination}</span>
-              </>
-            )}
+            <span className={styles.vfr}>VFR</span>
           </div>
+        ) : (
+          (aircraft.origin || aircraft.destination) && (
+            <div className={styles.route}>
+              {aircraft.origin && (
+                <>
+                  <span className={styles.routeLabel}>FROM</span>
+                  <span className={styles.routeCode}>{aircraft.origin}</span>
+                </>
+              )}
+              {aircraft.destination && (
+                <>
+                  <span className={styles.routeLabel}>TO</span>
+                  <span className={styles.routeCode}>{aircraft.destination}</span>
+                </>
+              )}
+            </div>
+          )
         )}
 
         <div className={styles.expanded}>

@@ -20,6 +20,7 @@ import { LocFeatherLayer } from './LocFeatherLayer'
 import { WaypointMarkers } from './WaypointMarkers'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
 import { AltitudeFilter } from './AltitudeFilter'
+import { TrafficFilter } from './TrafficFilter'
 import { ProfilePanel } from '../profile/ProfilePanel'
 import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftPoll } from '../../hooks/useAircraftPoll'
@@ -168,7 +169,26 @@ export function AppMap() {
       {/* DOM overlay so aircraft render above the waypoint markers and stay crisp */}
       <AircraftOverlay mapRef={mapRef} />
 
-      <AltitudeFilter />
+      {/* Bottom-right control stack: traffic filters above the altitude
+          filter. Anchored at the bottom (clearing the NavigationControl) so it
+          grows upward when the altitude filter shows its summary badge, keeping
+          a consistent gap between the two boxes. */}
+      <div
+        style={{
+          position: 'absolute',
+          right: 10,
+          bottom: 110,
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 12,
+          pointerEvents: 'none',
+        }}
+      >
+        <TrafficFilter />
+        <AltitudeFilter />
+      </div>
 
       <ActiveProceduresOverlay />
 

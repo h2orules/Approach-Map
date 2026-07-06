@@ -15,9 +15,11 @@ import {
   DETECT_CONFIRMED_DIR_DEG,
   DETECT_CONFIRM_MIN_MATCHES,
   DETECT_CONFIRM_MIN_DURATION_MS,
+  DETECT_CONFIRM_MIN_PROGRESS_NM,
   DETECT_CANDIDATE_TTL_MS,
   DETECT_CONFIRMED_TTL_MS,
   DETECT_REASSIGN_CLOSER_STREAK,
+  VFR_SQUAWK,
 } from '../config/constants'
 
 export interface ProcTrack {
@@ -27,11 +29,17 @@ export interface ProcTrack {
   lastMatchMs: number
   matchCount: number
   lastCrossTrackNm: number
+  /** Along-track position (nm) at the track's first match — confirmation of
+   *  SID/STAR tracks requires net progress from here, so aligned-but-loitering
+   *  traffic (e.g. VFR circling near a leg) never confirms. */
+  firstAlongTrackNm: number
+  /** Along-track position (nm) at the latest match. */
+  lastAlongTrackNm: number
   /** True once this hex has matched a pre-MAP segment (distinguishes missed
    *  approaches from departures for at/past-MAP evidence). */
   preMapSeen: boolean
-  /** Consecutive polls this (approach) track has been laterally closer than the
-   *  hex's currently-assigned approach. Drives sticky reassignment. */
+  /** Consecutive polls this track has been laterally closer than the hex's
+   *  currently-assigned procedure of the same type. Drives sticky reassignment. */
   closerStreak: number
 }
 
@@ -40,6 +48,10 @@ export interface DetectionState {
   tracks: Record<string, Record<string, ProcTrack>>
   /** hex → procId (approaches only, exactly one per hex) */
   assignments: Record<string, string>
+  /** hex → one confirmed SID and/or STAR procId. Same dedupe idea as approach
+   *  `assignments`: sibling SIDs share their initial runway legs, so a single
+   *  departure would otherwise light up every one of them. */
+  sidStarAssignments: Record<string, Partial<Record<'SID' | 'STAR', string>>>
 }
 
 export interface ProcedureActivity {
@@ -52,6 +64,8 @@ export interface DetectionConfig {
   confirmed: MatchTolerances
   confirmMinMatches: number
   confirmMinDurationMs: number
+  /** Net along-track progress a SID/STAR candidate must cover to confirm. */
+  confirmMinProgressNm: number
   candidateTtlMs: number
   confirmedTtlMs: number
   reassignCloserStreak: number
@@ -83,13 +97,14 @@ export const DEFAULT_DETECTION_CONFIG: DetectionConfig = {
   },
   confirmMinMatches: DETECT_CONFIRM_MIN_MATCHES,
   confirmMinDurationMs: DETECT_CONFIRM_MIN_DURATION_MS,
+  confirmMinProgressNm: DETECT_CONFIRM_MIN_PROGRESS_NM,
   candidateTtlMs: DETECT_CANDIDATE_TTL_MS,
   confirmedTtlMs: DETECT_CONFIRMED_TTL_MS,
   reassignCloserStreak: DETECT_REASSIGN_CLOSER_STREAK,
 }
 
 export function initialDetectionState(): DetectionState {
-  return { tracks: {}, assignments: {} }
+  return { tracks: {}, assignments: {}, sidStarAssignments: {} }
 }
 
 /**
@@ -126,12 +141,16 @@ export function reduceDetection(
   for (const ac of aircraft) {
     const prevTracks = prev.tracks[ac.hex] ?? {}
     const nextTracks: Record<string, ProcTrack> = {}
+    // Known-VFR traffic is never on an IFR clearance, so it never generates
+    // evidence — existing tracks (e.g. after an IFR cancellation in the air)
+    // simply age out through the normal TTLs.
+    const isVfr = ac.squawk === VFR_SQUAWK
 
     for (const proc of procedures) {
       const existing = prevTracks[proc.id]
       const isConfirmed = existing?.phase === 'confirmed'
       const tol = isConfirmed ? config.confirmed : config.candidate
-      const ev = evaluateMatch(ac, proc, ctx, tol)
+      const ev = isVfr ? null : evaluateMatch(ac, proc, ctx, tol)
 
       const preMapSeen = (existing?.preMapSeen ?? false) || (ev?.preMap ?? false)
 
@@ -148,12 +167,21 @@ export function reduceDetection(
 
       if (qualifies) {
         const firstMatchMs = existing?.firstMatchMs ?? nowMs
+        const firstAlongTrackNm = existing?.firstAlongTrackNm ?? ev!.alongTrackNm
         const matchCount = (existing?.matchCount ?? 0) + 1
         let phase: 'candidate' | 'confirmed' = existing?.phase ?? 'candidate'
+        // SID/STAR additionally require net along-track progress: matches over
+        // time alone are satisfiable by traffic circling near a leg (each lap
+        // re-aligns with the local direction), but circling covers no distance
+        // along the line. Approaches are exempt (GS/altitude + MAP gates).
+        const progressOk =
+          proc.type === 'APPROACH' ||
+          ev!.alongTrackNm - firstAlongTrackNm >= config.confirmMinProgressNm
         if (
           phase === 'candidate' &&
           matchCount >= config.confirmMinMatches &&
-          nowMs - firstMatchMs >= config.confirmMinDurationMs
+          nowMs - firstMatchMs >= config.confirmMinDurationMs &&
+          progressOk
         ) {
           phase = 'confirmed'
           events.push({ type: 'confirmed', hex: ac.hex, procId: proc.id })
@@ -165,6 +193,8 @@ export function reduceDetection(
           lastMatchMs: nowMs,
           matchCount,
           lastCrossTrackNm: ev!.crossTrackNm,
+          firstAlongTrackNm,
+          lastAlongTrackNm: ev!.alongTrackNm,
           preMapSeen,
           closerStreak: existing?.closerStreak ?? 0,
         }
@@ -238,19 +268,67 @@ export function reduceDetection(
     }
   }
 
-  return { state: { tracks, assignments }, events }
+  // Step 7: SID/STAR assignment (exactly one of each type per hex). Sibling
+  // SIDs share their initial runway legs, so one departure confirms several of
+  // them at once — same shape as the parallel-runway approach problem, same
+  // fix: pick the laterally closest, keep it sticky, and let a sustained
+  // closer streak reassign once the real procedure's path diverges. There is
+  // no ATIS-priority rule here (ATIS names runways, not SIDs/STARs).
+  const sidStarAssignments: DetectionState['sidStarAssignments'] = {}
+  for (const [hex, procTracks] of Object.entries(tracks)) {
+    for (const type of ['SID', 'STAR'] as const) {
+      const confirmed = Object.values(procTracks).filter(
+        (t) => t.phase === 'confirmed' && procById.get(t.procId)?.type === type,
+      )
+      if (confirmed.length === 0) continue
+
+      const sorted = [...confirmed].sort((a, b) => a.lastCrossTrackNm - b.lastCrossTrackNm)
+      const best = sorted[0]
+
+      const prevId = prev.sidStarAssignments[hex]?.[type]
+      const incumbent = prevId ? procTracks[prevId] : undefined
+      const incumbentValid = !!incumbent && incumbent.phase === 'confirmed'
+
+      let winnerId: string
+      if (!incumbentValid) {
+        winnerId = best.procId
+        for (const t of confirmed) t.closerStreak = 0
+      } else {
+        const challenger = sorted.find((t) => t.procId !== prevId)
+        if (!challenger) {
+          winnerId = prevId!
+        } else {
+          if (challenger.lastCrossTrackNm < incumbent!.lastCrossTrackNm) {
+            challenger.closerStreak = challenger.closerStreak + 1
+          } else {
+            challenger.closerStreak = 0
+          }
+          winnerId =
+            challenger.closerStreak >= config.reassignCloserStreak ? challenger.procId : prevId!
+          for (const t of confirmed) if (t !== challenger) t.closerStreak = 0
+        }
+      }
+
+      ;(sidStarAssignments[hex] ??= {})[type] = winnerId
+      if (winnerId !== (prevId ?? null)) {
+        events.push({ type: 'assigned', hex, procId: winnerId, prevProcId: prevId ?? null })
+      }
+    }
+  }
+
+  return { state: { tracks, assignments, sidStarAssignments }, events }
 }
 
 /**
- * Derive per-procedure active-aircraft sets from detection state. Approaches
- * report their assigned aircraft; SID/STAR report confirmed tracks. Hex arrays
- * are sorted for deterministic output (stable render, stable tests).
+ * Derive per-procedure active-aircraft sets from detection state. Every
+ * procedure type reports only its assigned aircraft (one approach + at most
+ * one SID and one STAR per hex), so sibling procedures sharing legs don't all
+ * light up. Hex arrays are sorted for deterministic output (stable render,
+ * stable tests).
  */
 export function deriveProcedureActivity(
   state: DetectionState,
-  procedures: Procedure[],
 ): Record<string, ProcedureActivity> {
-  const byId = new Map(procedures.map((p) => [p.id, p]))
   const result: Record<string, ProcedureActivity> = {}
 
   const add = (procId: string, hex: string, lastMs: number) => {
@@ -260,11 +338,11 @@ export function deriveProcedureActivity(
     result[procId] = entry
   }
 
-  // SID/STAR: every confirmed track counts directly.
-  for (const [hex, procTracks] of Object.entries(state.tracks)) {
-    for (const t of Object.values(procTracks)) {
-      const p = byId.get(t.procId)
-      if (p && p.type !== 'APPROACH' && t.phase === 'confirmed') add(t.procId, hex, t.lastMatchMs)
+  // SID/STAR: the assigned track of each type.
+  for (const [hex, byType] of Object.entries(state.sidStarAssignments)) {
+    for (const procId of Object.values(byType)) {
+      const t = state.tracks[hex]?.[procId]
+      if (t) add(procId, hex, t.lastMatchMs)
     }
   }
 

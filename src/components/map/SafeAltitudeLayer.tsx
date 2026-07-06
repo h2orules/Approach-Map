@@ -4,6 +4,7 @@ import type { FeatureCollection, Feature } from 'geojson'
 import type { SafeAltitudeArea, SafeAltitudeSector } from '../../types/safeAltitude'
 import { sectorPolygon, sectorBoundaryLines, sectorLabelAnchor } from '../../geo/safeAltitude'
 import { useSettingsStore } from '../../store/useSettingsStore'
+import { useMapStore } from '../../store/useMapStore'
 import {
   MSA_DEFAULT_RADIUS_NM,
   SAFE_ALT_COLOR,
@@ -11,6 +12,7 @@ import {
   SAFE_ALT_LINE_WIDTH,
   SAFE_ALT_LINE_OPACITY,
   SAFE_ALT_LINE_COLOR,
+  SAFE_ALT_LINE_COLOR_LIGHT,
 } from '../../config/constants'
 import styles from './SafeAltitudeLayer.module.css'
 
@@ -59,6 +61,9 @@ interface LabelInfo {
 
 export function SafeAltitudeLayer({ items }: Props) {
   const showSafeAltitudes = useSettingsStore((s) => s.showSafeAltitudes)
+  // Boundary lines invert with the basemap; satellite reads like dark.
+  const onLightBasemap = useMapStore((s) => s.styleKey === 'light')
+  const lineColor = onLightBasemap ? SAFE_ALT_LINE_COLOR_LIGHT : SAFE_ALT_LINE_COLOR
   const { current: mapRef } = useMap()
   const [labels, setLabels] = useState<LabelInfo[]>([])
   const rafRef = useRef<number | null>(null)
@@ -131,7 +136,7 @@ export function SafeAltitudeLayer({ items }: Props) {
           filter={['==', ['geometry-type'], 'LineString']}
           layout={{ visibility }}
           paint={{
-            'line-color': SAFE_ALT_LINE_COLOR,
+            'line-color': lineColor,
             'line-width': SAFE_ALT_LINE_WIDTH,
             'line-opacity': SAFE_ALT_LINE_OPACITY,
           }}

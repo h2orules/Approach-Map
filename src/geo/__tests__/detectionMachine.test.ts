@@ -66,7 +66,7 @@ function approach(name: string, lon: number, withMap = false): Procedure {
   }
 }
 
-function plane(hex: string, lat: number, lon: number, track = 180): InterpolatedAircraft {
+function plane(hex: string, lat: number, lon: number, track = 180, squawk = '3471'): InterpolatedAircraft {
   return {
     hex,
     flight: hex.toUpperCase(),
@@ -79,10 +79,30 @@ function plane(hex: string, lat: number, lon: number, track = 180): Interpolated
     groundspeed: 180,
     track,
     baroRate: -500,
-    squawk: '1200',
+    squawk,
     lastPollMs: 0,
     interpLat: lat,
     interpLon: lon,
+  }
+}
+
+// Northbound SID: a straight line of fixes from the airport heading north.
+// ~0.025° lat ≈ 1.5 nm, so 47.45 → 47.48 covers ~1.8 nm of along-track travel.
+function sid(name: string, lon: number): Procedure {
+  return {
+    id: name,
+    icao: 'KSEA',
+    name,
+    type: 'SID',
+    runways: ['34C'],
+    waypoints: [
+      { id: 'A', lat: 47.45, lon, navaidType: 'FIX', altConstraint: null, sequenceNumber: 10 },
+      { id: 'B', lat: 47.6, lon, navaidType: 'FIX', altConstraint: null, sequenceNumber: 20 },
+    ],
+    symbols: [],
+    geojson: { type: 'FeatureCollection', features: [] },
+    hasGeometry: true,
+    color: '#22d3ee',
   }
 }
 
@@ -114,7 +134,7 @@ function runPolls(procedures: Procedure[], polls: Poll[], baseAtis: AtisInfo | n
       CONFIG,
     )
     state = r.state
-    return { state, events: r.events, activity: deriveProcedureActivity(state, procedures) }
+    return { state, events: r.events, activity: deriveProcedureActivity(state) }
   })
   return { state, steps }
 }
@@ -272,5 +292,78 @@ describe('detectionMachine', () => {
     expect(steps[4].events).toEqual([])
     expect(steps[3].activity.I16C.hexes).toEqual(['a'])
     expect(steps[4].activity.I16C.hexes).toEqual(['a'])
+  })
+
+  it('(11) a squawk-1200 aircraft never creates a track, even on a perfect line', () => {
+    const proc = approach('I16C', LON_16C)
+    const { steps, state } = runPolls(
+      [proc],
+      CONFIRM_TS.map((t) => ({ t, aircraft: [plane('a', 47.45, LON_16C, 180, '1200')] })),
+    )
+    expect(state.tracks.a).toBeUndefined()
+    expect(state.assignments).toEqual({})
+    expect(steps.every((s) => s.events.length === 0)).toBe(true)
+  })
+
+  it('(12) a SID flyer making along-track progress confirms', () => {
+    const proc = sid('BANGR9', LON_16C)
+    // Northbound and moving: 47.45 → 47.465 → 47.48 ≈ 1.8 nm of progress.
+    const { steps, state } = runPolls([proc], [
+      { t: 0, aircraft: [plane('a', 47.45, LON_16C, 0)] },
+      { t: 5000, aircraft: [plane('a', 47.465, LON_16C, 0)] },
+      { t: 10000, aircraft: [plane('a', 47.48, LON_16C, 0)] },
+    ])
+    expect(steps[2].state.tracks.a.BANGR9.phase).toBe('confirmed')
+    expect(steps[2].activity.BANGR9.hexes).toEqual(['a'])
+    expect(state.sidStarAssignments).toEqual({ a: { SID: 'BANGR9' } })
+  })
+
+  it('(13) aligned-but-loitering traffic never confirms a SID (no progress)', () => {
+    const proc = sid('BANGR9', LON_16C)
+    // Aligned with the leg every poll, but stationary — like a circler whose
+    // track happens to parallel the SID each time it's sampled.
+    const polls: Poll[] = [0, 5000, 10000, 15000, 20000, 25000].map((t) => ({
+      t,
+      aircraft: [plane('a', 47.45, LON_16C, 0)],
+    }))
+    const { steps, state } = runPolls([proc], polls)
+    expect(state.tracks.a.BANGR9.phase).toBe('candidate')
+    expect(steps.every((s) => s.activity.BANGR9 === undefined)).toBe(true)
+    expect(steps.every((s) => s.events.every((e) => e.type !== 'confirmed'))).toBe(true)
+  })
+
+  it('(14) sibling SIDs sharing a leg: only the closest is shown, one assignment per hex', () => {
+    // Two SIDs on the same line — both confirm, only one appears in activity.
+    const procs = [sid('BANGR9', LON_16C), sid('ISBRG1', LON_16C)]
+    const { steps, state } = runPolls(procs, [
+      { t: 0, aircraft: [plane('a', 47.45, LON_16C, 0)] },
+      { t: 5000, aircraft: [plane('a', 47.465, LON_16C, 0)] },
+      { t: 10000, aircraft: [plane('a', 47.48, LON_16C, 0)] },
+    ])
+    expect(steps[2].state.tracks.a.BANGR9.phase).toBe('confirmed')
+    expect(steps[2].state.tracks.a.ISBRG1.phase).toBe('confirmed')
+    const assigned = state.sidStarAssignments.a.SID!
+    expect(['BANGR9', 'ISBRG1']).toContain(assigned)
+    expect(Object.keys(steps[2].activity)).toEqual([assigned])
+    expect(steps[2].activity[assigned].hexes).toEqual(['a'])
+  })
+
+  it('(15) SID assignment reassigns after a sustained closer streak on divergence', () => {
+    // Parallel SIDs 0.13 nm apart; the plane confirms while between them, then
+    // settles clearly onto the second line for 3+ polls.
+    const procs = [sid('S1', LON_16C), sid('S2', LON_16L)]
+    const between = (LON_16C + LON_16L) / 2 + 0.0004 // nearer S1
+    const polls: Poll[] = [
+      { t: 0, aircraft: [plane('a', 47.45, between, 0)] },
+      { t: 5000, aircraft: [plane('a', 47.465, between, 0)] },
+      { t: 10000, aircraft: [plane('a', 47.48, between, 0)] },
+      { t: 15000, aircraft: [plane('a', 47.495, LON_16L, 0)] },
+      { t: 20000, aircraft: [plane('a', 47.51, LON_16L, 0)] },
+      { t: 25000, aircraft: [plane('a', 47.525, LON_16L, 0)] },
+    ]
+    const { steps, state } = runPolls(procs, polls)
+    expect(steps[2].state.sidStarAssignments.a.SID).toBe('S1')
+    expect(state.sidStarAssignments.a.SID).toBe('S2')
+    expect(Object.keys(steps[5].activity)).toEqual(['S2'])
   })
 })

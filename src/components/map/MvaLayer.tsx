@@ -4,10 +4,12 @@ import type { FeatureCollection, Feature, Position } from 'geojson'
 import * as turf from '@turf/turf'
 import { useAirportStore } from '../../store/useAirportStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
+import { useMapStore } from '../../store/useMapStore'
 import { useMvaStore, ensureMvaLoaded } from '../../services/mvaData'
 import type { MvaSector } from '../../utils/aixmMva'
 import {
   MVA_COLOR,
+  MVA_COLOR_LIGHT,
   MVA_FILL_OPACITY,
   MVA_LINE_WIDTH,
   MVA_LINE_OPACITY,
@@ -63,6 +65,8 @@ function sectorLabelAnchor(sector: MvaSector): Position | null {
 // src/utils/mvaFacilities.ts for how facility IDs are guessed).
 export function MvaLayer() {
   const showMva = useSettingsStore((s) => s.showMva)
+  // Fill+line invert with the basemap; satellite reads like dark.
+  const mvaColor = useMapStore((s) => (s.styleKey === 'light' ? MVA_COLOR_LIGHT : MVA_COLOR))
   const selectedAirport = useAirportStore((s) => s.selectedAirport)
   const icao = selectedAirport?.icao ?? null
   const byIcao = useMvaStore((s) => s.byIcao)
@@ -97,7 +101,7 @@ export function MvaLayer() {
           type="fill"
           layout={{ visibility }}
           paint={{
-            'fill-color': MVA_COLOR,
+            'fill-color': mvaColor,
             'fill-opacity': MVA_FILL_OPACITY,
           }}
         />
@@ -106,7 +110,7 @@ export function MvaLayer() {
           type="line"
           layout={{ visibility }}
           paint={{
-            'line-color': MVA_COLOR,
+            'line-color': mvaColor,
             'line-width': MVA_LINE_WIDTH,
             'line-opacity': MVA_LINE_OPACITY,
           }}

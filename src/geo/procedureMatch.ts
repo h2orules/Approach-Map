@@ -17,6 +17,9 @@ export interface MatchTolerances {
 export interface MatchEvidence {
   crossTrackNm: number
   segIdx: number
+  /** Along-track position (nm from the line's start). The reducer uses the
+   *  delta between first and latest match to require real progress. */
+  alongTrackNm: number
   /** Altitude agrees with the expected profile. Evidence only — the reducer,
    *  not this function, decides whether alt failure sheds a track. */
   altOk: boolean
@@ -133,7 +136,7 @@ export function evaluateMatch(
   })
   if (!match) return null
 
-  const { crossTrackNm, segIdx, segStart, segEnd, nearestCoords } = match
+  const { crossTrackNm, segIdx, segStart, segEnd, nearestCoords, alongTrackNm } = match
   const acPt = turf.point([ac.interpLon, ac.interpLat])
 
   const distToAirport = turf.distance(acPt, turf.point([ctx.lon, ctx.lat]), {
@@ -194,5 +197,5 @@ export function evaluateMatch(
     altOk = Math.abs(altFt - expectedAlt) <= threshold
   }
 
-  return { crossTrackNm, segIdx, altOk, preMap, pastMap }
+  return { crossTrackNm, segIdx, alongTrackNm, altOk, preMap, pastMap }
 }

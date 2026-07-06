@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import type { AltConstraint } from '../../types/procedure'
-import { BoltGlyph, DmeD, dmeGlyphWidth } from '../map/glyphs'
+import { BoltGlyph, DmeD, dmeGlyphWidth, MALTESE_PATH } from '../map/glyphs'
 import {
   descentProfilePoints,
   fixRenderAltitudes,
@@ -42,8 +42,18 @@ const GS_BOLT_TAIL = { dx: 18, dy: -22 }
 const GS_ALT_GAP = 6 // px between the bolt tail and the near edge of the altitude label
 const NAME_CHAR_W = 7.6 // px per char of a fix name at 12px bold Roboto Mono — for label de-collision
 const NAME_ROW_H = 15 // px a colliding fix name is pushed down to the next row
-const AIRCRAFT_LABEL_ABOVE_DY = -10 // px from the glyph center to the label baseline, above
-const AIRCRAFT_LABEL_BELOW_DY = 17 // px from the glyph center to the label baseline, below
+const MARKER_LABEL_H = 10 // px added to the name band (and the fix name lifted by this) for a marker fix's second label line (OM/MM/IM)
+const MARKER_CONE_HALF_W = 9 // px half-width of the marker's dotted cone at the top of the plot
+// Aircraft glyph scale — bumped up from the original size for legibility;
+// body dimensions, label offset, and label text size (CSS) all scale with it
+// so the callsign stays proportional to the feather it's labeling.
+const AIRCRAFT_GLYPH_SCALE = 1.4
+const AIRCRAFT_BODY_LEN = 15 * AIRCRAFT_GLYPH_SCALE // tip-to-tail length
+const AIRCRAFT_BODY_HALF_H = 5 * AIRCRAFT_GLYPH_SCALE // half-height at the tail
+const AIRCRAFT_NOTCH_LEN = 11 * AIRCRAFT_GLYPH_SCALE // tail-notch depth from the tip
+const AIRCRAFT_LABEL_X_OFFSET = -7 * AIRCRAFT_GLYPH_SCALE // px, tip → label horizontal center
+const AIRCRAFT_LABEL_ABOVE_DY = -10 * AIRCRAFT_GLYPH_SCALE // px from the glyph tip to the label baseline, above
+const AIRCRAFT_LABEL_BELOW_DY = 17 * AIRCRAFT_GLYPH_SCALE // px from the glyph tip to the label baseline, below
 
 // ── scales ──────────────────────────────────────────────────────────────
 
@@ -106,21 +116,8 @@ function ProfileBolt({ x, y }: { x: number; y: number }) {
   return <BoltGlyph from={{ x: x + GS_BOLT_TAIL.dx, y: y + GS_BOLT_TAIL.dy }} to={{ x, y }} standalone={false} />
 }
 
-// A proper FAA "maltese cross" (cross patée): four arms narrow at the waist,
-// flaring wide at the tips, each tip cut with a V-notch — not a plain plus.
-const MALTESE_PATH = (() => {
-  const w = 1.7 // half-width at the waist (center)
-  const t = 4.8 // half-width at each arm tip
-  const L = 7.5 // arm length from center
-  const n = 2.0 // tip V-notch depth
-  return (
-    `M ${-w} ${-w} L ${-t} ${-L} L 0 ${-L + n} L ${t} ${-L} L ${w} ${-w} ` +
-    `L ${L} ${-t} L ${L - n} 0 L ${L} ${t} L ${w} ${w} ` +
-    `L ${t} ${L} L 0 ${L - n} L ${-t} ${L} L ${-w} ${w} ` +
-    `L ${-L} ${t} L ${-L + n} 0 L ${-L} ${-t} Z`
-  )
-})()
-
+// The FAF maltese cross (cross patée) is shared with the map FAF marker —
+// geometry lives in ../map/glyphs (MALTESE_PATH), drawn upright and rotated here.
 function MalteseCross({ x, y }: { x: number; y: number }) {
   return (
     <g className={styles.malteseCross} transform={`translate(${x} ${y}) rotate(45)`}>
@@ -171,12 +168,18 @@ function AircraftGlyph({
   labelAbove: boolean
 }) {
   const labelY = y + (labelAbove ? AIRCRAFT_LABEL_ABOVE_DY : AIRCRAFT_LABEL_BELOW_DY)
+  // Feather points RIGHT with its tip at (x, y). The tip — not the body center —
+  // is the reference point for both lateral (distance) and vertical (altitude)
+  // position, so the body extends left from it. Label centers over the body.
+  const points =
+    `${x - AIRCRAFT_BODY_LEN},${y + AIRCRAFT_BODY_HALF_H} ${x},${y} ` +
+    `${x - AIRCRAFT_BODY_LEN},${y - AIRCRAFT_BODY_HALF_H} ${x - AIRCRAFT_NOTCH_LEN},${y}`
   return (
-    <g className={isSelected ? undefined : styles.aircraftDimmed}>
-      <polygon className={styles.aircraft} points={`${x - 7},${y + 5} ${x + 8},${y} ${x - 7},${y - 5} ${x - 3},${y}`} />
+    <g>
+      <polygon className={isSelected ? styles.aircraft : styles.aircraftInactive} points={points} />
       <text
         className={isSelected ? styles.aircraftLabel : styles.aircraftLabelDimmed}
-        x={x}
+        x={x + AIRCRAFT_LABEL_X_OFFSET}
         y={labelY}
         textAnchor="middle"
       >
@@ -249,7 +252,12 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
     )
   }
 
-  const chartTop = MARGIN.top + TOP_BAND_H
+  // Marker fixes (LOM etc.) get a second label line under their name; grow the
+  // name band by that height and push all name baselines down by it, so the
+  // marker name can lift back up to its normal spot with the marker type below
+  // it — the plot just compresses slightly, nothing clips.
+  const markerBandExtra = model.fixes.some((f) => f.marker) ? MARKER_LABEL_H : 0
+  const chartTop = MARGIN.top + TOP_BAND_H + markerBandExtra
   const chartBottom = Math.max(height - MARGIN.bottom - BOTTOM_BAND_H, chartTop + 20)
   // Reserve headroom at the top of the plot so the highest fix's altitude
   // label sits below the name band, not on top of it.
@@ -352,6 +360,23 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
 
   return (
     <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      {/* marker-beacon cones — narrow dotted triangles rising from the ground at
+          each marker fix up to the top of the plot. Rendered first so they sit
+          behind every other layer. */}
+      {model.fixes.map((f, i) =>
+        f.marker ? (
+          <polygon
+            key={`marker-cone-${f.fixId}-${i}`}
+            className={styles.markerCone}
+            points={
+              `${xScale(f.distNm)},${plotTop + plotH} ` +
+              `${xScale(f.distNm) - MARKER_CONE_HALF_W},${plotTop} ` +
+              `${xScale(f.distNm) + MARKER_CONE_HALF_W},${plotTop}`
+            }
+          />
+        ) : null,
+      )}
+
       {/* ground / runway reference — a short mark near the threshold, not a
           full-width baseline under the whole profile */}
       {model.tdzeFt != null && (() => {
@@ -401,19 +426,27 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
       {/* top band: fix names + DME boxes, dashed vertical ticks down to the path */}
       {model.fixes.map((f, i) => {
         const x = xScale(f.distNm)
-        const nameY = MARGIN.top + NAME_TOP_PAD + nameOffsets[i]
+        const nameY = MARGIN.top + NAME_TOP_PAD + markerBandExtra + nameOffsets[i]
         const dmeY = nameY + DME_ROW_GAP
         const pathY = yScale(fixAlts[i])
         const dmeW = f.dmeNm != null ? dmeGlyphWidth(f.dmeNm) * DME_SCALE : 0
+        // Marker fix: lift the name by one line and put the marker type (OM/…)
+        // on a second line centered under it, at the name's normal baseline.
+        const nameBaselineY = f.marker ? nameY - MARKER_LABEL_H : nameY
 
         return (
           <g key={`name-${f.fixId}-${i}`}>
             <line className={styles.tick} x1={x} y1={nameY + 4} x2={x} y2={pathY} />
 
-            <text className={styles.fixName} x={x} y={nameY} textAnchor="middle">
+            <text className={styles.fixName} x={x} y={nameBaselineY} textAnchor="middle">
               {f.fixId}
               {f.speedKt > 0 && <tspan className={styles.speedInline}> {f.speedKt}K</tspan>}
             </text>
+            {f.marker && (
+              <text className={styles.markerType} x={x} y={nameY} textAnchor="middle">
+                {f.markerLocator ? `L${f.marker}` : f.marker}
+              </text>
+            )}
 
             {f.dmeNm != null && (
               <g transform={`translate(${x - dmeW / 2} ${dmeY})`}>
@@ -487,7 +520,9 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
           rest are dimmed. Labels alternate above/below when entries crowd. */}
       {liveAircraft.length > 0 && (() => {
         const nmPerPx = plotW > 0 ? approachNm / plotW : 1
-        const labelSides = placeProfileLabels(liveAircraft, nmPerPx)
+        // Wider min gap than the default 40px: labels scaled up with the glyph
+        // (AIRCRAFT_GLYPH_SCALE) need more clearance to avoid overlapping.
+        const labelSides = placeProfileLabels(liveAircraft, nmPerPx, 40 * AIRCRAFT_GLYPH_SCALE)
         return liveAircraft.map((ac, i) => (
           <AircraftGlyph
             key={ac.hex}

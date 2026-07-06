@@ -149,6 +149,24 @@ describe('buildProfileModel', () => {
     expect(faf.plotAltFt).toBe(1800)
   })
 
+  it('carries a marker (LOM) from the matching symbol onto its profile fix', () => {
+    const withMarker = makeProcedure({
+      symbols: [
+        {
+          id: 'FAFFX', lat: FAF.lat, lon: FAF.lon, navaidType: 'FIX', role: 'faf',
+          alt: null, speedKt: null, gsFaf: false, flyover: false,
+          marker: 'OM', markerLocator: true,
+        },
+      ],
+    })
+    const m = buildProfileModel(withMarker, transition, rwy)
+    const faf = m.fixes.find((f) => f.fixId === 'FAFFX')!
+    expect(faf.marker).toBe('OM')
+    expect(faf.markerLocator).toBe(true)
+    // Non-marker fixes stay null.
+    expect(m.fixes[0].marker).toBeNull()
+  })
+
   it('splits fixes (through MAP inclusive) from missed', () => {
     expect(model.fixes[model.fixes.length - 1].role).toBe('map')
     expect(model.missed.length).toBe(2)
@@ -278,7 +296,7 @@ describe('fixRenderAltitudes', () => {
       fixId, distNm, plotAltFt, role,
       constraint: plotAltFt == null ? null : { type: 'AT', low: plotAltFt },
       pathTerm: 'TF', speedKt: 0, isGsIntercept: role === 'faf', isDmeArc: false,
-      dmeNm: null, dmeNavaidId: null, flyover: false,
+      dmeNm: null, dmeNavaidId: null, flyover: false, marker: null, markerLocator: false,
     }
   }
   const base: Omit<ProfileModel, 'fixes'> = {

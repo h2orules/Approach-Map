@@ -42,6 +42,8 @@ const GS_BOLT_TAIL = { dx: 18, dy: -22 }
 const GS_ALT_GAP = 6 // px between the bolt tail and the near edge of the altitude label
 const NAME_CHAR_W = 7.6 // px per char of a fix name at 12px bold Roboto Mono — for label de-collision
 const NAME_ROW_H = 15 // px a colliding fix name is pushed down to the next row
+const MARKER_LABEL_H = 10 // px added to the name band (and the fix name lifted by this) for a marker fix's second label line (OM/MM/IM)
+const MARKER_CONE_HALF_W = 9 // px half-width of the marker's dotted cone at the top of the plot
 // Aircraft glyph scale — bumped up from the original size for legibility;
 // body dimensions, label offset, and label text size (CSS) all scale with it
 // so the callsign stays proportional to the feather it's labeling.
@@ -250,7 +252,12 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
     )
   }
 
-  const chartTop = MARGIN.top + TOP_BAND_H
+  // Marker fixes (LOM etc.) get a second label line under their name; grow the
+  // name band by that height and push all name baselines down by it, so the
+  // marker name can lift back up to its normal spot with the marker type below
+  // it — the plot just compresses slightly, nothing clips.
+  const markerBandExtra = model.fixes.some((f) => f.marker) ? MARKER_LABEL_H : 0
+  const chartTop = MARGIN.top + TOP_BAND_H + markerBandExtra
   const chartBottom = Math.max(height - MARGIN.bottom - BOTTOM_BAND_H, chartTop + 20)
   // Reserve headroom at the top of the plot so the highest fix's altitude
   // label sits below the name band, not on top of it.
@@ -353,6 +360,23 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
 
   return (
     <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      {/* marker-beacon cones — narrow dotted triangles rising from the ground at
+          each marker fix up to the top of the plot. Rendered first so they sit
+          behind every other layer. */}
+      {model.fixes.map((f, i) =>
+        f.marker ? (
+          <polygon
+            key={`marker-cone-${f.fixId}-${i}`}
+            className={styles.markerCone}
+            points={
+              `${xScale(f.distNm)},${plotTop + plotH} ` +
+              `${xScale(f.distNm) - MARKER_CONE_HALF_W},${plotTop} ` +
+              `${xScale(f.distNm) + MARKER_CONE_HALF_W},${plotTop}`
+            }
+          />
+        ) : null,
+      )}
+
       {/* ground / runway reference — a short mark near the threshold, not a
           full-width baseline under the whole profile */}
       {model.tdzeFt != null && (() => {
@@ -402,19 +426,27 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
       {/* top band: fix names + DME boxes, dashed vertical ticks down to the path */}
       {model.fixes.map((f, i) => {
         const x = xScale(f.distNm)
-        const nameY = MARGIN.top + NAME_TOP_PAD + nameOffsets[i]
+        const nameY = MARGIN.top + NAME_TOP_PAD + markerBandExtra + nameOffsets[i]
         const dmeY = nameY + DME_ROW_GAP
         const pathY = yScale(fixAlts[i])
         const dmeW = f.dmeNm != null ? dmeGlyphWidth(f.dmeNm) * DME_SCALE : 0
+        // Marker fix: lift the name by one line and put the marker type (OM/…)
+        // on a second line centered under it, at the name's normal baseline.
+        const nameBaselineY = f.marker ? nameY - MARKER_LABEL_H : nameY
 
         return (
           <g key={`name-${f.fixId}-${i}`}>
             <line className={styles.tick} x1={x} y1={nameY + 4} x2={x} y2={pathY} />
 
-            <text className={styles.fixName} x={x} y={nameY} textAnchor="middle">
+            <text className={styles.fixName} x={x} y={nameBaselineY} textAnchor="middle">
               {f.fixId}
               {f.speedKt > 0 && <tspan className={styles.speedInline}> {f.speedKt}K</tspan>}
             </text>
+            {f.marker && (
+              <text className={styles.markerType} x={x} y={nameY} textAnchor="middle">
+                {f.markerLocator ? `L${f.marker}` : f.marker}
+              </text>
+            )}
 
             {f.dmeNm != null && (
               <g transform={`translate(${x - dmeW / 2} ${dmeY})`}>

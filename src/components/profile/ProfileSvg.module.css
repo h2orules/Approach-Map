@@ -42,6 +42,23 @@
   font-weight: 600;
 }
 
+/* Marker-beacon type (OM/MM/IM) — second label line under the fix name. */
+.markerType {
+  fill: #fbbf24;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* Marker-beacon cone — a faint dotted triangle rising from the ground at the
+   fix, behind every other layer. */
+.markerCone {
+  fill: rgba(251, 191, 36, 0.06);
+  stroke: rgba(251, 191, 36, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
 .missedFixName {
   fill: #94a3b8;
   font-size: 9px;

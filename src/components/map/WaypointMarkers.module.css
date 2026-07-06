@@ -83,21 +83,27 @@
   gap: 4px;
 }
 
-/* DME badge: source-navaid ident stacked right above the "D" outline, matching
-   the vertical-profile layout. */
+/* DME badge: the "D" outline sits inline (vertically centered with the fix
+   name via .nameRow's align-items:center), with the source-navaid ident
+   floated directly above it so it doesn't drag the D — and the number — down
+   toward the altitude restriction below. */
 .dmeBadge {
+  position: relative;
   display: inline-flex;
-  flex-direction: column;
-  align-items: center;
   line-height: 1;
 }
 
 .dmeIdent {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 8.5px;
   font-weight: 600;
   color: #fde68a;
   letter-spacing: 0.02em;
   margin-bottom: 1px;
+  white-space: nowrap;
 }
 
 /* Amber dashed ring marking a navaid that is the DME reference for a fix. */
@@ -110,6 +116,35 @@
   border-radius: 50%;
   opacity: 0.65;
   pointer-events: none;
+}
+
+/* Marker-beacon lens + NDB overlay, centered on the fix so it coincides with
+   the collocated locator (LOM). */
+.markerLens {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  line-height: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+
+/* Marker type label (LOM/OM/MM/IM), centered under the fix and clear of the lens. */
+.markerLabel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, 20px);
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fbbf24;
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow:
+    0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
 }
 
 /* Hand-drawn glideslope-intercept bolt, absolutely placed in the marker. */

@@ -39,6 +39,10 @@ export interface ProfileFix {
   /** Ident of the DME's source navaid (e.g. 'I-CJL'), null if dmeNm is null or the leg carried no recNavId. */
   dmeNavaidId: string | null
   flyover: boolean
+  /** Marker-beacon type when this fix is a marker (OM/MM/IM), else null. */
+  marker: 'OM' | 'MM' | 'IM' | null
+  /** True when the marker is a locator (LOM) — drives the NDB-style rendering. */
+  markerLocator: boolean
 }
 
 export interface ProfileHold {
@@ -153,6 +157,10 @@ export function buildProfileModel(p: Procedure, t: ProcedureTransition, rwy: Cif
     groups.push([leg])
   }
 
+  // Marker beacons are tagged on the procedure's symbols (by fix id) during
+  // parsing (LOM detection); carry them onto the matching profile fix.
+  const symById = new Map(p.symbols.map((s) => [s.id, s]))
+
   const allFixes: ProfileFix[] = []
   let cumDistNm = 0
   for (let i = 0; i < groups.length; i++) {
@@ -180,6 +188,8 @@ export function buildProfileModel(p: Procedure, t: ProcedureTransition, rwy: Cif
       dmeNm: merged.dmeNm,
       dmeNavaidId: merged.dmeNavaidId,
       flyover: merged.flyover,
+      marker: symById.get(merged.fixId)?.marker ?? null,
+      markerLocator: symById.get(merged.fixId)?.markerLocator ?? false,
     })
   }
 

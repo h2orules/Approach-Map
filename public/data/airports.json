@@ -878,5 +878,15 @@
     "elevation": 2643,
     "city": "Tucson",
     "state": "AZ"
+  },
+  {
+    "icao": "KAWO",
+    "iata": "AWO",
+    "name": "Arlington Municipal",
+    "lat": 48.161448,
+    "lon": -122.158442,
+    "elevation": 142,
+    "city": "Arlington",
+    "state": "WA"
   }
 ]

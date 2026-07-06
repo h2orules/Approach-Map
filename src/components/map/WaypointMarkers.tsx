@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as turf from '@turf/turf'
 import { Marker, useMap } from 'react-map-gl'
 import type { Procedure, WaypointSymbol, AltConstraint } from '../../types/procedure'
-import { BoltGlyph, DmeD, dmeGlyphWidth, MALTESE_PATH, type Pt } from './glyphs'
+import { BoltGlyph, DmeD, dmeGlyphWidth, MALTESE_PATH, MarkerLens, type Pt } from './glyphs'
 import styles from './WaypointMarkers.module.css'
 
 interface Props {
@@ -231,13 +231,18 @@ export function WaypointMarkers({ procedures }: Props) {
         const p = map.project([s.lon, s.lat])
         if (p.x < -40 || p.y < -40 || p.x > vw + 40 || p.y > vh + 40) continue
         onScreen.push({ s, sx: p.x, sy: p.y })
-        iconRects.push({ x: p.x - 14, y: p.y - 14, w: 28, h: 28 })
+        // Marker fixes carry the wide LOM lens, so reserve a wider footprint
+        // than the default icon so neighbouring labels keep clear of it.
+        const iw = s.marker ? 60 : 28
+        const ih = s.marker ? 34 : 28
+        iconRects.push({ x: p.x - iw / 2, y: p.y - ih / 2, w: iw, h: ih })
       }
 
       const labelRects: Rect[] = []
       const next: Placement[] = []
       for (const { s, sx, sy } of onScreen) {
-        const gap = s.gsFaf ? 44 : 16
+        // Marker fixes need extra lateral gap to clear the wide LOM lens.
+        const gap = s.marker ? 34 : s.gsFaf ? 44 : 16
         const { w, h } = labelBoxSize(s)
         const cands: Pt[] = [
           { x: gap, y: -h / 2 }, { x: -gap - w, y: -h / 2 },
@@ -325,9 +330,25 @@ export function WaypointMarkers({ procedures }: Props) {
           <Marker key={symKey(s)} longitude={s.lon} latitude={s.lat} anchor="center">
             <div className={styles.container}>
               {s.isDmeSource && <div className={styles.dmeRing} />}
+              {/* Marker beacon (LOM etc.) — lens + NDB overlay centered on the
+                  fix (it coincides with the collocated locator); drawn before
+                  the fix icon so the FAF glyph sits on top of it. */}
+              {s.marker && (
+                <div className={styles.markerLens}>
+                  <MarkerLens locator={s.markerLocator} />
+                </div>
+              )}
+
               <div className={styles.icon}>
                 <WpIcon s={s} />
               </div>
+
+              {/* Marker type label below the fix — 'LOM' for a locator. */}
+              {s.marker && (
+                <span className={styles.markerLabel}>
+                  {s.markerLocator ? `L${s.marker}` : s.marker}
+                </span>
+              )}
 
               {boltFrom && <BoltGlyph from={boltFrom} to={{ x: 0, y: 0 }} className={styles.bolt} />}
 

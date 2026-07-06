@@ -53,6 +53,18 @@ export interface WaypointSymbol {
    * reference for another fix on the procedure. Rendered with a DME ring.
    */
   isDmeSource?: boolean
+  /**
+   * Marker-beacon type when this fix is a marker: 'OM'/'MM'/'IM'. The FAA CIFP
+   * has no marker records, so in practice only 'OM' is produced — detected when
+   * an approach FAF is collocated with an NDB (a Locator Outer Marker). Null/
+   * absent when not a marker.
+   */
+  marker?: 'OM' | 'MM' | 'IM' | null
+  /**
+   * True when the marker is a locator (collocated NDB) — an LOM. Drives the
+   * FAA NDB overlay (radiating concentric dots) drawn over the marker lens.
+   */
+  markerLocator?: boolean
 }
 
 /** One parsed leg of a transition, preserving path/terminator detail for profile rendering. */

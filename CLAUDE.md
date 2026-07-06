@@ -66,7 +66,7 @@ api/             Azure Functions proxy for production (mirrors the vite.config.t
 infra/           main.bicep — Azure resource definitions (Static Web App)
 scripts/         buildStaticData.ts — regenerates public/data/*.json
 scripts/azure/   az-cli scripts: provision, secrets, custom domain, teardown
-public/data/     airports.json (88 airports), runways.json (85 airports)
+public/data/     airports.json (89 airports), runways.json (86 airports)
 ```
 
 App composition: `App.tsx` → `TopBar` + `Sidebar` (airport search, procedure list,
@@ -86,6 +86,7 @@ CIFP file facts (verified against live FAA data, June 2026):
 - SID/STAR/approach legs carry NO embedded lat/lon — fix coordinates are looked up by name from terminal-waypoint (`PC`) and enroute (`EA`) records (lat at cols 33–41, lon 42–51). See `src/utils/arincCoords.ts`.
 - Legs also carry altitude/speed constraints, DME (Rho, cols 67–70), a recommended navaid (cols 51–54), and description codes (flyover, etc.) that the parser turns into renderable `WaypointSymbol`s.
 - Each procedure has multiple transitions (runway + enroute) that restart sequence numbers; the parser keys waypoints by transition to avoid collisions and draws one line per transition.
+- The CIFP has **no marker-beacon records** (0 subsection-`M`). The only detectable marker is a Locator Outer Marker (LOM): an approach FAF collocated (≤0.5 nm) with an NDB. The parser captures airport-terminal NDBs (`P/N`, subsection at col 6 like enroute) as well as enroute NDBs (`DB`), and tags such FAFs via `WaypointSymbol.marker`/`markerLocator`. Rendered as an FAA lens/NDB glyph under the fix (map) and a dotted ground-to-top cone (profile). KAWO LOC 34 (FAF WATON over the AWO NDB) is the reference case.
 
 **Dual procedure visibility model.** `src/store/useProcedureStore.ts` keeps `userToggles` (explicit user action) and `autoVisible` (detection engine) separate. `isVisible(id) = userToggles[id] ?? autoVisible[id] ?? false`. "Revert to auto" clears `userToggles[id]`. The store also tracks `lastDetectedAt`, `detectedHexes` (confirmed aircraft per procedure — powers hover highlighting and the profile panel; array identity is stable when contents don't change), `aircraftAssignments` (hex → the one approach that aircraft is assigned to), and `autoShownIds`.
 
@@ -114,8 +115,8 @@ CIFP file facts (verified against live FAA data, June 2026):
 | Callsign routes | adsb.lol `/api/0/routeset` (primary), adsbdb.com fallback | Proxied via `/api/adsblol` + `/api/adsbdb`, keyless, batched, cached (see `src/api/routes.ts`) |
 | MVA/MIA sectors | FAA AIXM per-TRACON (`aeronav.faa.gov/MVA_Charts/aixm`) | Proxied via `/api/faa-mva`, parsed (`utils/aixmMva.ts`), cached in IndexedDB (`services/mvaData.ts`) |
 | Airspace (Class B/C/D/E) | FAA AIS `Class_Airspace` ArcGIS FeatureServer | Proxied via `/api/faa-airspace`, bbox GeoJSON query per airport (`api/faaAirspace.ts`), cached in IndexedDB (`services/airspaceData.ts`) |
-| Airport list | `public/data/airports.json` (88 major US airports) | Bundled; Fuse.js search |
-| Runway geometry | `public/data/runways.json` (85 airports) | Loaded on airport select (`useRunways`) |
+| Airport list | `public/data/airports.json` (89 major US airports) | Bundled; Fuse.js search |
+| Runway geometry | `public/data/runways.json` (86 airports) | Loaded on airport select (`useRunways`) |
 
 Dev proxies are defined in `vite.config.ts` (`/api/adsbx`, `/api/aviationapi`,
 `/api/faa-cifp`, `/api/adsbdb`, `/api/adsblol`, `/api/datis`, `/api/dtpp`,

@@ -44,6 +44,73 @@ export const MALTESE_PATH = (() => {
   )
 })()
 
+// ---- marker beacon (lens) + optional locator (NDB) overlay ----------------
+// FAA marker-beacon symbol: a horizontal convex lens ("eye") stippled with
+// dots. A Locator Outer Marker (LOM) adds the FAA NDB symbol — a center dot
+// ringed by concentric dots — drawn over the lens. Centered on the origin so
+// the map can wrap it in its own <svg> (standalone) and place it under a fix.
+const MARKER_COLOR = '#fbbf24'
+
+// Pointed-ellipse ("eye") reaching ±13 wide, ±5 tall (quad control at ±10 so
+// the curve peaks at ±5 rather than ±2.5).
+const MARKER_LENS_PATH = 'M -13 0 Q 0 -10 13 0 Q 0 10 -13 0 Z'
+
+// Concentric rings of dots forming the FAA NDB symbol, radiating from center.
+function ndbRingDots(): Pt[] {
+  const dots: Pt[] = []
+  for (const [r, n] of [[3.2, 8], [5.4, 10]] as const) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2
+      dots.push({ x: r * Math.cos(a), y: r * 0.62 * Math.sin(a) }) // flattened to fit the lens height
+    }
+  }
+  return dots
+}
+
+interface MarkerLensProps {
+  /** LOM: overlay the NDB dot-rings on the lens. */
+  locator?: boolean
+  className?: string
+  standalone?: boolean
+}
+
+export function MarkerLens({ locator = false, className, standalone = true }: MarkerLensProps) {
+  const halo = { stroke: '#0b0f14', strokeWidth: 0.5 }
+  const content = (
+    <g className={className}>
+      {/* lens outline over a dark wash so the amber stipple reads on any basemap */}
+      <path d={MARKER_LENS_PATH} fill="rgba(11,15,20,0.55)" stroke={MARKER_COLOR} strokeWidth={1} />
+      {locator ? (
+        <>
+          {ndbRingDots().map((d, i) => (
+            <circle key={i} cx={d.x} cy={d.y} r={0.75} fill={MARKER_COLOR} />
+          ))}
+          <circle cx={0} cy={0} r={1.7} fill={MARKER_COLOR} {...halo} />
+        </>
+      ) : (
+        // Plain marker: a simple row of stipple dots inside the lens.
+        [-8, -4, 0, 4, 8].map((x, i) => (
+          <circle key={i} cx={x} cy={0} r={0.9} fill={MARKER_COLOR} />
+        ))
+      )}
+    </g>
+  )
+
+  if (!standalone) return content
+  return (
+    <svg
+      width={58}
+      height={33}
+      viewBox="-16 -9 32 18"
+      className={className}
+      style={{ display: 'block', overflow: 'visible' }}
+      aria-label={locator ? 'Locator outer marker' : 'Marker beacon'}
+    >
+      {content}
+    </svg>
+  )
+}
+
 // ---- glideslope-intercept bolt --------------------------------------------
 
 interface BoltGlyphProps {

@@ -19,7 +19,7 @@ export interface ProcedureWaypoint {
   sequenceNumber: number
 }
 
-export type WaypointRole = 'iaf' | 'faf' | 'map' | 'hold' | 'normal'
+export type WaypointRole = 'iaf' | 'if' | 'faf' | 'map' | 'hold' | 'normal'
 
 /** A renderable waypoint symbol (deduped across a procedure's transitions). */
 export interface WaypointSymbol {
@@ -79,16 +79,43 @@ export interface ProcedureLeg {
   role: WaypointRole
   flyover: boolean
   turnRight: boolean
-  course: number // degrees (magCourse / 10)
+  course: number // degrees (magCourse / 10) — MAGNETIC, matches the published chart
   legNm: number // straight-leg length, nm
   speedKt: number // 0 = none
   dmeNm: number | null
   recNavId: string // '' if absent
+  /**
+   * Leg vertical descent angle (VDA) in degrees, from ARINC 424 cols 103-106
+   * (signed hundredths of a degree, e.g. "-305" => 3.05). Present mainly on the
+   * final-approach leg of non-precision approaches. Sign is normalized away
+   * (always the descent magnitude); null/absent when the field is blank/zero.
+   */
+  vertAngleDeg?: number | null
+  /**
+   * Procedure-turn (PI leg) geometry, derived from the raw ARINC 424 fields.
+   * The coded magCourse of a PI leg is the 45° BARB course, and legLen is the
+   * "remain within" excursion limit — NOT the outbound course/length. All
+   * courses here are MAGNETIC (convert with the airport magvar before drawing).
+   * Present only on PI legs.
+   */
+  pi?: {
+    outboundCourseMag: number
+    inboundCourseMag: number
+    barbCourseMag: number
+    limitNm: number
+  }
 }
 
 export interface ProcedureTransition {
   id: string // transitionId, '(common)' for blank
   legs: ProcedureLeg[] // ordered by seq
+  /**
+   * True when this transition is a NoPT (No Procedure Turn) route on an approach
+   * that publishes a course reversal on another transition. Inferred: an approach
+   * has a course reversal (PI or HF leg) in some transition, and this named
+   * enroute transition contains none, so it joins the final segment straight-in.
+   */
+  noPt?: boolean
 }
 
 export interface Procedure {
@@ -107,6 +134,45 @@ export interface Procedure {
   gpaDeg?: number | null
   /** Threshold crossing height, ft. */
   tchFt?: number | null
+  /**
+   * Where `gpaDeg` came from: an RNAV path point, an ILS glide slope, a
+   * non-precision leg vertical descent angle (VDA), or nothing (renderer falls
+   * back to 3°). Absent on legacy cached data.
+   */
+  gsSource?: 'pathPoint' | 'ilsGs' | 'vda' | 'default'
+  /** Airport magnetic variation, east positive (from the PA airport record). */
+  magVarDeg?: number
+  /**
+   * Course-reversal (procedure turn) metadata for an approach that publishes a
+   * PI leg. `alt` is the PI leg's own crossing constraint; `entryAlt` is the
+   * constraint on the IF leg at the same fix in the same transition (the
+   * arrival altitude before entering the turn). Absent when no PI leg exists.
+   */
+  courseReversal?: {
+    fixId: string
+    transitionId: string
+    outboundCourseMag: number
+    inboundCourseMag: number
+    turnRight: boolean
+    limitNm: number
+    alt: AltConstraint | null
+    entryAlt: AltConstraint | null
+  }
+  /**
+   * Hold-in-lieu-of-procedure-turn (HILPT) metadata for an approach that
+   * publishes an HF leg (e.g. KAWO RNAV 34 at SAVOY). Courses are MAGNETIC
+   * (chart display values); `alt` is the HF leg's own crossing constraint.
+   * Absent when no HF leg exists.
+   */
+  holdInLieu?: {
+    fixId: string
+    transitionId: string
+    inboundCourseMag: number
+    outboundCourseMag: number
+    turnRight: boolean
+    legNm: number
+    alt: AltConstraint | null
+  }
 }
 
 export type ProcedureVisibilitySource = 'user' | 'auto' | 'none'

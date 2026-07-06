@@ -18,6 +18,21 @@ function isLocBased(procedure: Procedure): boolean {
   return ['I', 'L', 'X'].includes(procedure.name[0]?.toUpperCase())
 }
 
+/**
+ * Coordinates of the final-approach FAF: the `role === 'faf'` leg of the
+ * transition that also contains the missed-approach point (the final segment).
+ * Null when the procedure has no such leg (e.g. legacy cached data with no
+ * transitions, or an approach with no charted FAF).
+ */
+function findFafFix(procedure: Procedure): { lat: number; lon: number } | null {
+  for (const t of procedure.transitions ?? []) {
+    const faf = t.legs.find((l) => l.role === 'faf')
+    const hasMap = t.legs.some((l) => l.role === 'map')
+    if (faf && hasMap) return { lat: faf.lat, lon: faf.lon }
+  }
+  return null
+}
+
 /** Find the runway end (and its opposite end) whose id matches the approach's runway ident. */
 function findRunwayEnd(
   runways: Runway[],
@@ -60,15 +75,21 @@ export function LocFeatherLayer() {
     const { end, other } = match
     if (!end?.lat || !other?.lat) return EMPTY_FC
 
-    // True inbound landing course toward `end`: the runway-axis bearing FROM
-    // this threshold TOWARD the far end IS the rollout/travel direction, which
-    // equals the course flown to land here — not its reciprocal. Derived from
-    // the threshold coordinates (like extendedCenterline.ts) so we don't depend
-    // on the (possibly magnetic) published heading field. buildLocFeather
+    // True inbound landing course toward `end`. Prefer the course AS FLOWN — the
+    // bearing from the FAF to the landing threshold — so the feather lies along
+    // the actual final-approach course (which may be offset a few degrees from
+    // the runway axis, as on a LOC or LDA). Fall back to the runway-axis bearing
+    // (threshold → far end, the rollout/travel direction, which equals the
+    // landing course — not its reciprocal) when the procedure has no charted FAF
+    // leg. Derived from coordinates (like extendedCenterline.ts) so we don't
+    // depend on the (possibly magnetic) published heading field. buildLocFeather
     // extends the feather outbound from here into the final-approach airspace
-    // (the front-course side); passing the reciprocal would flip it to the
-    // back course, over the runway.
-    const axisBearing = turf.bearing(turf.point([end.lon, end.lat]), turf.point([other.lon, other.lat]))
+    // (the front-course side); passing the reciprocal would flip it to the back
+    // course, over the runway.
+    const faf = findFafFix(procedure)
+    const axisBearing = faf
+      ? turf.bearing(turf.point([faf.lon, faf.lat]), turf.point([end.lon, end.lat]))
+      : turf.bearing(turf.point([end.lon, end.lat]), turf.point([other.lon, other.lat]))
     const inboundCourseTrueDeg = (axisBearing + 360) % 360
 
     const { shaded, outline } = buildLocFeather(

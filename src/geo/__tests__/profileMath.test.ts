@@ -10,6 +10,8 @@ import {
   segmentDistancesNm,
   labelStaggerOffsets,
   placeProfileLabels,
+  ptKeepMask,
+  courseReversalProfile,
 } from '../profileMath'
 import type { ProfileFix, ProfileModel } from '../profileMath'
 import type { Procedure, ProcedureLeg, ProcedureTransition } from '../../types/procedure'
@@ -302,6 +304,7 @@ describe('fixRenderAltitudes', () => {
   const base: Omit<ProfileModel, 'fixes'> = {
     procedureId: 'x', name: 'x', gsAngleDeg: 3, usedFallbackGs: false, tchFt: 50,
     tdzeFt: 400, runwayLengthFt: null, totalNm: 13, holds: [], missed: [],
+    appCourseMag: null, hasChartedVerticalGuidance: false, courseReversal: null, holdInLieu: null,
   }
 
   it('interpolates an unconstrained interior fix between its constrained neighbours', () => {
@@ -328,6 +331,34 @@ describe('fixRenderAltitudes', () => {
     const alts = fixRenderAltitudes(m)
     expect(alts[0]).toBe(2000)
     expect(alts[1]).toBe(2000)
+  })
+})
+
+describe('buildProfileModel — hold in lieu of PT', () => {
+  const hilpt: NonNullable<Procedure['holdInLieu']> = {
+    fixId: 'IAF1',
+    transitionId: 'IAF1',
+    inboundCourseMag: 342.1,
+    outboundCourseMag: 162.1,
+    turnRight: false,
+    legNm: 4,
+    alt: { type: 'AT_OR_ABOVE', low: 2000 },
+  }
+
+  it('maps the HILPT onto its anchor profile fix with courses and altitude', () => {
+    const m = buildProfileModel(makeProcedure({ holdInLieu: hilpt }), transition, rwy)
+    expect(m.holdInLieu).not.toBeNull()
+    expect(m.holdInLieu!.anchorFixIdx).toBe(0)
+    expect(m.holdInLieu!.inboundCourse).toBeCloseTo(342.1, 5)
+    expect(m.holdInLieu!.outboundCourse).toBeCloseTo(162.1, 5)
+    expect(m.holdInLieu!.altFt).toBe(2000)
+    expect(m.holdInLieu!.legNm).toBe(4)
+  })
+
+  it('is null when no HILPT exists or its fix is not on the profile transition', () => {
+    expect(buildProfileModel(makeProcedure(), transition, rwy).holdInLieu).toBeNull()
+    const offProfile = makeProcedure({ holdInLieu: { ...hilpt, fixId: 'NOPE' } })
+    expect(buildProfileModel(offProfile, transition, rwy).holdInLieu).toBeNull()
   })
 })
 
@@ -399,6 +430,118 @@ describe('labelStaggerOffsets', () => {
 
   it('is stable (all zero offset) when every fix shares the same altitude', () => {
     expect(labelStaggerOffsets([2000, 2000], 40)).toEqual([0, 0])
+  })
+})
+
+// A KAWO LOC 34-style non-precision approach with a charted procedure turn:
+//   SAVOY (IF, 2000) -> WATON (FAF, 1700, gs-intercept star) -> RW34 (MAP).
+// The reversal's own fix 'AW' (a collocated NDB) is NOT a distinct profile fix,
+// so the reversal anchors at the FAF. SAVOY is flat at the PT altitude (2000).
+const PT_LEGS: ProcedureLeg[] = [
+  leg({ seq: 10, fixId: 'SAVOY', lat: 48.3, lon: -122.28, role: 'if', altConstraint: { type: 'AT', low: 2000 }, course: 342 }),
+  leg({ seq: 20, fixId: 'WATON', lat: 48.22, lon: -122.28, role: 'faf', altConstraint: { type: 'AT', low: 1700 }, course: 342 }),
+  leg({ seq: 30, fixId: 'RW34', lat: 48.16, lon: -122.28, role: 'map', pathTerm: 'TF', course: 342 }),
+]
+const PT_TRANSITION: ProcedureTransition = { id: '(common)', legs: PT_LEGS }
+const PT_REVERSAL = {
+  fixId: 'AW',
+  transitionId: '(common)',
+  outboundCourseMag: 162,
+  inboundCourseMag: 342,
+  turnRight: false,
+  limitNm: 10,
+  alt: { type: 'AT_OR_ABOVE' as const, low: 2000 },
+  entryAlt: { type: 'AT_OR_BELOW' as const, low: 6000, high: 6000 },
+}
+
+function ptFix(fixId: string, plotAltFt: number | null, role: ProfileFix['role'] = 'normal', distNm = 0): ProfileFix {
+  return {
+    fixId, distNm, plotAltFt, role,
+    constraint: plotAltFt == null ? null : { type: 'AT', low: plotAltFt },
+    pathTerm: 'TF', speedKt: 0, isGsIntercept: false, isDmeArc: false,
+    dmeNm: null, dmeNavaidId: null, flyover: false, marker: null, markerLocator: false,
+  }
+}
+
+describe('ptKeepMask', () => {
+  it('drops a pre-anchor fix that is flat at the PT-completion altitude', () => {
+    const fixes = [ptFix('SAVOY', 2000, 'if'), ptFix('WATON', 1700, 'faf')]
+    expect(ptKeepMask(fixes, PT_REVERSAL)).toEqual([false, true])
+  })
+
+  it('keeps a pre-anchor fix whose altitude differs from the PT altitude', () => {
+    const fixes = [ptFix('HIGH', 3000, 'if'), ptFix('WATON', 1700, 'faf')]
+    expect(ptKeepMask(fixes, PT_REVERSAL)).toEqual([true, true])
+  })
+
+  it('keeps every fix when there is no reversal', () => {
+    const fixes = [ptFix('SAVOY', 2000, 'if'), ptFix('WATON', 1700, 'faf')]
+    expect(ptKeepMask(fixes, null)).toEqual([true, true])
+  })
+
+  it('never drops the anchor fix itself even if it sits at the PT altitude', () => {
+    const fixes = [ptFix('WATON', 2000, 'faf'), ptFix('RW34', null, 'map')]
+    expect(ptKeepMask(fixes, PT_REVERSAL)).toEqual([true, true])
+  })
+})
+
+describe('courseReversalProfile', () => {
+  it('anchors at the FAF (viaFallback) when the reversal fix is not a profile fix', () => {
+    const fixes = [ptFix('WATON', 1700, 'faf'), ptFix('RW34', null, 'map')]
+    const cr = courseReversalProfile(fixes, PT_REVERSAL)!
+    expect(cr.anchorFixIdx).toBe(0)
+    expect(cr.anchorIsIaf).toBe(true)
+    expect(cr.entryAltFt).toBe(6000)
+    expect(cr.vertexAltFt).toBe(2000)
+    expect(cr.outboundCourse).toBe(162)
+    expect(cr.inboundCourse).toBe(342)
+  })
+
+  it('anchors directly at the reversal fix when it is a profile fix (not a fallback)', () => {
+    const fixes = [ptFix('AW', 1700, 'faf'), ptFix('RW34', null, 'map')]
+    const cr = courseReversalProfile(fixes, PT_REVERSAL)!
+    expect(cr.anchorFixIdx).toBe(0)
+    expect(cr.anchorIsIaf).toBe(false)
+  })
+
+  it('returns null with no reversal', () => {
+    expect(courseReversalProfile([ptFix('WATON', 1700, 'faf')], null)).toBeNull()
+  })
+})
+
+describe('buildProfileModel — course reversal + app course', () => {
+  it('drops the flat pre-FAF fix, anchors the reversal at the FAF, and threads app course', () => {
+    const p = makeProcedure({
+      name: 'LOC RWY 34',
+      runways: ['34'],
+      transitions: [PT_TRANSITION],
+      gpaDeg: 3.05,
+      gsSource: 'vda',
+      courseReversal: PT_REVERSAL,
+    })
+    const m = buildProfileModel(p, PT_TRANSITION, rwy)
+    // SAVOY (flat 2000) dropped; WATON + RW34 remain.
+    expect(m.fixes.map((f) => f.fixId)).toEqual(['WATON', 'RW34'])
+    expect(m.courseReversal).not.toBeNull()
+    expect(m.courseReversal!.anchorFixIdx).toBe(0)
+    expect(m.courseReversal!.anchorIsIaf).toBe(true)
+    // App course from the MAP leg.
+    expect(m.appCourseMag).toBe(342)
+    // A coded VDA is not "charted vertical guidance" → no clear-surface wedge.
+    expect(m.hasChartedVerticalGuidance).toBe(false)
+  })
+
+  it('flags charted vertical guidance for an ILS glide slope', () => {
+    const p = makeProcedure({ gsSource: 'ilsGs', gpaDeg: 3.0 })
+    expect(buildProfileModel(p, transition, rwy).hasChartedVerticalGuidance).toBe(true)
+  })
+
+  it('keeps a differing pre-FAF fix and reports no reversal when absent', () => {
+    const p = makeProcedure({ transitions: [transition] })
+    const m = buildProfileModel(p, transition, rwy)
+    expect(m.courseReversal).toBeNull()
+    // The synthetic ILS transition (no reversal) keeps all its fixes.
+    expect(m.fixes.map((f) => f.fixId)).toEqual(['IAF1', 'MIDFX', 'FAFFX', 'MAPFX'])
   })
 })
 

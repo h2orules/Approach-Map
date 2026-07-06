@@ -3,7 +3,22 @@ import * as turf from '@turf/turf'
 import { Marker, useMap } from 'react-map-gl'
 import type { Procedure, WaypointSymbol, AltConstraint } from '../../types/procedure'
 import { BoltGlyph, DmeD, dmeGlyphWidth, MALTESE_PATH, MarkerLens, type Pt } from './glyphs'
+import {
+  groupCourseLabels,
+  labelRotation,
+  padCourse,
+  type CourseLeg,
+} from '../../geo/segmentCourseLabels'
+import {
+  procedureTurnDrawnLengthNm,
+  holdOutboundLabelAnchor,
+  holdInboundLabelAnchor,
+  PT_BARB_NM,
+} from '../../geo/procedureShapes'
+import { magneticToTrue } from '../../utils/arincRecords'
 import styles from './WaypointMarkers.module.css'
+
+const norm360 = (d: number): number => ((d % 360) + 360) % 360
 
 interface Props {
   procedures: Procedure[]
@@ -20,7 +35,7 @@ function symKey(s: WaypointSymbol): string {
   return `${s.id}:${s.lat.toFixed(4)}:${s.lon.toFixed(4)}`
 }
 
-const ROLE_RANK: Record<string, number> = { map: 5, faf: 4, iaf: 3, hold: 2, normal: 1 }
+const ROLE_RANK: Record<string, number> = { map: 6, faf: 5, iaf: 4, if: 3, hold: 2, normal: 1 }
 
 // ---- icons ---------------------------------------------------------------
 function Ring({ cx, cy, r, color }: { cx: number; cy: number; r: number; color: string }) {
@@ -192,10 +207,39 @@ interface SegLabel {
   color: string
 }
 
+// Rotated magnetic-course label placed along an approach segment.
+interface CourseLabelPlacement {
+  key: string
+  lon: number
+  lat: number
+  text: string
+  color: string
+  rot: number
+  flipped: boolean
+}
+
+// A short rotated course label drawn along a shape leg (procedure-turn barb
+// tick, hold straight legs). `text` already carries the degree sign / arrow;
+// `alt` is an optional constraint rendered under the text (a hold's own
+// crossing restriction, shown only when it differs from the fix's).
+interface LegCourseLabel {
+  key: string
+  lon: number
+  lat: number
+  text: string
+  color: string
+  rot: number
+  flipped: boolean
+  alt?: AltConstraint | null
+}
+
 export function WaypointMarkers({ procedures }: Props) {
   const { current: mapRef } = useMap()
   const [placements, setPlacements] = useState<Placement[]>([])
   const [segmentLabels, setSegmentLabels] = useState<SegLabel[]>([])
+  const [courseLabels, setCourseLabels] = useState<CourseLabelPlacement[]>([])
+  const [barbLabels, setBarbLabels] = useState<LegCourseLabel[]>([])
+  const [holdLabels, setHoldLabels] = useState<LegCourseLabel[]>([])
   const rafRef = useRef<number | null>(null)
 
   const symbols = useMemo(() => {
@@ -209,6 +253,17 @@ export function WaypointMarkers({ procedures }: Props) {
       }
     }
     return Array.from(map.values())
+  }, [procedures])
+
+  // symKeys that belong to an APPROACH — drives IAF/IF label tags (task 6),
+  // which are meaningful only on approaches.
+  const approachSymKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const proc of procedures) {
+      if (proc.type !== 'APPROACH') continue
+      for (const s of proc.symbols) keys.add(symKey(s))
+    }
+    return keys
   }, [procedures])
 
   useEffect(() => {
@@ -257,15 +312,41 @@ export function WaypointMarkers({ procedures }: Props) {
       }
       setPlacements(next)
 
+      const mapBearing = map.getBearing()
+
       // ── Segment distance labels (zoom ≥ threshold) ────────────────────────
       if (zoom < SEG_LABEL_MIN_ZOOM) {
         setSegmentLabels([])
+        setCourseLabels([])
+        setBarbLabels([])
+        setHoldLabels([])
         return
       }
 
+      // Suppress a label whose screen anchor sits within `pad` px of any fix/
+      // navaid icon rect (reuse the placement pass's iconRects).
+      const nearIcon = (px: number, py: number, pad = 28) =>
+        iconRects.some(
+          (r) => px >= r.x - pad && px <= r.x + r.w + pad && py >= r.y - pad && py <= r.y + r.h + pad,
+        )
+
       const segLabels: SegLabel[] = []
       for (const proc of procedures) {
-        const wpts = proc.waypoints
+        // Distance labels follow the representative (longest) transition — but
+        // only its inbound path up to and including the MAP. FAA plan views don't
+        // label missed-approach leg distances, and the missed leg runs back down
+        // the final corridor, so labeling it duplicates the final leg's distance
+        // (e.g. KAWO's "4.7" appearing twice). Fall back to raw waypoints for
+        // legacy data with no transitions.
+        let wpts: Array<{ lat: number; lon: number }>
+        if (proc.transitions && proc.transitions.length > 0) {
+          const rep = proc.transitions.reduce((a, b) => (b.legs.length > a.legs.length ? b : a))
+          const mapIdx = rep.legs.findIndex((l) => l.role === 'map')
+          const endIdx = mapIdx >= 0 ? mapIdx + 1 : rep.legs.length
+          wpts = rep.legs.slice(0, endIdx)
+        } else {
+          wpts = proc.waypoints
+        }
         for (let i = 0; i < wpts.length - 1; i++) {
           const a = wpts[i]
           const b = wpts[i + 1]
@@ -296,6 +377,157 @@ export function WaypointMarkers({ procedures }: Props) {
         }
       }
       setSegmentLabels(segLabels)
+
+      // ── Procedure-turn barb heading labels (approaches with a course reversal) ──
+      // FAA plan view labels the barb tick with the barb course on the outer
+      // (tip) side and its reciprocal on the inner side. The final course itself
+      // is labeled by the segment-course pass below (just its inbound course), so
+      // no outbound/inbound text pair sits on the final line any more.
+      const bLabels: LegCourseLabel[] = []
+      const onScreenLabel = (lon: number, lat: number): boolean => {
+        const p = map.project([lon, lat])
+        return !(p.x < -20 || p.y < -20 || p.x > vw + 20 || p.y > vh + 20)
+      }
+      for (const proc of procedures) {
+        const cr = proc.courseReversal
+        if (proc.type !== 'APPROACH' || !cr) continue
+        // PI fix coordinates, plus the collocated FAF (the barb is anchored on
+        // the final path when they coincide — matching the worker's geometry).
+        let fix: { lat: number; lon: number } | null = null
+        let faf: { lat: number; lon: number } | null = null
+        for (const t of proc.transitions ?? []) {
+          if (!fix) {
+            const leg = t.legs.find((l) => l.fixId === cr.fixId)
+            if (leg) fix = { lat: leg.lat, lon: leg.lon }
+          }
+          if (!faf) {
+            const fl = t.legs.find((l) => l.role === 'faf')
+            if (fl && t.legs.some((l) => l.role === 'map')) faf = { lat: fl.lat, lon: fl.lon }
+          }
+        }
+        if (!fix) continue
+        const anchor =
+          faf && turf.distance(turf.point([fix.lon, fix.lat]), turf.point([faf.lon, faf.lat]), {
+            units: 'nauticalmiles',
+          }) <= 0.5
+            ? faf
+            : fix
+
+        const magVar = proc.magVarDeg ?? 0
+        const outboundTrue = magneticToTrue(cr.outboundCourseMag, magVar)
+        const barbCourseMag = norm360(cr.outboundCourseMag + (cr.turnRight ? -45 : 45))
+        const barbTrue = magneticToTrue(barbCourseMag, magVar)
+        const drawnLen = procedureTurnDrawnLengthNm(cr.limitNm)
+        const end = turf.destination(turf.point([anchor.lon, anchor.lat]), drawnLen, outboundTrue, {
+          units: 'nauticalmiles',
+        })
+        const { rot, flipped } = labelRotation(barbTrue, mapBearing)
+        // Outer label (barb course) near the tip, reciprocal near the leg.
+        const spots: Array<{ frac: number; text: string; tag: string }> = [
+          { frac: 0.8, text: `${padCourse(barbCourseMag)}°`, tag: 'out' },
+          { frac: 0.28, text: `${padCourse(barbCourseMag + 180)}°`, tag: 'in' },
+        ]
+        for (const s of spots) {
+          const pos = turf.destination(end, PT_BARB_NM * s.frac, barbTrue, { units: 'nauticalmiles' })
+          const [lon, lat] = pos.geometry.coordinates
+          if (!onScreenLabel(lon, lat)) continue
+          bLabels.push({ key: `${proc.id}-barb-${s.tag}`, lon, lat, text: s.text, color: proc.color, rot, flipped })
+        }
+      }
+      setBarbLabels(bLabels)
+
+      // ── Hold course labels (racetracks) ───────────────────────────────────
+      // Label BOTH straight legs of each hold with their magnetic course + a
+      // travel-direction arrow, rotated along the leg — pilots expect the
+      // inbound course printed even when it matches the final approach course
+      // (plates always show both). The hold's own altitude constraint rides
+      // under the outbound label when it adds information (differs from the
+      // fix's charted restriction).
+      const hLabels: LegCourseLabel[] = []
+      for (const proc of procedures) {
+        const magVar = proc.magVarDeg ?? 0
+        for (const f of proc.geojson.features) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const props = (f as any).properties
+          if (!props || props.kind !== 'hold') continue
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const coords = (f as any).geometry?.coordinates as [number, number][] | undefined
+          if (!coords || coords.length < 2) continue
+          const A = coords[0]
+          const F = coords[1] // holdTrack emits [A, fix, …]
+          const inboundMag: number = props.inboundCourseMag ?? 0
+          const turnRight: boolean = props.turnRight !== false
+          const legNm = turf.distance(turf.point(A), turf.point(F), { units: 'nauticalmiles' })
+          const inboundTrue = magneticToTrue(inboundMag, magVar)
+
+          // Hold crossing restriction — shown only when it differs from the
+          // fix symbol's own (else it would just duplicate the fix label).
+          const holdAlt: AltConstraint | null = props.alt ?? null
+          const fixAlt = proc.symbols.find((s) => s.id === props.fixId)?.alt ?? null
+          const altDiffers = holdAlt != null && JSON.stringify(holdAlt) !== JSON.stringify(fixAlt)
+
+          const legAnchors = [
+            { ...holdOutboundLabelAnchor(F[1], F[0], inboundTrue, turnRight, legNm), mag: norm360(inboundMag + 180), tag: 'out' },
+            { ...holdInboundLabelAnchor(F[1], F[0], inboundTrue, legNm), mag: inboundMag, tag: 'in' },
+          ]
+          for (const a of legAnchors) {
+            if (!onScreenLabel(a.lon, a.lat)) continue
+            const { rot, flipped } = labelRotation(a.courseTrue, mapBearing)
+            const text = flipped ? `← ${padCourse(a.mag)}°` : `${padCourse(a.mag)}° →`
+            hLabels.push({
+              key: `${proc.id}-${props.fixId ?? ''}-hold-${a.tag}`,
+              lon: a.lon,
+              lat: a.lat,
+              text,
+              color: proc.color,
+              rot,
+              flipped,
+              alt: a.tag === 'out' && altDiffers ? holdAlt : null,
+            })
+          }
+        }
+      }
+      setHoldLabels(hLabels)
+
+      // ── Segment magnetic-course labels (approaches only) ──────────────────
+      const cLabels: CourseLabelPlacement[] = []
+      const seenCourse = new Set<string>()
+      for (const proc of procedures) {
+        if (proc.type !== 'APPROACH' || !proc.transitions) continue
+        const magVar = proc.magVarDeg ?? 0
+        for (const t of proc.transitions) {
+          const legs: CourseLeg[] = t.legs.map((l) => ({
+            lat: l.lat,
+            lon: l.lon,
+            course: l.course,
+            pathTerm: l.pathTerm,
+            role: l.role,
+          }))
+          for (const label of groupCourseLabels(legs, magVar, !!t.noPt)) {
+            // Dedup shared segments (e.g. the common final appears once, but
+            // enroute transitions can repeat a joined leg).
+            const dk = `${label.lat.toFixed(3)}:${label.lon.toFixed(3)}:${label.text}:${label.noPt}`
+            if (seenCourse.has(dk)) continue
+            seenCourse.add(dk)
+
+            const p = map.project([label.lon, label.lat])
+            if (p.x < -20 || p.y < -20 || p.x > vw + 20 || p.y > vh + 20) continue
+            if (nearIcon(p.x, p.y)) continue
+
+            const { rot, flipped } = labelRotation(label.trueBearing, mapBearing)
+            cLabels.push({
+              key: `${proc.id}-crs-${dk}`,
+              lon: label.lon,
+              lat: label.lat,
+              text: label.noPt ? `${label.text}° NoPT` : `${label.text}°`,
+              color: proc.color,
+              rot,
+              flipped,
+            })
+          }
+        }
+      }
+      setCourseLabels(cLabels)
     }
 
     const schedule = () => {
@@ -325,6 +557,11 @@ export function WaypointMarkers({ procedures }: Props) {
             : s.alt
         const boltFrom = s.gsFaf ? nearestPointToFix(dx, dy, w, h) : null
         const dme = s.dmeNm ?? null
+        // IAF/IF/FAF chip — approaches only.
+        const roleTag =
+          approachSymKeys.has(symKey(s)) && (s.role === 'iaf' || s.role === 'if' || s.role === 'faf')
+            ? s.role.toUpperCase()
+            : null
 
         return (
           <Marker key={symKey(s)} longitude={s.lon} latitude={s.lat} anchor="center">
@@ -356,6 +593,7 @@ export function WaypointMarkers({ procedures }: Props) {
                 {/* Name line: fix ID + optional DME D-badge to the right */}
                 <div className={styles.nameRow}>
                   <span className={styles.name}>{s.id}</span>
+                  {roleTag && <span className={styles.roleTag}>{roleTag}</span>}
                   {dme !== null && (
                     <span className={styles.dmeBadge}>
                       {s.dmeNavaid && <span className={styles.dmeIdent}>{s.dmeNavaid}</span>}
@@ -379,6 +617,49 @@ export function WaypointMarkers({ procedures }: Props) {
         <Marker key={sl.key} longitude={sl.lon} latitude={sl.lat} anchor="center">
           <div className={styles.segDist} style={{ color: sl.color }}>
             {sl.text}
+          </div>
+        </Marker>
+      ))}
+
+      {/* Magnetic-course labels along approach segments (task 4/5). Rotated to
+          align with the leg; nudged to a consistent screen side so they clear
+          the line. */}
+      {courseLabels.map((cl) => (
+        <Marker key={cl.key} longitude={cl.lon} latitude={cl.lat} anchor="center">
+          <div
+            className={styles.courseLabel}
+            style={{ color: cl.color, transform: `rotate(${cl.rot}deg) translateY(${cl.flipped ? 9 : -9}px)` }}
+          >
+            {cl.text}
+          </div>
+        </Marker>
+      ))}
+
+      {/* Procedure-turn barb heading labels: barb course on the tip side, its
+          reciprocal on the inner side, each rotated along the 45° tick. */}
+      {barbLabels.map((bl) => (
+        <Marker key={bl.key} longitude={bl.lon} latitude={bl.lat} anchor="center">
+          <div
+            className={styles.barbLabel}
+            style={{ color: bl.color, transform: `rotate(${bl.rot}deg) translateY(${bl.flipped ? 8 : -8}px)` }}
+          >
+            {bl.text}
+          </div>
+        </Marker>
+      ))}
+
+      {/* Hold course labels: magnetic course + travel arrow on BOTH straight
+          legs of the racetrack, each rotated along its leg. The hold's own
+          altitude restriction (when it differs from the fix's) rides under
+          the outbound label. */}
+      {holdLabels.map((hl) => (
+        <Marker key={hl.key} longitude={hl.lon} latitude={hl.lat} anchor="center">
+          <div
+            className={styles.holdCourseLabel}
+            style={{ color: hl.color, transform: `rotate(${hl.rot}deg) translateY(${hl.flipped ? 10 : -10}px)` }}
+          >
+            <span className={styles.courseLabel} style={{ color: hl.color }}>{hl.text}</span>
+            {hl.alt && <AltLabel c={hl.alt} />}
           </div>
         </Marker>
       ))}

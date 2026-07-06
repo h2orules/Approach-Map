@@ -67,6 +67,25 @@ function ndbRingDots(): Pt[] {
   return dots
 }
 
+// Stipple filling the lens interior (the FAA marker-beacon dot fill), on a grid
+// clipped to the pointed-oval boundary and cleared of the central NDB symbol so
+// the locator dot-rings stay legible. `y = ±LENS_HH·(1 − (x/13)²)` tracks the
+// MARKER_LENS_PATH silhouette; the central ellipse guards the NDB rings.
+function lensStippleDots(): Pt[] {
+  const dots: Pt[] = []
+  const halfW = 12
+  const LENS_HH = 4.6
+  for (let x = -halfW; x <= halfW + 1e-6; x += 2.3) {
+    const yMax = LENS_HH * (1 - (x / 13) ** 2)
+    for (let y = -yMax; y <= yMax + 1e-6; y += 1.9) {
+      // Skip the central zone occupied by the NDB dot-rings + center dot.
+      if ((x / 6.4) ** 2 + (y / 3.9) ** 2 < 1) continue
+      dots.push({ x, y })
+    }
+  }
+  return dots
+}
+
 interface MarkerLensProps {
   /** LOM: overlay the NDB dot-rings on the lens. */
   locator?: boolean
@@ -82,6 +101,10 @@ export function MarkerLens({ locator = false, className, standalone = true }: Ma
       <path d={MARKER_LENS_PATH} fill="rgba(11,15,20,0.55)" stroke={MARKER_COLOR} strokeWidth={1} />
       {locator ? (
         <>
+          {/* stipple fill around the central NDB symbol */}
+          {lensStippleDots().map((d, i) => (
+            <circle key={`s${i}`} cx={d.x} cy={d.y} r={0.55} fill={MARKER_COLOR} opacity={0.9} />
+          ))}
           {ndbRingDots().map((d, i) => (
             <circle key={i} cx={d.x} cy={d.y} r={0.75} fill={MARKER_COLOR} />
           ))}

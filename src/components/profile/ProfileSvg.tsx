@@ -404,8 +404,9 @@ function HoldInLieuFigure({
   const pad = (n: number) => String(Math.round(n)).padStart(3, '0')
 
   // Constraint at the open end: a BETWEEN splits plate-style (max with its
-  // overbar on the outbound row, min underlined on the inbound row); a single
-  // constraint centers between the two lines.
+  // overbar above the outbound line, min underlined below the inbound line, so
+  // neither collides with the racetrack strokes); a single constraint sits
+  // clear above the outbound line.
   const alt = hold.alt
   const altLabelX = (label: string) => extLeft - (label.length * ALT_CHAR_W) / 2 - 8
   const constraint = !alt ? null : alt.type === 'BETWEEN' ? (
@@ -413,16 +414,16 @@ function HoldInLieuFigure({
       <ConstraintText
         constraint={{ type: 'AT_OR_BELOW', low: alt.high ?? alt.low }}
         cx={altLabelX(altNumberOnly({ type: 'AT_OR_BELOW', low: alt.high ?? alt.low }))}
-        cy={yOut}
+        cy={yOut - ALT_BAR_HALF_GAP - 4}
       />
       <ConstraintText
         constraint={{ type: 'AT_OR_ABOVE', low: alt.low }}
         cx={altLabelX(altNumberOnly({ type: 'AT_OR_ABOVE', low: alt.low }))}
-        cy={yIn}
+        cy={yIn + ALT_BAR_HALF_GAP + 4}
       />
     </g>
   ) : (
-    <ConstraintText constraint={alt} cx={altLabelX(altNumberOnly(alt))} cy={(yIn + yOut) / 2} />
+    <ConstraintText constraint={alt} cx={altLabelX(altNumberOnly(alt))} cy={yOut - ALT_BAR_HALF_GAP - 5} />
   )
 
   return (
@@ -515,9 +516,19 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
     x: xScale(descentPts[descentPts.length - 1].distNm),
     y: yScale(descentPts[descentPts.length - 1].altFt),
   }
-  const gsLabelPos = gsAnchorPx
-    ? { x: (gsAnchorPx.x + thresholdPx.x) / 2, y: (gsAnchorPx.y + thresholdPx.y) / 2 - 8 }
-    : null
+  // Offset the GS label perpendicular to (above) the descent line, not straight
+  // up: on a sloped line a vertical nudge leaves the far end of the text sitting
+  // on the stroke. The unit normal (dy, -dx)/len points up-left of the segment.
+  const gsLabelPos = (() => {
+    if (!gsAnchorPx) return null
+    const mx = (gsAnchorPx.x + thresholdPx.x) / 2
+    const my = (gsAnchorPx.y + thresholdPx.y) / 2
+    const dx = thresholdPx.x - gsAnchorPx.x
+    const dy = thresholdPx.y - gsAnchorPx.y
+    const len = Math.hypot(dx, dy) || 1
+    const off = 16
+    return { x: mx + (dy / len) * off, y: my + (-dx / len) * off }
+  })()
 
   // ── missed approach: a short dotted curve that leaves the runway and turns
   //    up, ending in a solid arrowhead — the FAA-plate flourish, not the full
@@ -682,7 +693,9 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
             {`GS ${model.gsAngleDeg.toFixed(2)}°${model.usedFallbackGs ? '*' : ''}`}
           </text>
           {model.tchFt != null && (
-            <text className={styles.gsLabel} x={thresholdPx.x} y={distTextY} textAnchor="middle">
+            // Nudged right of the threshold so it clears the last inter-fix
+            // distance label (which centers on the WIGIB→RW34 midpoint).
+            <text className={styles.gsLabel} x={thresholdPx.x + 28} y={distTextY} textAnchor="middle">
               {`TCH ${model.tchFt}′`}
             </text>
           )}
@@ -763,10 +776,26 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
         // The runway/threshold fix's crossing altitude is redundant with the
         // TDZE and TCH already shown near the runway — skip it to reduce noise.
         const isRunwayFix = i === model.fixes.length - 1
+        // The HILPT anchor's own crossing restriction sits directly above the
+        // fix by default, which lands inside the racetrack figure drawn to its
+        // left. Shift it RIGHT of the fix (toward the descent, which is clear)
+        // so both altitudes stay visible — the hold's at the racetrack's open
+        // end, the fix's here — without overlapping the racetrack strokes.
+        const holdAnchorShift =
+          holdGeom != null && holdGeom.hold.anchorFixIdx === i && f.constraint != null && !f.isGsIntercept
 
         return (
           <g key={`${f.fixId}-${i}`}>
-            {!isRunwayFix && <AltAnnotation f={f} x={x} y={y} />}
+            {!isRunwayFix &&
+              (holdAnchorShift ? (
+                <ConstraintText
+                  constraint={f.constraint!}
+                  cx={x + (altNumberOnly(f.constraint!).length * ALT_CHAR_W) / 2 + 12}
+                  cy={y - ALT_CY_OFFSET}
+                />
+              ) : (
+                <AltAnnotation f={f} x={x} y={y} />
+              ))}
 
             {f.isGsIntercept && <ProfileBolt x={x} y={y} />}
             {f.role === 'faf' && <MalteseCross x={x} y={y} />}

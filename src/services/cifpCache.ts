@@ -4,10 +4,7 @@ import type { Procedure } from '../types/procedure'
 import type { CifpAirportData, CifpRunwayInfo } from '../types/cifp'
 import type { SafeAltitudeArea } from '../types/safeAltitude'
 import { currentCycleEffectiveDate, nextCycleDate, cifpUrl, formatCycleDate, isCycleStale } from '../utils/airac'
-
-const DB_NAME = 'approach-map-cifp'
-const DB_VERSION = 1
-const STORE_NAME = 'cifp'
+import { createIndexedDbStore, type KVStore } from './db'
 
 // Bump whenever the ARINC 424 parser logic changes, so previously cached
 // parse results (which may have been produced by buggy parser code) are
@@ -40,7 +37,13 @@ const STORE_NAME = 'cifp'
 // KAWO R34 "SAVOY"), so the racetrack renders and NoPT inference sees it;
 // Procedure.holdInLieu derived from the HF leg; hold features carry the leg's
 // alt constraint; missed-approach holds duplicating a transition hold dropped.
-const PARSER_VERSION = 20
+// v21: IndexedDB layout changed from one monolithic 'data' blob to one record
+// per airport ('airport:'+key → CifpAirportData) plus meta keys
+// 'effectiveDate' / 'parserVersion' / 'airportKeys' (string[] of every parsed
+// key). useCifpStore.data now holds only lazily-warmed airports (via
+// ensureAirport(key)) instead of the whole country, so a cold start from IDB
+// doesn't load every airport's geometry into memory up front.
+const PARSER_VERSION = 21
 
 export type CifpStatus = 'idle' | 'fetching' | 'parsing' | 'ready' | 'error'
 
@@ -49,11 +52,15 @@ interface CifpStore {
   progress: number
   progressMessage: string
   effectiveDate: string | null
+  /** Only airports that have been warmed this session (see `ensureAirport`). */
   data: Record<string, CifpAirportData>
+  /** Every airport key available in the current CIFP parse, warmed or not. */
+  airportKeys: string[]
   error: string | null
 
   setStatus: (s: CifpStatus, progress?: number, message?: string) => void
-  setData: (data: Record<string, CifpAirportData>, effectiveDate: string) => void
+  setReady: (data: Record<string, CifpAirportData>, airportKeys: string[], effectiveDate: string) => void
+  putAirport: (key: string, airportData: CifpAirportData) => void
   setError: (e: string) => void
 }
 
@@ -63,41 +70,24 @@ export const useCifpStore = create<CifpStore>((set) => ({
   progressMessage: '',
   effectiveDate: null,
   data: {},
+  airportKeys: [],
   error: null,
 
   setStatus: (status, progress = 0, progressMessage = '') =>
     set({ status, progress, progressMessage }),
-  setData: (data, effectiveDate) => set({ data, effectiveDate, status: 'ready', error: null }),
+  setReady: (data, airportKeys, effectiveDate) =>
+    set({ data, airportKeys, effectiveDate, status: 'ready', error: null }),
+  putAirport: (key, airportData) =>
+    set((s) => ({ data: { ...s.data, [key]: airportData } })),
   setError: (error) => set({ error, status: 'error' }),
 }))
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE_NAME)
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
+// Injectable KV seam — real IndexedDB in the app, an in-memory fake in tests.
+let kv: KVStore = createIndexedDbStore()
 
-async function dbGet<T>(db: IDBDatabase, key: string): Promise<T | undefined> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly')
-    const req = tx.objectStore(STORE_NAME).get(key)
-    req.onsuccess = () => resolve(req.result as T)
-    req.onerror = () => reject(req.error)
-  })
-}
-
-async function dbPut(db: IDBDatabase, key: string, value: unknown): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const req = tx.objectStore(STORE_NAME).put(value, key)
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
-  })
+/** Test-only seam: point cifpCache at a fake KVStore (see `./db.ts`). */
+export function __setKvStoreForTests(store: KVStore): void {
+  kv = store
 }
 
 let inflightPromise: Promise<void> | null = null
@@ -109,6 +99,21 @@ function scheduleRollover(): void {
   rolloverTimer = setTimeout(() => {
     void fetchAndParseCifp()
   }, msUntilNext)
+}
+
+/** Persists a freshly parsed national CIFP as one IDB record per airport
+ *  (batched, see `KVStore.putMany`) plus the meta keys, then drops the
+ *  legacy monolithic 'data' blob if one is still lingering from before v21. */
+async function persistParsedData(data: Record<string, CifpAirportData>, dateStr: string): Promise<void> {
+  const airportKeys = Object.keys(data)
+  const entries: Array<[string, unknown]> = airportKeys.map((key) => [`airport:${key}`, data[key]])
+  await kv.putMany(entries)
+  await kv.putMany([
+    ['effectiveDate', dateStr],
+    ['parserVersion', PARSER_VERSION],
+    ['airportKeys', airportKeys],
+  ])
+  await kv.delete('data')
 }
 
 async function fetchAndParseCifp(): Promise<void> {
@@ -158,16 +163,11 @@ async function fetchAndParseCifp(): Promise<void> {
         store.setStatus('parsing', msg.percent ?? 0, msg.message ?? '')
       } else if (msg.type === 'result') {
         const data = msg.data as Record<string, CifpAirportData>
-        store.setData(data, dateStr)
-        openDb()
-          .then((db) =>
-            Promise.all([
-              dbPut(db, 'data', data),
-              dbPut(db, 'effectiveDate', dateStr),
-              dbPut(db, 'parserVersion', PARSER_VERSION),
-            ]),
-          )
-          .catch(console.error)
+        // The fresh parse is kept fully in memory for this session (simplest
+        // model — it's already all in memory right here); only a *cold start*
+        // reading back from IDB avoids eagerly warming every airport.
+        store.setReady(data, Object.keys(data), dateStr)
+        persistParsedData(data, dateStr).catch(console.error)
         resolve()
       } else if (msg.type === 'error') {
         reject(new Error(msg.message as string))
@@ -185,17 +185,22 @@ async function fetchAndParseCifp(): Promise<void> {
 }
 
 async function checkAndRefreshIfStale(): Promise<void> {
-  const db = await openDb()
-  const storedDate = await dbGet<string>(db, 'effectiveDate')
-  const storedVersion = await dbGet<number>(db, 'parserVersion')
+  const storedDate = await kv.get<string>('effectiveDate')
+  const storedVersion = await kv.get<number>('parserVersion')
+  const storedAirportKeys = await kv.get<string[]>('airportKeys')
 
-  if (storedVersion === PARSER_VERSION && !isCycleStale(storedDate ?? null)) {
-    const data = await dbGet<Record<string, CifpAirportData>>(db, 'data')
-    if (data) {
-      useCifpStore.getState().setData(data, storedDate!)
-      scheduleRollover()
-      return
-    }
+  if (
+    storedVersion === PARSER_VERSION &&
+    !isCycleStale(storedDate ?? null) &&
+    storedAirportKeys &&
+    storedAirportKeys.length > 0
+  ) {
+    // Cache hit: the index of available airports is valid, but nothing is
+    // warmed into memory yet — callers warm individual airports on demand via
+    // `ensureAirport`. This is what keeps cold-start memory bounded.
+    useCifpStore.getState().setReady({}, storedAirportKeys, storedDate!)
+    scheduleRollover()
+    return
   }
 
   inflightPromise = fetchAndParseCifp()
@@ -206,6 +211,23 @@ async function checkAndRefreshIfStale(): Promise<void> {
 export async function getCifpData(): Promise<void> {
   if (inflightPromise) return inflightPromise
   return checkAndRefreshIfStale()
+}
+
+/**
+ * Warms one airport's parsed CIFP data into memory if it isn't already there.
+ * No-op (resolves true immediately) once warmed. Returns false if the key
+ * isn't in the current CIFP parse at all (no published procedures / unknown
+ * key) — callers should treat that the same as "no procedures found".
+ */
+export async function ensureAirport(key: string): Promise<boolean> {
+  const k = key.toUpperCase()
+  if (useCifpStore.getState().data[k]) return true
+
+  const record = await kv.get<CifpAirportData>(`airport:${k}`)
+  if (!record) return false
+
+  useCifpStore.getState().putAirport(k, record)
+  return true
 }
 
 export function getProceduresForAirport(icao: string): Procedure[] {

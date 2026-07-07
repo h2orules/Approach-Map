@@ -6,6 +6,12 @@ export interface Airport {
    * compatibility with the curated airports.json (which omits it today).
    */
   key?: string
+  /**
+   * ICAO code, read pervasively downstream (search, procedure/runway/ATIS
+   * lookups). For LID-only airports (no true ICAO code) this is set to `key`
+   * for display purposes — since CIFP data is keyed by the same identifier,
+   * that also makes it functionally correct as a lookup key, not just cosmetic.
+   */
   icao: string
   iata: string
   name: string

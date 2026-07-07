@@ -10,7 +10,7 @@ export function AirportSearch() {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
-  const { results } = useAirportSearch(query)
+  const { results, counts } = useAirportSearch(query)
   const setSelectedAirport = useAirportStore((s) => s.setSelectedAirport)
   const selectedAirport = useAirportStore((s) => s.selectedAirport)
   const { setViewport } = useMapStore()
@@ -94,21 +94,27 @@ export function AirportSearch() {
       />
       {open && results.length > 0 && (
         <ul className={styles.dropdown} id="airport-suggestions" role="listbox">
-          {results.map((airport, i) => (
-            <li
-              key={airport.icao}
-              id={`airport-opt-${i}`}
-              role="option"
-              aria-selected={i === activeIndex}
-              className={`${styles.option} ${i === activeIndex ? styles.optionActive : ''}`}
-              onMouseDown={() => selectAirport(airport)}
-              onMouseEnter={() => setActiveIndex(i)}
-            >
-              <span className={styles.icao}>{airport.icao}</span>
-              <span className={styles.name}>{airport.name}</span>
-              <span className={styles.city}>{airport.city}, {airport.state}</span>
-            </li>
-          ))}
+          {results.map((airport, i) => {
+            const airportCounts = counts.get(airport.key ?? airport.icao)
+            return (
+              <li
+                key={airport.icao}
+                id={`airport-opt-${i}`}
+                role="option"
+                aria-selected={i === activeIndex}
+                className={`${styles.option} ${i === activeIndex ? styles.optionActive : ''}`}
+                onMouseDown={() => selectAirport(airport)}
+                onMouseEnter={() => setActiveIndex(i)}
+              >
+                <span className={styles.icao}>{airport.icao}</span>
+                <span className={styles.name}>{airport.name}</span>
+                <span className={styles.city}>{airport.city}, {airport.state}</span>
+                {airportCounts && (
+                  <span className={styles.counts}>{airportCounts.a} APP</span>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

@@ -23,12 +23,15 @@ interface PaneStore {
   sheetOpen: boolean
   /** Dismissal of the "many airports active" clutter hint. Not persisted (re-shows next session). */
   clutterHintDismissed: boolean
+  /** Dismissal of the "too many procedure lines rendered" hint (AppMap). Not persisted. */
+  procedureLinesHintDismissed: boolean
 
   toggleCollapsed: () => void
   setCollapsed: (collapsed: boolean) => void
   setSheetOpen: (open: boolean) => void
   toggleSheetOpen: () => void
   dismissClutterHint: () => void
+  dismissProcedureLinesHint: () => void
 }
 
 export const usePaneStore = create<PaneStore>()(
@@ -37,12 +40,14 @@ export const usePaneStore = create<PaneStore>()(
       collapsed: false,
       sheetOpen: false,
       clutterHintDismissed: false,
+      procedureLinesHintDismissed: false,
 
       toggleCollapsed: () => set((s) => ({ collapsed: !s.collapsed })),
       setCollapsed: (collapsed) => set({ collapsed }),
       setSheetOpen: (open) => set({ sheetOpen: open }),
       toggleSheetOpen: () => set((s) => ({ sheetOpen: !s.sheetOpen })),
       dismissClutterHint: () => set({ clutterHintDismissed: true }),
+      dismissProcedureLinesHint: () => set({ procedureLinesHintDismissed: true }),
     }),
     {
       name: 'approach-map-pane',

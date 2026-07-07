@@ -17,7 +17,6 @@ const UPSTREAMS: Record<string, Upstream> = {
       'X-RapidAPI-Host': 'adsbexchange-com1.p.rapidapi.com',
     }),
   },
-  aviationapi: { base: 'https://www.aviationapi.com/api/v1' },
   'faa-cifp': { base: 'https://aeronav.faa.gov/Upload_313-d/cifp' },
   adsbdb: { base: 'https://api.adsbdb.com/v0' },
   adsblol: { base: 'https://api.adsb.lol/api/0' },

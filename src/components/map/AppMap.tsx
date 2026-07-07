@@ -19,6 +19,7 @@ import { MvaLayer } from './MvaLayer'
 import { AirspaceLayer } from './AirspaceLayer'
 import { LocFeatherLayer } from './LocFeatherLayer'
 import { WaypointMarkers } from './WaypointMarkers'
+import { RenderBudgetHint } from './RenderBudgetHint'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
 import { AltitudeFilter } from './AltitudeFilter'
 import { TrafficFilter } from './TrafficFilter'
@@ -202,6 +203,8 @@ export function AppMap() {
       </div>
 
       <ActiveProceduresOverlay />
+
+      <RenderBudgetHint visibleCount={visibleProcedures.length} />
 
       <ProfilePanel mapRef={mapRef} />
     </div>

@@ -16,7 +16,12 @@ describe('deriveMode', () => {
 describe('usePaneStore', () => {
   beforeEach(() => {
     localStorage.clear()
-    usePaneStore.setState({ collapsed: false, sheetOpen: false, clutterHintDismissed: false })
+    usePaneStore.setState({
+      collapsed: false,
+      sheetOpen: false,
+      clutterHintDismissed: false,
+      procedureLinesHintDismissed: false,
+    })
   })
 
   it('toggleCollapsed flips collapsed', () => {
@@ -38,6 +43,12 @@ describe('usePaneStore', () => {
     expect(usePaneStore.getState().clutterHintDismissed).toBe(false)
     usePaneStore.getState().dismissClutterHint()
     expect(usePaneStore.getState().clutterHintDismissed).toBe(true)
+  })
+
+  it('dismissProcedureLinesHint sets the dismissal flag', () => {
+    expect(usePaneStore.getState().procedureLinesHintDismissed).toBe(false)
+    usePaneStore.getState().dismissProcedureLinesHint()
+    expect(usePaneStore.getState().procedureLinesHintDismissed).toBe(true)
   })
 
   it('persists only collapsed, not sheetOpen or clutterHintDismissed', () => {

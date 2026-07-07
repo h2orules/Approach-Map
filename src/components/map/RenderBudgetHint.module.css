@@ -1,0 +1,37 @@
+.hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--overlay-border);
+  background: var(--overlay-bg);
+  backdrop-filter: blur(6px);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.text {
+  flex: 1;
+}
+
+.dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.dismiss:hover {
+  opacity: 0.75;
+}

@@ -16,6 +16,7 @@ import {
   PT_BARB_NM,
 } from '../../geo/procedureShapes'
 import { magneticToTrue } from '../../utils/arincRecords'
+import { isOverWaypointBudget } from '../../utils/renderBudget'
 import styles from './WaypointMarkers.module.css'
 
 const norm360 = (d: number): number => ((d % 360) + 360) % 360
@@ -140,6 +141,9 @@ interface Placement {
   dy: number
   w: number
   h: number
+  // false past MAX_ONSCREEN_WAYPOINT_SYMBOLS: the icon still renders but the
+  // name/altitude/speed label is skipped (see the render budget degrade in
+  // the recompute effect below).
   placed: boolean
 }
 
@@ -293,9 +297,18 @@ export function WaypointMarkers({ procedures }: Props) {
         iconRects.push({ x: p.x - iw / 2, y: p.y - ih / 2, w: iw, h: ih })
       }
 
+      // Render budget: past this many on-screen symbols, skip the label
+      // placement pass entirely (icons still render) — this is also what
+      // makes the collision loop itself cheaper, not just the DOM output.
+      const overBudget = isOverWaypointBudget(onScreen.length)
+
       const labelRects: Rect[] = []
       const next: Placement[] = []
       for (const { s, sx, sy } of onScreen) {
+        if (overBudget) {
+          next.push({ s, dx: 0, dy: 0, w: 0, h: 0, placed: false })
+          continue
+        }
         // Marker fixes need extra lateral gap to clear the wide LOM lens.
         const gap = s.marker ? 34 : s.gsFaf ? 44 : 16
         const { w, h } = labelBoxSize(s)
@@ -549,7 +562,7 @@ export function WaypointMarkers({ procedures }: Props) {
   return (
     <>
       {placements.map((pl) => {
-        const { s, dx, dy, w, h } = pl
+        const { s, dx, dy, w, h, placed } = pl
         const altC: AltConstraint | null = !s.alt
           ? null
           : s.gsFaf
@@ -580,34 +593,41 @@ export function WaypointMarkers({ procedures }: Props) {
                 <WpIcon s={s} />
               </div>
 
-              {/* Marker type label below the fix — 'LOM' for a locator. */}
-              {s.marker && (
-                <span className={styles.markerLabel}>
-                  {s.markerLocator ? `L${s.marker}` : s.marker}
-                </span>
-              )}
-
-              {boltFrom && <BoltGlyph from={boltFrom} to={{ x: 0, y: 0 }} className={styles.bolt} />}
-
-              <div className={styles.label} style={{ transform: `translate(${dx}px, ${dy}px)` }}>
-                {/* Name line: fix ID + optional DME D-badge to the right */}
-                <div className={styles.nameRow}>
-                  <span className={styles.name}>{s.id}</span>
-                  {roleTag && <span className={styles.roleTag}>{roleTag}</span>}
-                  {dme !== null && (
-                    <span className={styles.dmeBadge}>
-                      {s.dmeNavaid && <span className={styles.dmeIdent}>{s.dmeNavaid}</span>}
-                      <DmeD nm={dme} />
+              {/* Past the on-screen symbol budget, skip everything below the
+                  glyph (marker-type text, GS-intercept bolt, name/altitude/
+                  speed label) — see MAX_ONSCREEN_WAYPOINT_SYMBOLS. */}
+              {placed && (
+                <>
+                  {/* Marker type label below the fix — 'LOM' for a locator. */}
+                  {s.marker && (
+                    <span className={styles.markerLabel}>
+                      {s.markerLocator ? `L${s.marker}` : s.marker}
                     </span>
                   )}
-                </div>
-                {(altC || s.speedKt) && (
-                  <div className={styles.restrictions}>
-                    {altC && <AltLabel c={altC} />}
-                    {s.speedKt ? <SpeedLabel kt={s.speedKt} /> : null}
+
+                  {boltFrom && <BoltGlyph from={boltFrom} to={{ x: 0, y: 0 }} className={styles.bolt} />}
+
+                  <div className={styles.label} style={{ transform: `translate(${dx}px, ${dy}px)` }}>
+                    {/* Name line: fix ID + optional DME D-badge to the right */}
+                    <div className={styles.nameRow}>
+                      <span className={styles.name}>{s.id}</span>
+                      {roleTag && <span className={styles.roleTag}>{roleTag}</span>}
+                      {dme !== null && (
+                        <span className={styles.dmeBadge}>
+                          {s.dmeNavaid && <span className={styles.dmeIdent}>{s.dmeNavaid}</span>}
+                          <DmeD nm={dme} />
+                        </span>
+                      )}
+                    </div>
+                    {(altC || s.speedKt) && (
+                      <div className={styles.restrictions}>
+                        {altC && <AltLabel c={altC} />}
+                        {s.speedKt ? <SpeedLabel kt={s.speedKt} /> : null}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </>
+              )}
             </div>
           </Marker>
         )

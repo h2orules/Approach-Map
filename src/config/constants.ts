@@ -12,6 +12,22 @@ export const POLL_CLUSTER_MAX_RADIUS_NM = 250
 export const MAX_ACTIVE_AIRPORTS = 10
 export const MAX_ACTIVE_AIRPORTS_SOFT = 5
 
+// ── Render budgets (Phase 7 perf review) ────────────────────────────────────
+// Each visible procedure costs ~5 Mapbox GL layers (line, casing, hit-target,
+// direction arrows, etc. — see ProcedureLayer.tsx), so a busy multi-airport
+// session can add up fast. Past this many simultaneously-visible procedure
+// lines, AppMap shows a small dismissible hint (reusing the AirportList
+// clutter-hint pattern) telling the user to hide procedures or collapse
+// airport sections — it never silently culls a line.
+export const MAX_RENDERED_PROCEDURE_LINES = 150
+// WaypointMarkers renders one DOM Marker per on-screen fix, with an O(n²)-ish
+// label-collision placement pass (each candidate label position is scored
+// against every other placed icon/label rect). Past this many on-screen
+// symbols, WaypointMarkers degrades to icon-only glyphs (skips the label
+// placement pass entirely for the overflow, dropping name/altitude/speed
+// text) so the collision loop itself gets cheaper, not just the DOM output.
+export const MAX_ONSCREEN_WAYPOINT_SYMBOLS = 250
+
 export const DEFAULT_POLL_INTERVAL_MS = 5_000
 export const STALE_AIRCRAFT_THRESHOLD_S = 60
 

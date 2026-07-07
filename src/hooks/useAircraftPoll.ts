@@ -5,6 +5,8 @@ import { useAircraftStore } from '../store/useAircraftStore'
 import { useAirportStore } from '../store/useAirportStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 
+// Polls a single circle around the primary airport (activeAirports[0]). Phase 6
+// replaces this with clustered polling covering all active airports.
 export function useAircraftPoll() {
   const selectedAirport = useAirportStore((s) => s.selectedAirport)
   const pollIntervalMs = useSettingsStore((s) => s.pollIntervalMs)

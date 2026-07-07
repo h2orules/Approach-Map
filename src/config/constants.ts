@@ -1,5 +1,14 @@
 export const ADSBX_SEARCH_RADIUS_NM = 50
 
+// ── Multi-airport limits (Phase 4+) ─────────────────────────────────────────
+// Several airports can be active at once (their procedures/runways coexist on
+// the map). MAX_ACTIVE_AIRPORTS is the hard cap enforced by
+// useAirportStore.addAirport (returns 'capped' past it). MAX_ACTIVE_AIRPORTS_SOFT
+// is the clutter/saturation threshold the UI uses (Phase 5) to prompt the user
+// to reduce the count — it does not block adds.
+export const MAX_ACTIVE_AIRPORTS = 10
+export const MAX_ACTIVE_AIRPORTS_SOFT = 5
+
 export const DEFAULT_POLL_INTERVAL_MS = 5_000
 export const STALE_AIRCRAFT_THRESHOLD_S = 60
 

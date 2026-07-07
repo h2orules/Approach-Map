@@ -1,7 +1,7 @@
 import type { Procedure, ProcedureWaypoint, ProcedureLeg, ProcedureTransition, NavaidType, ProcedureType, WaypointRole, WaypointSymbol } from '../types/procedure'
 import type { CifpAirportData, CifpRunwayInfo } from '../types/cifp'
 import { parseArinc424AltDescriptor } from '../utils/altitudeConstraint'
-import { nextProcedureColor, resetColorCounters } from '../utils/colorScheme'
+import { assignProcedureColors } from '../utils/colorScheme'
 import { parseLatLon } from '../utils/arincCoords'
 import {
   parseAirportMagVar,
@@ -454,7 +454,6 @@ export function parseCifp(text: string, onProgress?: CifpParseProgress): Record<
   onProgress?.(85, 'Building GeoJSON…')
 
   // Convert to CifpAirportData per airport.
-  resetColorCounters()
   const result: Record<string, CifpAirportData> = {}
 
   const legToWaypoint = (l: ProcedureLeg): ProcedureWaypoint => ({
@@ -672,7 +671,10 @@ export function parseCifp(text: string, onProgress?: CifpParseProgress): Record<
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         geojson: { type: 'FeatureCollection', features } as any,
         hasGeometry: true,
-        color: nextProcedureColor(group.type),
+        // Placeholder — the airport's procedures are colored together below
+        // (assignProcedureColors) once the full list is built. The live display
+        // color is (re)assigned per active-airport slot in useProcedures.
+        color: '',
         transitions,
         ...(gpaDeg !== undefined ? { gpaDeg } : {}),
         ...(tchFt !== undefined ? { tchFt } : {}),
@@ -709,7 +711,9 @@ export function parseCifp(text: string, onProgress?: CifpParseProgress): Record<
     }))
 
     result[icao] = {
-      procedures,
+      // Slot-0 default colors baked in; useProcedures re-colors per airport slot
+      // for multi-airport display.
+      procedures: assignProcedureColors(icao, procedures, 0),
       safeAltitudes,
       runwayInfo: runwayInfoByAirport.get(icao) ?? {},
       magVarDeg,

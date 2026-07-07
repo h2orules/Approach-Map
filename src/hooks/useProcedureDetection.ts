@@ -19,6 +19,9 @@ import {
  * result into the procedure store. All matching/dedup/hysteresis policy lives
  * in the pure reducer (`src/geo/detectionMachine.ts`); this hook is only glue.
  */
+// Runs detection against the primary airport (activeAirports[0]) only. Phase 6
+// extends this to a per-airport AirportContext map keyed by proc.icao so every
+// active airport's traffic is detected with its own elevation/position.
 export function useProcedureDetection() {
   const lastPollMs = useAircraftStore((s) => s.lastPollMs)
   const selectedAirport = useAirportStore((s) => s.selectedAirport)

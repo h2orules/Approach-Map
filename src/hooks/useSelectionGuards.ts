@@ -3,7 +3,7 @@ import { useSelectionStore } from '../store/useSelectionStore'
 import { useAircraftStore } from '../store/useAircraftStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useProcedureStore, computeVisibility } from '../store/useProcedureStore'
-import { useAirportStore } from '../store/useAirportStore'
+import { useAirportStore, airportKey } from '../store/useAirportStore'
 import { positionToMinFt, positionToMaxFt } from '../utils/altitudeFilter'
 
 /**
@@ -15,7 +15,10 @@ import { positionToMinFt, positionToMaxFt } from '../utils/altitudeFilter'
  *    altitude filter range
  *  - selected approach is no longer visible (user untoggle, revert-to-auto,
  *    or the 5-minute auto-hide)
- *  - the selected airport changes
+ *  - the airport that OWNS the selected approach is removed from the active set
+ *    (multi-airport: switching/removing one airport must not clear a selection
+ *    belonging to another). Aircraft selections have no owning airport, so they
+ *    persist across airport changes and clear only via the poll/altitude guards.
  */
 export function useSelectionGuards() {
   const selected = useSelectionStore((s) => s.selected)
@@ -27,8 +30,9 @@ export function useSelectionGuards() {
 
   const userToggles = useProcedureStore((s) => s.userToggles)
   const autoVisible = useProcedureStore((s) => s.autoVisible)
+  const procedures = useProcedureStore((s) => s.procedures)
 
-  const airportIcao = useAirportStore((s) => s.selectedAirport?.icao)
+  const activeAirports = useAirportStore((s) => s.activeAirports)
 
   // Aircraft: gone from the poll, or outside the altitude filter window.
   useEffect(() => {
@@ -50,8 +54,16 @@ export function useSelectionGuards() {
     if (!computeVisibility(userToggles, autoVisible, selected.procedureId)) clear()
   }, [selected, userToggles, autoVisible, clear])
 
-  // Airport switch always clears whatever was selected at the old airport.
+  // Approach: clear when its owning airport leaves the active set (the
+  // procedure vanishes from the store), not on every airport change.
   useEffect(() => {
-    clear()
-  }, [airportIcao, clear])
+    if (selected?.kind !== 'approach') return
+    const proc = procedures.find((p) => p.id === selected.procedureId)
+    if (!proc) {
+      clear()
+      return
+    }
+    const ownerActive = activeAirports.some((a) => airportKey(a) === proc.icao.toUpperCase())
+    if (!ownerActive) clear()
+  }, [selected, procedures, activeAirports, clear])
 }

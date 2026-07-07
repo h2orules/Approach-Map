@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useAirportSearch } from '../../hooks/useAirportSearch'
 import { useAirportStore } from '../../store/useAirportStore'
 import { useMapStore } from '../../store/useMapStore'
+import { decideFlyTarget } from '../../utils/decideFlyTarget'
 import type { Airport } from '../../types/airport'
 import styles from './AirportSearch.module.css'
 
@@ -22,8 +23,14 @@ export function AirportSearch() {
 
   const selectAirport = useCallback(
     (airport: Airport) => {
+      // Single-select (Phase 4): replace the active set. Since the airport
+      // becomes the sole/primary anchor, decideFlyTarget is fed an empty
+      // "retained" list and always returns a fly target — preserving the
+      // current always-recenter UX. Phase 5 switches this to addAirport +
+      // decideFlyTarget(previousActiveList) so 2nd+ airports don't move the camera.
+      const target = decideFlyTarget([], airport)
       setSelectedAirport(airport)
-      setViewport({ longitude: airport.lon, latitude: airport.lat, zoom: 11 })
+      if (target) setViewport({ longitude: target.lon, latitude: target.lat, zoom: target.zoom })
       setQuery('')
       setOpen(false)
       setActiveIndex(-1)

@@ -51,9 +51,19 @@ describe('useProcedures', () => {
   beforeEach(() => {
     ensureAirportMock.mockReset()
     getProceduresForAirportMock.mockReset()
-    useAirportStore.setState({ selectedAirport: null })
-    useProcedureStore.getState().setProcedures([])
-    useProcedureStore.setState({ loading: false, error: null })
+    useAirportStore.getState().setSelectedAirport(null)
+    useProcedureStore.setState({
+      procedures: [],
+      loading: false,
+      error: null,
+      userToggles: {},
+      autoVisible: {},
+      autoShownIds: new Set(),
+      lastDetectedAt: {},
+      detectedHexes: {},
+      aircraftAssignments: {},
+      detectionHistory: {},
+    })
     useCifpStore.setState({
       status: 'ready',
       data: {},
@@ -101,6 +111,44 @@ describe('useProcedures', () => {
     await waitFor(() => expect(useProcedureStore.getState().loading).toBe(false))
     expect(useProcedureStore.getState().error).toBe('No procedures found in CIFP data for this airport')
     expect(useProcedureStore.getState().procedures).toEqual([])
+  })
+
+  it('adding a second airport does not re-warm or re-merge an already-loaded airport (preserves its detection state)', async () => {
+    getProceduresForAirportMock.mockImplementation((icao: string) =>
+      icao === 'KSEA' ? [proc('KSEA', 'I16C')] : [proc('KPAE', 'I16')],
+    )
+    ensureAirportMock.mockResolvedValue(true)
+
+    renderHook(() => useProcedures())
+    act(() => {
+      useAirportStore.getState().addAirport(airport('KSEA'))
+    })
+    await waitFor(() => expect(useProcedureStore.getState().procedures.map((p) => p.id)).toEqual(['KSEA-I16C']))
+
+    // Simulate live detection state accumulated for KSEA's approach.
+    act(() => {
+      useProcedureStore.setState({
+        userToggles: { 'KSEA-I16C': true },
+        detectedHexes: { 'KSEA-I16C': ['abc123'] },
+        aircraftAssignments: { abc123: 'KSEA-I16C' },
+      })
+    })
+    ensureAirportMock.mockClear()
+    getProceduresForAirportMock.mockClear()
+
+    // Add a second airport -- must not touch KSEA's already-merged state.
+    act(() => {
+      useAirportStore.getState().addAirport(airport('KPAE'))
+    })
+    await waitFor(() =>
+      expect(useProcedureStore.getState().procedures.map((p) => p.id).sort()).toEqual(['KPAE-I16', 'KSEA-I16C']),
+    )
+
+    expect(ensureAirportMock).not.toHaveBeenCalledWith('KSEA')
+    expect(getProceduresForAirportMock).not.toHaveBeenCalledWith('KSEA')
+    expect(useProcedureStore.getState().userToggles).toEqual({ 'KSEA-I16C': true })
+    expect(useProcedureStore.getState().detectedHexes).toEqual({ 'KSEA-I16C': ['abc123'] })
+    expect(useProcedureStore.getState().aircraftAssignments).toEqual({ abc123: 'KSEA-I16C' })
   })
 
   it('does not let a stale ensureAirport resolution clobber a rapid second airport switch', async () => {

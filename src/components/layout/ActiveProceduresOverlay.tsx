@@ -1,11 +1,13 @@
 import { useRef, useState, useCallback } from 'react'
+import clsx from 'clsx'
 import { useProcedureStore } from '../../store/useProcedureStore'
-import { useAirportStore } from '../../store/useAirportStore'
+import { useAirportStore, airportKey } from '../../store/useAirportStore'
 import { useAircraftStore } from '../../store/useAircraftStore'
 import { useSelectionStore } from '../../store/useSelectionStore'
 import { useMapStore } from '../../store/useMapStore'
-import { arrivalSummary } from '../../api/datis'
+import { arrivalSummary, type AtisInfo } from '../../api/datis'
 import { AUTO_HIDE_DELAY_MS } from '../../config/constants'
+import type { Procedure } from '../../types/procedure'
 import styles from './ActiveProceduresOverlay.module.css'
 
 function useHoverDelay(delayMs = 150) {
@@ -60,6 +62,37 @@ function ProcTooltip({ hexes, lastSeenMs, onSelect, onMouseEnter, onMouseLeave }
   )
 }
 
+/** Per-airport sub-header (multi-airport mode): ident + ATIS letter badge with
+ *  hover-to-reveal raw text. */
+function GroupHeader({ label, atis }: { label: string; atis: AtisInfo | null | undefined }) {
+  const hover = useHoverDelay()
+  const hasAtis = atis && atis.code !== '?'
+  return (
+    <div className={styles.groupHeader}>
+      <span className={styles.groupIdent}>{label}</span>
+      {hasAtis && (
+        <span
+          className={styles.atisBadge}
+          onMouseEnter={hover.show}
+          onMouseLeave={hover.hide}
+          style={{ position: 'relative' }}
+        >
+          ATIS {atis!.code}
+          {hover.open && (
+            <div
+              className={styles.atisFullText}
+              onMouseEnter={hover.show}
+              onMouseLeave={hover.hide}
+            >
+              {atis!.raw}
+            </div>
+          )}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function ActiveProceduresOverlay() {
   const procedures = useProcedureStore((s) => s.procedures)
   const autoShownIds = useProcedureStore((s) => s.autoShownIds)
@@ -67,6 +100,8 @@ export function ActiveProceduresOverlay() {
   const detectedHexes = useProcedureStore((s) => s.detectedHexes)
   const lastDetectedAt = useProcedureStore((s) => s.lastDetectedAt)
   const atisInfo = useAirportStore((s) => s.atisInfo)
+  const activeAirports = useAirportStore((s) => s.activeAirports)
+  const atisByIcao = useAirportStore((s) => s.atisByIcao)
 
   const selected = useSelectionStore((s) => s.selected)
   const selectAircraftSel = useSelectionStore((s) => s.select)
@@ -100,6 +135,66 @@ export function ActiveProceduresOverlay() {
 
   if (active.length === 0) return null
 
+  const renderRow = (p: Procedure) => {
+    const hexes = detectedHexes[p.id] ?? []
+    const isAutoShown = autoShownIds.has(p.id)
+    const isHovered = hoveredProcId === p.id
+    const isApproach = p.type === 'APPROACH'
+    const isSelected = selected?.kind === 'approach' && selected.procedureId === p.id
+    return (
+      <div
+        key={p.id}
+        className={styles.item}
+        onMouseEnter={() => isAutoShown && showProcTooltip(p.id)}
+        onMouseLeave={hideProcTooltip}
+      >
+        <span className={styles.dot} style={{ background: p.color }} />
+        <span
+          className={`${styles.name} ${isApproach ? styles.nameSelectable : ''} ${isSelected ? styles.nameSelected : ''}`}
+          onClick={isApproach ? () => toggleSelection({ kind: 'approach', procedureId: p.id }) : undefined}
+        >
+          {p.name}
+        </span>
+        <span className={styles.badge}>{p.type}</span>
+        {isHovered && isAutoShown && (
+          <ProcTooltip
+            hexes={hexes}
+            lastSeenMs={lastDetectedAt[p.id]}
+            onSelect={selectAircraft}
+            onMouseEnter={keepProcTooltip}
+            onMouseLeave={hideProcTooltip}
+          />
+        )}
+      </div>
+    )
+  }
+
+  const multi = activeAirports.length >= 2
+
+  // ── Multi-airport mode: group rows by airport with a per-airport sub-header ──
+  if (multi) {
+    return (
+      <div
+        className={clsx(styles.overlay, activeAirports.length >= 3 && styles.scroll)}
+        data-map-overlay=""
+      >
+        <div className={styles.title}>IN USE</div>
+        {activeAirports.map((a) => {
+          const key = airportKey(a)
+          const group = active.filter((p) => p.icao.toUpperCase() === key)
+          if (group.length === 0) return null
+          return (
+            <div key={key} className={styles.group}>
+              <GroupHeader label={key} atis={atisByIcao[key]} />
+              {group.map(renderRow)}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // ── Single-airport mode: exactly as before (primary ATIS + full summary) ──
   const hasAtis = atisInfo && atisInfo.code !== '?'
   const arrSummary = hasAtis ? arrivalSummary(atisInfo) : ''
   const depSummary = hasAtis && atisInfo.depRunways.length > 0
@@ -162,39 +257,7 @@ export function ActiveProceduresOverlay() {
       )}
 
       {/* ── Procedure list ─────────────────────────────────────────── */}
-      {active.map((p) => {
-        const hexes = detectedHexes[p.id] ?? []
-        const isAutoShown = autoShownIds.has(p.id)
-        const isHovered = hoveredProcId === p.id
-        const isApproach = p.type === 'APPROACH'
-        const isSelected = selected?.kind === 'approach' && selected.procedureId === p.id
-        return (
-          <div
-            key={p.id}
-            className={styles.item}
-            onMouseEnter={() => isAutoShown && showProcTooltip(p.id)}
-            onMouseLeave={hideProcTooltip}
-          >
-            <span className={styles.dot} style={{ background: p.color }} />
-            <span
-              className={`${styles.name} ${isApproach ? styles.nameSelectable : ''} ${isSelected ? styles.nameSelected : ''}`}
-              onClick={isApproach ? () => toggleSelection({ kind: 'approach', procedureId: p.id }) : undefined}
-            >
-              {p.name}
-            </span>
-            <span className={styles.badge}>{p.type}</span>
-            {isHovered && isAutoShown && (
-              <ProcTooltip
-                hexes={hexes}
-                lastSeenMs={lastDetectedAt[p.id]}
-                onSelect={selectAircraft}
-                onMouseEnter={keepProcTooltip}
-                onMouseLeave={hideProcTooltip}
-              />
-            )}
-          </div>
-        )
-      })}
+      {active.map(renderRow)}
 
     </div>
   )

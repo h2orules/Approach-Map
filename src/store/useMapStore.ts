@@ -23,12 +23,19 @@ interface MapStore {
    * keyed on this counter performs it.
    */
   resizeToken: number
+  /**
+   * Airport key currently hovered in the sidebar (an AirportSection header),
+   * or null. Set on enter/leave only — no mousemove churn — so the map's
+   * AirportLabelsLayer can highlight the matching ident label.
+   */
+  hoveredAirportKey: string | null
 
   setViewport: (v: Partial<ViewState>) => void
   setTheme: (t: MapTheme) => void
   toggleSatellite: () => void
   getMapStyle: () => string
   requestResize: () => void
+  setHoveredAirportKey: (k: string | null) => void
 }
 
 export const useMapStore = create<MapStore>((set, get) => ({
@@ -37,6 +44,7 @@ export const useMapStore = create<MapStore>((set, get) => ({
   styleKey: 'dark',
   satelliteOn: false,
   resizeToken: 0,
+  hoveredAirportKey: null,
 
   setViewport: (v) => set((s) => ({ viewport: { ...s.viewport, ...v } })),
 
@@ -58,4 +66,6 @@ export const useMapStore = create<MapStore>((set, get) => ({
   },
 
   requestResize: () => set((s) => ({ resizeToken: s.resizeToken + 1 })),
+
+  setHoveredAirportKey: (k) => set({ hoveredAirportKey: k }),
 }))

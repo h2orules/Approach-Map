@@ -11,6 +11,38 @@
   z-index: 10;
 }
 
+/* At 3+ active airports the grouped list can grow tall — cap it and scroll. */
+.scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* ── Per-airport group (multi-airport mode) ───────────────────── */
+.group {
+  margin-bottom: 8px;
+}
+
+.group:last-child {
+  margin-bottom: 0;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--overlay-border);
+}
+
+.groupIdent {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
 /* ── Header ───────────────────────────────────────────────────── */
 .title {
   display: flex;

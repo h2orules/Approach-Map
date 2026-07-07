@@ -11,6 +11,7 @@ import { ProcedureLayer } from './ProcedureLayer'
 import { FlownSegmentLayer } from './FlownSegmentLayer'
 import { AutoActiveSegmentsLayer } from './AutoActiveSegmentsLayer'
 import { RunwayLayer } from './RunwayLayer'
+import { AirportLabelsLayer } from './AirportLabelsLayer'
 import { ExtendedCenterlineLayer } from './ExtendedCenterlineLayer'
 import { TerrainLayer } from './TerrainLayer'
 import { SafeAltitudeLayer } from './SafeAltitudeLayer'
@@ -158,6 +159,8 @@ export function AppMap() {
         <LocFeatherLayer />
 
         <RunwayLayer runways={runways} />
+
+        <AirportLabelsLayer />
 
         {showCenterlines && <ExtendedCenterlineLayer runways={runways} />}
 

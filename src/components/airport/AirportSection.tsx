@@ -19,6 +19,7 @@ export function AirportSection({ airport, procedures, collapsed, onToggle }: Pro
   const atis = useAirportStore((s) => s.atisByIcao[key])
   const removeAirport = useAirportStore((s) => s.removeAirport)
   const setViewport = useMapStore((s) => s.setViewport)
+  const setHoveredAirportKey = useMapStore((s) => s.setHoveredAirportKey)
 
   const flyTo = useCallback(() => {
     setViewport({ longitude: airport.lon, latitude: airport.lat, zoom: DEFAULT_FLY_ZOOM })
@@ -39,7 +40,11 @@ export function AirportSection({ airport, procedures, collapsed, onToggle }: Pro
 
   return (
     <div className={styles.section}>
-      <div className={styles.header}>
+      <div
+        className={styles.header}
+        onMouseEnter={() => setHoveredAirportKey(key)}
+        onMouseLeave={() => setHoveredAirportKey(null)}
+      >
         <button
           className={styles.chevronBtn}
           onClick={onToggle}

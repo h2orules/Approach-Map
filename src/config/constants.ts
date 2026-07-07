@@ -1,4 +1,7 @@
 export const ADSBX_SEARCH_RADIUS_NM = 50
+// ADS-B Exchange rejects radius queries beyond 250 nm, so a poll cluster's
+// covering circle (member spread + per-airport radius) is clamped to this.
+export const POLL_CLUSTER_MAX_RADIUS_NM = 250
 
 // ── Multi-airport limits (Phase 4+) ─────────────────────────────────────────
 // Several airports can be active at once (their procedures/runways coexist on
@@ -57,6 +60,13 @@ export const DETECT_CONFIRM_MIN_PROGRESS_NM = 1.5
 export const DETECT_CANDIDATE_TTL_MS = 15_000
 export const DETECT_CONFIRMED_TTL_MS = 30_000
 export const DETECT_REASSIGN_CLOSER_STREAK = 3
+// Extra padding (nm) added around a procedure's waypoint bounding box before it
+// gates whether an aircraft can start a NEW detection track. Combined with
+// NEAR_AIRPORT_DISTANCE_NM (5) this yields a 6 nm pad — comfortably wider than
+// the widest cross-track gate (DETECT_CONFIRMED_XT_SIDSTAR_NM = 1.5) so the
+// prefilter never drops an aircraft that could actually match. See
+// src/geo/procedureBbox.ts.
+export const DETECT_BBOX_PAD_NM = 1
 // US VFR squawk. Aircraft squawking this are never on an IFR clearance, so the
 // detection machine ignores them entirely (a 1200 squawker shooting a practice
 // approach isn't "using" the procedure). VFR flight-following traffic carries a

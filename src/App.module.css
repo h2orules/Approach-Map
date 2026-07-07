@@ -20,8 +20,6 @@
   overflow: hidden;
 }
 
-@media (max-width: 640px) {
-  .body {
-    flex-direction: column-reverse;
-  }
-}
+/* Below 640px the Sidebar becomes a `position: fixed` bottom sheet (see
+   Sidebar.module.css) — it exits the flex flow entirely, so `.mapArea`
+   always fills the full body and the map canvas never resizes on phones. */

@@ -48,6 +48,7 @@ function approachRenderOrder(p: Procedure): number {
 export function AppMap() {
   const mapRef = useRef<MapRef | null>(null)
   const { viewport, setViewport, getMapStyle } = useMapStore()
+  const resizeToken = useMapStore((s) => s.resizeToken)
   const procedures = useProcedureStore((s) => s.procedures)
   const userToggles = useProcedureStore((s) => s.userToggles)
   const autoVisible = useProcedureStore((s) => s.autoVisible)
@@ -76,6 +77,13 @@ export function AppMap() {
     // Run once on mount; subsequent selections set the viewport via AirportSearch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The sidebar requests a resize (via useMapStore.requestResize) on its
+  // collapse/expand transitionend plus a safety timeout — mapbox-gl doesn't
+  // pick up a reflowed container size on its own.
+  useEffect(() => {
+    mapRef.current?.getMap()?.resize()
+  }, [resizeToken])
 
   const handleMove = useCallback(
     (evt: { viewState: { longitude: number; latitude: number; zoom: number } }) => {

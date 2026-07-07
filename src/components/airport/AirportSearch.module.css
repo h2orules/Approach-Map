@@ -85,3 +85,13 @@
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+.hint {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  font-size: 11px;
+  color: var(--accent);
+  padding: 2px 2px 0;
+}

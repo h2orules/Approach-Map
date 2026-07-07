@@ -7,7 +7,7 @@ export interface FlyTarget {
   zoom: number
 }
 
-const DEFAULT_FLY_ZOOM = 11
+export const DEFAULT_FLY_ZOOM = 11
 
 /**
  * Decide whether selecting/adding `added` should move the camera.

@@ -2,7 +2,8 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useAirportSearch } from '../../hooks/useAirportSearch'
 import { useAirportStore } from '../../store/useAirportStore'
 import { useMapStore } from '../../store/useMapStore'
-import { decideFlyTarget } from '../../utils/decideFlyTarget'
+import { decideFlyTarget, DEFAULT_FLY_ZOOM } from '../../utils/decideFlyTarget'
+import { MAX_ACTIVE_AIRPORTS } from '../../config/constants'
 import type { Airport } from '../../types/airport'
 import styles from './AirportSearch.module.css'
 
@@ -10,9 +11,9 @@ export function AirportSearch() {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
+  const [capHint, setCapHint] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const { results, counts } = useAirportSearch(query)
-  const setSelectedAirport = useAirportStore((s) => s.setSelectedAirport)
   const selectedAirport = useAirportStore((s) => s.selectedAirport)
   const { setViewport } = useMapStore()
 
@@ -23,20 +24,31 @@ export function AirportSearch() {
 
   const selectAirport = useCallback(
     (airport: Airport) => {
-      // Single-select (Phase 4): replace the active set. Since the airport
-      // becomes the sole/primary anchor, decideFlyTarget is fed an empty
-      // "retained" list and always returns a fly target — preserving the
-      // current always-recenter UX. Phase 5 switches this to addAirport +
-      // decideFlyTarget(previousActiveList) so 2nd+ airports don't move the camera.
-      const target = decideFlyTarget([], airport)
-      setSelectedAirport(airport)
-      if (target) setViewport({ longitude: target.lon, latitude: target.lat, zoom: target.zoom })
+      // Multi-airport add flow (Phase 5): grab the pre-add list before
+      // mutating so decideFlyTarget can tell a first/primary add (moves the
+      // camera) from a 2nd+ add (camera stays put on the existing primary).
+      const previousActive = useAirportStore.getState().activeAirports
+      const result = useAirportStore.getState().addAirport(airport)
+
+      if (result === 'capped') {
+        setCapHint(true)
+      } else {
+        setCapHint(false)
+        if (result === 'exists') {
+          // Already active — just recenter on it.
+          setViewport({ longitude: airport.lon, latitude: airport.lat, zoom: DEFAULT_FLY_ZOOM })
+        } else {
+          const target = decideFlyTarget(previousActive, airport)
+          if (target) setViewport({ longitude: target.lon, latitude: target.lat, zoom: target.zoom })
+        }
+      }
+
       setQuery('')
       setOpen(false)
       setActiveIndex(-1)
       inputRef.current?.blur()
     },
-    [setSelectedAirport, setViewport],
+    [setViewport],
   )
 
   const exactMatch = useCallback(
@@ -89,6 +101,7 @@ export function AirportSearch() {
         onChange={(e) => {
           setQuery(e.target.value)
           setOpen(true)
+          setCapHint(false)
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -123,6 +136,11 @@ export function AirportSearch() {
             )
           })}
         </ul>
+      )}
+      {capHint && (
+        <div className={styles.hint}>
+          Airport limit reached ({MAX_ACTIVE_AIRPORTS}) — remove one first
+        </div>
       )}
     </div>
   )

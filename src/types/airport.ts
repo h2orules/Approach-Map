@@ -1,4 +1,11 @@
 export interface Airport {
+  /**
+   * Search/data key — the identifier the per-airport data shard and index row
+   * are keyed by. Equals `icao` for ICAO airports; for non-ICAO US fields it is
+   * the FAA location identifier (LID, e.g. "A09"). Optional for backwards
+   * compatibility with the curated airports.json (which omits it today).
+   */
+  key?: string
   icao: string
   iata: string
   name: string

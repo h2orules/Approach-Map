@@ -2,6 +2,10 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { fetchCsv } from './lib/csv'
+import { deriveRunwaysByAirport } from './lib/runways'
+import type { Runway } from '../src/types/airport'
+
 /**
  * Rebuilds public/data/runways.json (and refreshes airport coordinates in
  * airports.json) from the OurAirports open dataset.
@@ -10,6 +14,9 @@ import { join } from 'node:path'
  * plain CSV files served over HTTPS with no ZIP extraction, no auth, and no
  * 56-day URL juggling — and it carries accurate runway THRESHOLD coordinates
  * plus TRUE headings, which is exactly what the map geometry needs.
+ *
+ * CSV parsing and runway derivation are shared with buildAirportIndex.ts via
+ * scripts/lib/ so both pipelines stay in lock-step.
  *
  * Run: npx tsx scripts/buildStaticData.ts
  */
@@ -30,81 +37,6 @@ interface Airport {
   elevation: number
   city: string
   state: string
-}
-
-interface RunwayEnd {
-  id: string
-  heading: number
-  lat: number
-  lon: number
-  displacedThresholdFt: number
-}
-
-interface Runway {
-  id: string
-  lengthFt: number
-  widthFt: number
-  surfaceCode: string
-  lowEnd: RunwayEnd
-  highEnd: RunwayEnd
-}
-
-/** Minimal RFC-4180 CSV parser (handles quoted fields with embedded commas). */
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let row: string[] = []
-  let field = ''
-  let inQuotes = false
-
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    if (inQuotes) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          field += '"'
-          i++
-        } else {
-          inQuotes = false
-        }
-      } else {
-        field += c
-      }
-    } else if (c === '"') {
-      inQuotes = true
-    } else if (c === ',') {
-      row.push(field)
-      field = ''
-    } else if (c === '\n' || c === '\r') {
-      if (c === '\r' && text[i + 1] === '\n') i++
-      row.push(field)
-      field = ''
-      if (row.length > 1 || row[0] !== '') rows.push(row)
-      row = []
-    } else {
-      field += c
-    }
-  }
-  if (field !== '' || row.length > 0) {
-    row.push(field)
-    rows.push(row)
-  }
-  return rows
-}
-
-function toRecords(rows: string[][]): Record<string, string>[] {
-  const header = rows[0]
-  return rows.slice(1).map((r) => {
-    const obj: Record<string, string> = {}
-    header.forEach((h, i) => (obj[h] = r[i] ?? ''))
-    return obj
-  })
-}
-
-async function fetchCsv(url: string): Promise<Record<string, string>[]> {
-  console.log(`Fetching ${url}`)
-  const resp = await fetch(url)
-  if (!resp.ok) throw new Error(`Failed to fetch ${url}: ${resp.status} ${resp.statusText}`)
-  return toRecords(parseCsv(await resp.text()))
 }
 
 async function main() {
@@ -142,49 +74,9 @@ async function main() {
     refreshed++
   }
 
-  // Build runways keyed by ICAO.
-  const runwaysByIcao: Record<string, Runway[]> = {}
-  let runwayCount = 0
-
-  for (const rw of oaRunways) {
-    const icao = rw.airport_ident
-    if (!wantedIcaos.has(icao)) continue
-    if (rw.closed === '1') continue
-
-    const leLat = parseFloat(rw.le_latitude_deg)
-    const leLon = parseFloat(rw.le_longitude_deg)
-    const heLat = parseFloat(rw.he_latitude_deg)
-    const heLon = parseFloat(rw.he_longitude_deg)
-    if (isNaN(leLat) || isNaN(leLon) || isNaN(heLat) || isNaN(heLon)) continue
-
-    const lengthFt = parseInt(rw.length_ft) || 0
-    const widthFt = parseInt(rw.width_ft) || 150
-
-    const runway: Runway = {
-      id: `${rw.le_ident}/${rw.he_ident}`,
-      lengthFt,
-      widthFt,
-      surfaceCode: (rw.surface || '').toUpperCase().slice(0, 3),
-      lowEnd: {
-        id: rw.le_ident,
-        heading: parseFloat(rw.le_heading_degT) || 0,
-        lat: leLat,
-        lon: leLon,
-        displacedThresholdFt: parseFloat(rw.le_displaced_threshold_ft) || 0,
-      },
-      highEnd: {
-        id: rw.he_ident,
-        heading: parseFloat(rw.he_heading_degT) || 0,
-        lat: heLat,
-        lon: heLon,
-        displacedThresholdFt: parseFloat(rw.he_displaced_threshold_ft) || 0,
-      },
-    }
-
-    if (!runwaysByIcao[icao]) runwaysByIcao[icao] = []
-    runwaysByIcao[icao].push(runway)
-    runwayCount++
-  }
+  // Build runways keyed by ICAO (shared derivation with buildAirportIndex.ts).
+  const runwaysByIcao: Record<string, Runway[]> = deriveRunwaysByAirport(oaRunways, wantedIcaos)
+  const runwayCount = Object.values(runwaysByIcao).reduce((n, rws) => n + rws.length, 0)
 
   writeFileSync(AIRPORTS_FILE, JSON.stringify(airports, null, 2) + '\n')
   writeFileSync(RUNWAYS_FILE, JSON.stringify(runwaysByIcao, null, 2) + '\n')

@@ -2,10 +2,12 @@ import { describe, it, expect } from 'vitest'
 import {
   initialDetectionState,
   reduceDetection,
+  pruneDetectionState,
   deriveProcedureActivity,
   DEFAULT_DETECTION_CONFIG,
   type DetectionState,
   type ProcedureActivity,
+  type ProcTrack,
 } from '../detectionMachine'
 import type { AirportContext } from '../procedureMatch'
 import type { Procedure, WaypointSymbol } from '../../types/procedure'
@@ -129,8 +131,8 @@ function runPolls(procedures: Procedure[], polls: Poll[], baseAtis: AtisInfo | n
       state,
       { nowMs: poll.t, aircraft: poll.aircraft },
       procedures,
-      CTX,
-      atisInfo,
+      { KSEA: CTX },
+      { KSEA: atisInfo },
       CONFIG,
     )
     state = r.state
@@ -365,5 +367,196 @@ describe('detectionMachine', () => {
     expect(steps[2].state.sidStarAssignments.a.SID).toBe('S1')
     expect(state.sidStarAssignments.a.SID).toBe('S2')
     expect(Object.keys(steps[5].activity)).toEqual(['S2'])
+  })
+})
+
+// ── Phase 6: multiple airports at once ──────────────────────────────────────
+// Each procedure is matched against its OWN airport's context (looked up by
+// proc.icao) and its OWN airport's ATIS. A bbox prefilter skips new-track work
+// for out-of-box aircraft without ever changing a result.
+
+interface MultiPoll {
+  t: number
+  aircraft: InterpolatedAircraft[]
+}
+
+function runMulti(
+  procedures: Procedure[],
+  ctxByKey: Record<string, AirportContext>,
+  atisByIcao: Record<string, AtisInfo | null>,
+  polls: MultiPoll[],
+) {
+  let state = initialDetectionState()
+  const steps: Step[] = polls.map((poll) => {
+    const r = reduceDetection(
+      state,
+      { nowMs: poll.t, aircraft: poll.aircraft },
+      procedures,
+      ctxByKey,
+      atisByIcao,
+      CONFIG,
+    )
+    state = r.state
+    return { state, events: r.events, activity: deriveProcedureActivity(state) }
+  })
+  return { state, steps }
+}
+
+describe('detectionMachine — multi-airport (Phase 6)', () => {
+  it('(16) altitude gating uses each procedure’s OWN airport elevation', () => {
+    // Two approaches on the identical line, differing only by which airport
+    // (icao) they belong to. A plane at 15000 ft baro on that line is only
+    // altitude-plausible relative to a high-elevation field:
+    //   KAAA elev 0    → agl 15000 (> 10000 ceiling) → altOk false → no track
+    //   KBBB elev 8000 → agl  7000 (plausible)        → altOk true  → confirms
+    // If the reducer used a single/first ctx for both, they'd behave identically;
+    // the divergence proves the ctxByKey[proc.icao] lookup.
+    const procGated: Procedure = { ...approach('I16C', LON_16C), id: 'GATED', icao: 'KAAA' }
+    const procOk: Procedure = { ...approach('I16C', LON_16C), id: 'OK', icao: 'KBBB' }
+    const ctxByKey: Record<string, AirportContext> = {
+      KAAA: { lat: 47.45, lon: LON_16C, elevationFt: 0 },
+      KBBB: { lat: 47.45, lon: LON_16C, elevationFt: 8000 },
+    }
+    const highPlane: InterpolatedAircraft = {
+      ...plane('a', 47.45, LON_16C),
+      altBaro: 15000,
+      altGeom: 15000,
+    }
+    const { state } = runMulti(
+      [procGated, procOk],
+      ctxByKey,
+      { KAAA: null, KBBB: null },
+      CONFIRM_TS.map((t) => ({ t, aircraft: [highPlane] })),
+    )
+    expect(state.tracks.a.OK.phase).toBe('confirmed')
+    expect(state.tracks.a.GATED).toBeUndefined()
+    expect(state.assignments).toEqual({ a: 'OK' })
+  })
+
+  it('(17) each airport’s ATIS selects the in-use type for that airport independently', () => {
+    // KAAA ATIS favors ILS on 16C; KBBB ATIS favors RNAV on 16C. Each airport
+    // has both an ILS and an RNAV on its runway; a plane over each field confirms
+    // both of its approaches, and the per-airport ATIS decides the assignment —
+    // opposite winners at the two fields prove atisByIcao[proc.icao] keying.
+    const LON_A = LON_16C // -122.31
+    const LON_B = -122.1 // ~8.5 nm east; far outside A's boxes and vice versa
+    const procAI: Procedure = { ...approach('I16C', LON_A), id: 'AI', icao: 'KAAA' }
+    const procAR: Procedure = { ...approach('R16C', LON_A), id: 'AR', icao: 'KAAA' }
+    const procBI: Procedure = { ...approach('I16C', LON_B), id: 'BI', icao: 'KBBB' }
+    const procBR: Procedure = { ...approach('R16C', LON_B), id: 'BR', icao: 'KBBB' }
+    const ctxByKey: Record<string, AirportContext> = {
+      KAAA: { lat: 47.45, lon: LON_A, elevationFt: 0 },
+      KBBB: { lat: 47.45, lon: LON_B, elevationFt: 0 },
+    }
+    const atisByIcao = { KAAA: atis({ '16C': ['I'] }), KBBB: atis({ '16C': ['R'] }) }
+    const { state } = runMulti(
+      [procAI, procAR, procBI, procBR],
+      ctxByKey,
+      atisByIcao,
+      CONFIRM_TS.map((t) => ({
+        t,
+        aircraft: [plane('a', 47.45, LON_A), plane('b', 47.45, LON_B)],
+      })),
+    )
+    // Airport A prefers ILS → a assigned AI; airport B prefers RNAV → b assigned BR.
+    expect(state.assignments).toEqual({ a: 'AI', b: 'BR' })
+  })
+
+  it('(18) removing an airport prunes only its tracks (pruneDetectionState)', () => {
+    const mk = (procId: string): ProcTrack => ({
+      procId,
+      phase: 'confirmed',
+      firstMatchMs: 0,
+      lastMatchMs: 10000,
+      matchCount: 3,
+      lastCrossTrackNm: 0.1,
+      firstAlongTrackNm: 0,
+      lastAlongTrackNm: 2,
+      preMapSeen: true,
+      closerStreak: 0,
+    })
+    const keepTrack = mk('KAAA-APPROACH-I16C')
+    const state: DetectionState = {
+      tracks: {
+        a: { 'KAAA-APPROACH-I16C': keepTrack, 'KBBB-APPROACH-I16C': mk('KBBB-APPROACH-I16C') },
+        b: { 'KBBB-SID-EXIT1': mk('KBBB-SID-EXIT1') },
+      },
+      assignments: { a: 'KAAA-APPROACH-I16C', c: 'KBBB-APPROACH-I16C' },
+      sidStarAssignments: {
+        a: { SID: 'KAAA-SID-DEP1', STAR: 'KBBB-STAR-ARR1' },
+        b: { SID: 'KBBB-SID-EXIT1' },
+      },
+    }
+    // KBBB removed → keep only KAAA's procedure ids.
+    const keep = new Set(['KAAA-APPROACH-I16C', 'KAAA-SID-DEP1'])
+    const pruned = pruneDetectionState(state, keep)
+
+    // KAAA survives; KBBB is gone everywhere.
+    expect(pruned.tracks).toEqual({ a: { 'KAAA-APPROACH-I16C': keepTrack } })
+    expect(pruned.assignments).toEqual({ a: 'KAAA-APPROACH-I16C' })
+    expect(pruned.sidStarAssignments).toEqual({ a: { SID: 'KAAA-SID-DEP1' } })
+    // hex b had only KBBB tracks → dropped entirely (no empty {} left behind).
+    expect(pruned.tracks.b).toBeUndefined()
+    // Kept track objects are preserved by reference (no needless copy).
+    expect(pruned.tracks.a['KAAA-APPROACH-I16C']).toBe(keepTrack)
+  })
+
+  it('(18b) pruneDetectionState with all ids kept is a structural no-op', () => {
+    const t: ProcTrack = {
+      procId: 'KAAA-APPROACH-I16C',
+      phase: 'confirmed',
+      firstMatchMs: 0,
+      lastMatchMs: 10000,
+      matchCount: 3,
+      lastCrossTrackNm: 0.1,
+      firstAlongTrackNm: 0,
+      lastAlongTrackNm: 2,
+      preMapSeen: true,
+      closerStreak: 0,
+    }
+    const state: DetectionState = {
+      tracks: { a: { 'KAAA-APPROACH-I16C': t } },
+      assignments: { a: 'KAAA-APPROACH-I16C' },
+      sidStarAssignments: { a: { SID: 'KAAA-SID-DEP1' } },
+    }
+    const pruned = pruneDetectionState(state, new Set(['KAAA-APPROACH-I16C', 'KAAA-SID-DEP1']))
+    expect(pruned).toEqual(state)
+  })
+
+  it('(19) the bbox prefilter never changes results: an out-of-box aircraft is inert', () => {
+    // A plane ~55 nm east of the line is outside the padded box and off the line
+    // (no evidence). Adding it must produce a detection state deep-equal to the
+    // run without it — the prefilter only skips work.
+    const proc = approach('I16C', LON_16C)
+    const near = (t: number) => ({ t, aircraft: [plane('a', 47.45, LON_16C)] })
+    const nearAndFar = (t: number) => ({
+      t,
+      aircraft: [plane('a', 47.45, LON_16C), plane('far', 47.45, -121.0)],
+    })
+    const without = runMulti([proc], { KSEA: CTX }, { KSEA: null }, CONFIRM_TS.map(near))
+    const withFar = runMulti([proc], { KSEA: CTX }, { KSEA: null }, CONFIRM_TS.map(nearAndFar))
+    expect(withFar.state).toEqual(without.state)
+    expect(withFar.state.tracks.far).toBeUndefined()
+  })
+
+  it('(20) an existing confirmed track is aged by TTL, never dropped by the prefilter', () => {
+    // Confirm on the line, then move the SAME hex far outside the padded box and
+    // off the line (no evidence). Because the track already exists, the reducer
+    // must NOT apply the new-track box gate: the track survives on its TTL and is
+    // only lost after DETECT_CONFIRMED_TTL_MS of sustained failure.
+    const proc = approach('I16C', LON_16C)
+    const polls: MultiPoll[] = [
+      ...CONFIRM_TS.map((t) => ({ t, aircraft: [plane('a', 47.45, LON_16C)] })),
+      { t: 15000, aircraft: [plane('a', 47.45, -121.0)] }, // out of box, 5 s after last match
+      { t: 45000, aircraft: [plane('a', 47.45, -121.0)] }, // 35 s after last match → past TTL
+    ]
+    const { steps } = runMulti([proc], { KSEA: CTX }, { KSEA: null }, polls)
+    // Right after leaving the box: still confirmed and assigned (TTL not lapsed).
+    expect(steps[3].state.tracks.a.I16C.phase).toBe('confirmed')
+    expect(steps[3].state.assignments).toEqual({ a: 'I16C' })
+    // Past the confirmed TTL: dropped with a lost event.
+    expect(steps[4].state.tracks.a).toBeUndefined()
+    expect(steps[4].state.assignments).toEqual({})
+    expect(steps[4].events.some((e) => e.type === 'lost')).toBe(true)
   })
 })

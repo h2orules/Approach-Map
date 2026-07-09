@@ -1,26 +1,81 @@
-import type { ProcedureType } from '../types/procedure'
+import type { Procedure, ProcedureType } from '../types/procedure'
 
-const SID_COLORS = ['#22d3ee', '#06b6d4', '#0891b2', '#0e7490', '#155e75']
-// Indigo/blue-violet — deliberately kept away from the magenta active-segment color.
-const STAR_COLORS = ['#818cf8', '#6366f1', '#4f46e5', '#4338ca', '#3730a3']
-const APPROACH_COLORS = ['#34d399', '#10b981', '#059669', '#047857', '#065f46']
+/**
+ * 2D procedure-color scheme: airport → hue family (a trio of per-type shade
+ * ramps), procedure → a shade cycled within its type's ramp. Deterministic and
+ * pure (no module-level mutable state) so N airports can be colored
+ * independently and repeatably.
+ *
+ * Slot 0 reproduces the original single-airport palette EXACTLY (cyan SIDs /
+ * indigo STARs / emerald approaches), so the one-airport look is unchanged.
+ * Slots 1–4 are distinct trios for additional airports; each keeps its three
+ * procedure types in different hues so type stays readable within an airport,
+ * while the family shift keeps airports distinguishable from one another.
+ * All ramps avoid the reserved aircraft (#f59e0b), active-segment (#ff2bd6),
+ * highlight (#facc15), centerline (#6b7280) and runway (#64748b) colors.
+ */
+export const PROCEDURE_COLOR_FAMILIES: ReadonlyArray<Record<ProcedureType, readonly string[]>> = [
+  {
+    // slot 0 — cyan / indigo / emerald (original palette; do not change)
+    SID: ['#22d3ee', '#06b6d4', '#0891b2', '#0e7490', '#155e75'],
+    STAR: ['#818cf8', '#6366f1', '#4f46e5', '#4338ca', '#3730a3'],
+    APPROACH: ['#34d399', '#10b981', '#059669', '#047857', '#065f46'],
+  },
+  {
+    // slot 1 — orange / rose / lime
+    SID: ['#fdba74', '#fb923c', '#f97316', '#ea580c', '#c2410c'],
+    STAR: ['#fda4af', '#fb7185', '#f43f5e', '#e11d48', '#be123c'],
+    APPROACH: ['#bef264', '#a3e635', '#84cc16', '#65a30d', '#4d7c0f'],
+  },
+  {
+    // slot 2 — violet / fuchsia / teal
+    SID: ['#c4b5fd', '#a78bfa', '#8b5cf6', '#7c3aed', '#6d28d9'],
+    STAR: ['#f0abfc', '#e879f9', '#d946ef', '#c026d3', '#a21caf'],
+    APPROACH: ['#5eead4', '#2dd4bf', '#14b8a6', '#0d9488', '#0f766e'],
+  },
+  {
+    // slot 3 — sky / pink / green
+    SID: ['#7dd3fc', '#38bdf8', '#0ea5e9', '#0284c7', '#0369a1'],
+    STAR: ['#f9a8d4', '#f472b6', '#ec4899', '#db2777', '#be185d'],
+    APPROACH: ['#86efac', '#4ade80', '#22c55e', '#16a34a', '#15803d'],
+  },
+  {
+    // slot 4 — blue / red / yellow-green
+    SID: ['#93c5fd', '#60a5fa', '#3b82f6', '#2563eb', '#1d4ed8'],
+    STAR: ['#fca5a5', '#f87171', '#ef4444', '#dc2626', '#b91c1c'],
+    APPROACH: ['#d9f99d', '#bef264', '#a3e635', '#84cc16', '#65a30d'],
+  },
+]
 
-let sidIdx = 0
-let starIdx = 0
-let approachIdx = 0
-
-export function nextProcedureColor(type: ProcedureType): string {
-  switch (type) {
-    case 'SID': return SID_COLORS[sidIdx++ % SID_COLORS.length]
-    case 'STAR': return STAR_COLORS[starIdx++ % STAR_COLORS.length]
-    case 'APPROACH': return APPROACH_COLORS[approachIdx++ % APPROACH_COLORS.length]
-  }
+function hashKey(key: string): number {
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
+  return Math.abs(h)
 }
 
-export function resetColorCounters(): void {
-  sidIdx = 0
-  starIdx = 0
-  approachIdx = 0
+/**
+ * Assign colors to one airport's procedures. `airportSlot` selects the hue
+ * family (insertion order among active airports, wrapped); pass a negative slot
+ * to derive it deterministically from `key` instead. Pure — returns new
+ * Procedure objects with `color` set, cycling shades per procedure type in the
+ * order given.
+ */
+export function assignProcedureColors(
+  key: string,
+  procs: Procedure[],
+  airportSlot: number,
+): Procedure[] {
+  const familyIdx =
+    airportSlot >= 0
+      ? airportSlot % PROCEDURE_COLOR_FAMILIES.length
+      : hashKey(key) % PROCEDURE_COLOR_FAMILIES.length
+  const family = PROCEDURE_COLOR_FAMILIES[familyIdx]
+  const counters: Record<ProcedureType, number> = { SID: 0, STAR: 0, APPROACH: 0 }
+  return procs.map((p) => {
+    const ramp = family[p.type]
+    const color = ramp[counters[p.type]++ % ramp.length]
+    return { ...p, color }
+  })
 }
 
 export const AIRCRAFT_COLOR = '#f59e0b'

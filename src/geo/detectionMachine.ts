@@ -3,6 +3,7 @@ import type { Procedure } from '../types/procedure'
 import type { AtisInfo } from '../api/datis'
 import { evaluateMatch, type MatchTolerances, type AirportContext } from './procedureMatch'
 import { approachPriority, approachRunwayKey } from './approachPriority'
+import { getProcedureBbox, isInsideBbox } from './procedureBbox'
 import {
   DETECT_CANDIDATE_XT_APPROACH_NM,
   DETECT_CANDIDATE_XT_SIDSTAR_NM,
@@ -20,7 +21,13 @@ import {
   DETECT_CONFIRMED_TTL_MS,
   DETECT_REASSIGN_CLOSER_STREAK,
   VFR_SQUAWK,
+  NEAR_AIRPORT_DISTANCE_NM,
+  DETECT_BBOX_PAD_NM,
 } from '../config/constants'
+
+/** Padded box radius for the new-track prefilter — wide enough that any
+ *  aircraft that could produce cross-track evidence is inside the box. */
+const BBOX_PAD_NM = NEAR_AIRPORT_DISTANCE_NM + DETECT_BBOX_PAD_NM
 
 export interface ProcTrack {
   procId: string
@@ -108,6 +115,47 @@ export function initialDetectionState(): DetectionState {
 }
 
 /**
+ * Surgical prune (not a full reset) of detection state to a set of still-present
+ * procedure ids: keep every track/assignment whose procId is in `keepProcIds`,
+ * drop only those whose procedure is gone. Adding an airport introduces new ids
+ * (nothing is pruned, existing tracks survive); removing one drops exactly that
+ * airport's `${icao}-`-prefixed ids; an AIRAC refresh keeps ids stable so tracks
+ * persist across the cycle boundary. Kept `ProcTrack` objects are preserved by
+ * reference (no needless copy). Pure so the multi-airport add/remove behavior is
+ * unit-testable outside the hook.
+ */
+export function pruneDetectionState(
+  state: DetectionState,
+  keepProcIds: Set<string>,
+): DetectionState {
+  const tracks: DetectionState['tracks'] = {}
+  for (const [hex, byProc] of Object.entries(state.tracks)) {
+    const kept: Record<string, ProcTrack> = {}
+    for (const [procId, track] of Object.entries(byProc)) {
+      if (keepProcIds.has(procId)) kept[procId] = track
+    }
+    if (Object.keys(kept).length > 0) tracks[hex] = kept
+  }
+
+  const assignments: DetectionState['assignments'] = {}
+  for (const [hex, procId] of Object.entries(state.assignments)) {
+    if (keepProcIds.has(procId)) assignments[hex] = procId
+  }
+
+  const sidStarAssignments: DetectionState['sidStarAssignments'] = {}
+  for (const [hex, byType] of Object.entries(state.sidStarAssignments)) {
+    const kept: DetectionState['sidStarAssignments'][string] = {}
+    for (const type of ['SID', 'STAR'] as const) {
+      const procId = byType[type]
+      if (procId && keepProcIds.has(procId)) kept[type] = procId
+    }
+    if (Object.keys(kept).length > 0) sidStarAssignments[hex] = kept
+  }
+
+  return { tracks, assignments, sidStarAssignments }
+}
+
+/**
  * Pure per-poll reducer. Candidate tolerances gate new/candidate tracks;
  * confirmed tracks are re-evaluated with widened tolerances and don't require
  * altOk (level-offs / go-arounds don't shed the lock — only sustained lateral
@@ -117,8 +165,8 @@ export function reduceDetection(
   prev: DetectionState,
   snapshot: { nowMs: number; aircraft: InterpolatedAircraft[] },
   procedures: Procedure[],
-  ctx: AirportContext,
-  atisInfo: AtisInfo | null,
+  ctxByKey: Record<string, AirportContext>,
+  atisByIcao: Record<string, AtisInfo | null>,
   config: DetectionConfig,
 ): { state: DetectionState; events: DetectionEvent[] } {
   const { nowMs, aircraft } = snapshot
@@ -148,6 +196,19 @@ export function reduceDetection(
 
     for (const proc of procedures) {
       const existing = prevTracks[proc.id]
+      // Per-airport detection context, keyed by the procedure's own airport.
+      // A procedure whose airport was removed mid-poll has no context and can
+      // produce no evidence.
+      const ctx = ctxByKey[proc.icao.toUpperCase()]
+      if (!ctx) continue
+      // Bbox prefilter: an aircraft outside a procedure's padded box can't start
+      // a NEW track, so skip the line-matching math for it. Existing candidate/
+      // confirmed tracks are NEVER gated here — they must still age via TTL — so
+      // the prefilter only skips work and never changes a result.
+      if (!existing) {
+        const bbox = getProcedureBbox(proc, BBOX_PAD_NM)
+        if (bbox && !isInsideBbox(bbox, ac.interpLat, ac.interpLon)) continue
+      }
       const isConfirmed = existing?.phase === 'confirmed'
       const tol = isConfirmed ? config.confirmed : config.candidate
       const ev = isVfr ? null : evaluateMatch(ac, proc, ctx, tol)
@@ -221,7 +282,10 @@ export function reduceDetection(
     )
     if (confirmed.length === 0) continue
 
-    const prio = (procId: string) => approachPriority(procById.get(procId)!, atisInfo)
+    const prio = (procId: string) => {
+      const proc = procById.get(procId)!
+      return approachPriority(proc, atisByIcao[proc.icao.toUpperCase()] ?? null)
+    }
     const rwyKey = (procId: string) => approachRunwayKey(procById.get(procId)!)
 
     // Best by ATIS-informed priority, tie-break min cross-track.

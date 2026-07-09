@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "build-static-data": "tsx scripts/buildStaticData.ts"
+    "build-static-data": "tsx scripts/buildStaticData.ts",
+    "build-airport-index": "tsx scripts/buildAirportIndex.ts",
+    "validate-static-data": "tsx scripts/validateStaticData.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.51.1",

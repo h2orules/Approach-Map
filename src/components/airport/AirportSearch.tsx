@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useAirportSearch } from '../../hooks/useAirportSearch'
 import { useAirportStore } from '../../store/useAirportStore'
 import { useMapStore } from '../../store/useMapStore'
+import { decideFlyTarget, DEFAULT_FLY_ZOOM } from '../../utils/decideFlyTarget'
+import { MAX_ACTIVE_AIRPORTS } from '../../config/constants'
 import type { Airport } from '../../types/airport'
 import styles from './AirportSearch.module.css'
 
@@ -9,9 +11,9 @@ export function AirportSearch() {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
+  const [capHint, setCapHint] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const { results } = useAirportSearch(query)
-  const setSelectedAirport = useAirportStore((s) => s.setSelectedAirport)
+  const { results, counts } = useAirportSearch(query)
   const selectedAirport = useAirportStore((s) => s.selectedAirport)
   const { setViewport } = useMapStore()
 
@@ -22,14 +24,31 @@ export function AirportSearch() {
 
   const selectAirport = useCallback(
     (airport: Airport) => {
-      setSelectedAirport(airport)
-      setViewport({ longitude: airport.lon, latitude: airport.lat, zoom: 11 })
+      // Multi-airport add flow (Phase 5): grab the pre-add list before
+      // mutating so decideFlyTarget can tell a first/primary add (moves the
+      // camera) from a 2nd+ add (camera stays put on the existing primary).
+      const previousActive = useAirportStore.getState().activeAirports
+      const result = useAirportStore.getState().addAirport(airport)
+
+      if (result === 'capped') {
+        setCapHint(true)
+      } else {
+        setCapHint(false)
+        if (result === 'exists') {
+          // Already active — just recenter on it.
+          setViewport({ longitude: airport.lon, latitude: airport.lat, zoom: DEFAULT_FLY_ZOOM })
+        } else {
+          const target = decideFlyTarget(previousActive, airport)
+          if (target) setViewport({ longitude: target.lon, latitude: target.lat, zoom: target.zoom })
+        }
+      }
+
       setQuery('')
       setOpen(false)
       setActiveIndex(-1)
       inputRef.current?.blur()
     },
-    [setSelectedAirport, setViewport],
+    [setViewport],
   )
 
   const exactMatch = useCallback(
@@ -82,6 +101,7 @@ export function AirportSearch() {
         onChange={(e) => {
           setQuery(e.target.value)
           setOpen(true)
+          setCapHint(false)
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -94,22 +114,33 @@ export function AirportSearch() {
       />
       {open && results.length > 0 && (
         <ul className={styles.dropdown} id="airport-suggestions" role="listbox">
-          {results.map((airport, i) => (
-            <li
-              key={airport.icao}
-              id={`airport-opt-${i}`}
-              role="option"
-              aria-selected={i === activeIndex}
-              className={`${styles.option} ${i === activeIndex ? styles.optionActive : ''}`}
-              onMouseDown={() => selectAirport(airport)}
-              onMouseEnter={() => setActiveIndex(i)}
-            >
-              <span className={styles.icao}>{airport.icao}</span>
-              <span className={styles.name}>{airport.name}</span>
-              <span className={styles.city}>{airport.city}, {airport.state}</span>
-            </li>
-          ))}
+          {results.map((airport, i) => {
+            const airportCounts = counts.get(airport.key ?? airport.icao)
+            return (
+              <li
+                key={airport.icao}
+                id={`airport-opt-${i}`}
+                role="option"
+                aria-selected={i === activeIndex}
+                className={`${styles.option} ${i === activeIndex ? styles.optionActive : ''}`}
+                onMouseDown={() => selectAirport(airport)}
+                onMouseEnter={() => setActiveIndex(i)}
+              >
+                <span className={styles.icao}>{airport.icao}</span>
+                <span className={styles.name}>{airport.name}</span>
+                <span className={styles.city}>{airport.city}, {airport.state}</span>
+                {airportCounts && (
+                  <span className={styles.counts}>{airportCounts.a} APP</span>
+                )}
+              </li>
+            )
+          })}
         </ul>
+      )}
+      {capHint && (
+        <div className={styles.hint}>
+          Airport limit reached ({MAX_ACTIVE_AIRPORTS}) — remove one first
+        </div>
       )}
     </div>
   )

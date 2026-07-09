@@ -1,0 +1,1 @@
+{"key":"9G0","name":"Buffalo Airfield","city":"Buffalo","state":"NY","lat":42.862,"lon":-78.716599,"elev":670,"runways":[{"id":"06/24","lengthFt":2666,"widthFt":60,"surfaceCode":"ASP","lowEnd":{"id":"06","heading":48,"lat":42.85950089,"lon":-78.72029877,"displacedThresholdFt":0},"highEnd":{"id":"24","heading":228,"lat":42.86449814,"lon":-78.71289825,"displacedThresholdFt":0}}]}

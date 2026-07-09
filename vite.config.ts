@@ -1,7 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Dev-only proxies for the nine upstream APIs. In production these same
+// Dev-only proxies for the eight upstream APIs. In production these same
 // /api/* paths are served by the Azure Functions proxy in api/ — keep the
 // two route tables in sync (see api/src/functions/proxy.ts).
 export default defineConfig(({ mode }) => {
@@ -22,11 +22,6 @@ export default defineConfig(({ mode }) => {
             'X-RapidAPI-Key': env.ADSBX_API_KEY ?? '',
             'X-RapidAPI-Host': 'adsbexchange-com1.p.rapidapi.com',
           },
-        },
-        '/api/aviationapi': {
-          target: 'https://www.aviationapi.com',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/aviationapi/, '/api/v1'),
         },
         '/api/faa-cifp': {
           target: 'https://aeronav.faa.gov',

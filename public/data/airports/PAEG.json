@@ -1,0 +1,1 @@
+{"key":"PAEG","icao":"PAEG","name":"Eagle Airport","city":"Eagle","state":"AK","lat":64.778003,"lon":-141.150455,"elev":908,"runways":[{"id":"07/25","lengthFt":3600,"widthFt":75,"surfaceCode":"GRV","lowEnd":{"id":"07","heading":0,"lat":64.778297,"lon":-141.160995,"displacedThresholdFt":0},"highEnd":{"id":"25","heading":0,"lat":64.777901,"lon":-141.138,"displacedThresholdFt":0}}]}

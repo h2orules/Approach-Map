@@ -10,6 +10,14 @@
   --input-bg: #0f172a;
   --hover: rgba(255, 255, 255, 0.05);
   --accent: #38bdf8;
+  /* Same value as --accent, as r,g,b components — lets rgba(var(--accent-rgb), a)
+     build accent-tinted translucent borders/washes (ActiveProceduresOverlay)
+     that track the theme instead of hardcoding dark theme's cyan. */
+  --accent-rgb: 56, 189, 248;
+  /* Floating map overlays (ActiveProceduresOverlay, tooltips) — preserves the
+     exact look of today's hardcoded dark chrome. */
+  --overlay-bg: rgba(15, 23, 42, 0.88);
+  --overlay-border: rgba(100, 116, 139, 0.35);
 }
 
 [data-theme="light"] {
@@ -22,6 +30,11 @@
   --input-bg: #f1f5f9;
   --hover: rgba(0, 0, 0, 0.04);
   --accent: #0284c7;
+  --accent-rgb: 2, 132, 199;
+  --overlay-bg: rgba(255, 255, 255, 0.92);
+  /* Derived from --border's slate family at higher contrast/opacity so the
+     overlay's edge still reads against a near-white translucent surface. */
+  --overlay-border: rgba(100, 116, 139, 0.3);
 }
 
 *, *::before, *::after {

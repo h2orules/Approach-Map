@@ -34,6 +34,9 @@ dist-ssr/
 # TypeScript cache
 *.tsbuildinfo
 
+# Build-script download cache (CIFP zip + OurAirports CSVs)
+scripts/.cache/
+
 # Azureite storage simulator
 __blobstorage__/
 __queuestorage__/

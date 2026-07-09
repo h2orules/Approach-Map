@@ -1,12 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useAircraftStore } from '../store/useAircraftStore'
 import { useProcedureStore } from '../store/useProcedureStore'
-import { useAirportStore } from '../store/useAirportStore'
+import { useAirportStore, airportKey } from '../store/useAirportStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { positionToMinFt, positionToMaxFt } from '../utils/altitudeFilter'
+import type { AirportContext } from '../geo/procedureMatch'
 import {
   initialDetectionState,
   reduceDetection,
+  pruneDetectionState,
   deriveProcedureActivity,
   DEFAULT_DETECTION_CONFIG,
   type DetectionState,
@@ -19,10 +21,13 @@ import {
  * result into the procedure store. All matching/dedup/hysteresis policy lives
  * in the pure reducer (`src/geo/detectionMachine.ts`); this hook is only glue.
  */
+// Runs detection across every active airport. Each procedure is matched against
+// its OWN airport's context (position + elevation), looked up by proc.icao, so a
+// second airport's altitude gating never uses the wrong field's elevation.
 export function useProcedureDetection() {
   const lastPollMs = useAircraftStore((s) => s.lastPollMs)
-  const selectedAirport = useAirportStore((s) => s.selectedAirport)
-  const atisInfo = useAirportStore((s) => s.atisInfo)
+  const activeAirports = useAirportStore((s) => s.activeAirports)
+  const atisByIcao = useAirportStore((s) => s.atisByIcao)
   const procedures = useProcedureStore((s) => s.procedures)
   const applyDetection = useProcedureStore((s) => s.applyDetection)
   const altFilterMin = useSettingsStore((s) => s.altFilterMin)
@@ -30,15 +35,33 @@ export function useProcedureDetection() {
 
   const stateRef = useRef<DetectionState>(initialDetectionState())
 
-  // Reset detection state when the airport or procedure set changes — stale
-  // tracks from a different airport/AIRAC cycle must not carry over.
-  const icao = selectedAirport?.icao ?? null
+  // Per-airport detection contexts keyed by airportKey (=== uppercase proc.icao).
+  const ctxByKey = useMemo(
+    () =>
+      Object.fromEntries(
+        activeAirports.map((a): [string, AirportContext] => [
+          airportKey(a),
+          { lat: a.lat, lon: a.lon, elevationFt: a.elevation },
+        ]),
+      ),
+    [activeAirports],
+  )
+
+  // Surgical prune (not a full reset) when the active-airport set or procedure
+  // set changes: keep every still-present procedure's tracks/assignments, drop
+  // only those whose procedure id is gone. Adding an airport introduces new ids
+  // (nothing pruned, existing tracks survive); removing one drops exactly that
+  // airport's ids; an AIRAC refresh keeps ids stable (`${icao}-${type}-${name}`)
+  // so tracks persist across the cycle boundary.
+  const activeKeys = activeAirports.map(airportKey).sort().join(',')
   useEffect(() => {
-    stateRef.current = initialDetectionState()
-  }, [icao, procedures])
+    const ids = new Set(procedures.map((p) => p.id))
+    stateRef.current = pruneDetectionState(stateRef.current, ids)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKeys, procedures])
 
   useEffect(() => {
-    if (!selectedAirport || procedures.length === 0 || lastPollMs === 0) return
+    if (activeAirports.length === 0 || procedures.length === 0 || lastPollMs === 0) return
 
     const minFt = positionToMinFt(altFilterMin)
     const maxFt = positionToMaxFt(altFilterMax)
@@ -50,18 +73,12 @@ export function useProcedureDetection() {
     )
     const nowMs = Date.now()
 
-    const ctx = {
-      lat: selectedAirport.lat,
-      lon: selectedAirport.lon,
-      elevationFt: selectedAirport.elevation,
-    }
-
     const { state, events } = reduceDetection(
       stateRef.current,
       { nowMs, aircraft },
       procedures,
-      ctx,
-      atisInfo,
+      ctxByKey,
+      atisByIcao,
       DEFAULT_DETECTION_CONFIG,
     )
     stateRef.current = state
@@ -79,7 +96,16 @@ export function useProcedureDetection() {
             : `${e.type} ${e.hex} ${name(e.procId)}`,
         )
         .join('  |  ')
-      console.log(`[detect] ${selectedAirport.icao}  ${line}`)
+      console.log(`[detect] ${activeAirports.length}apt  ${line}`)
     }
-  }, [lastPollMs, selectedAirport, procedures, atisInfo, applyDetection, altFilterMin, altFilterMax])
+  }, [
+    lastPollMs,
+    activeAirports,
+    atisByIcao,
+    procedures,
+    applyDetection,
+    altFilterMin,
+    altFilterMax,
+    ctxByKey,
+  ])
 }

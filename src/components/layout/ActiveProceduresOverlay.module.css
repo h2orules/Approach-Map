@@ -2,13 +2,45 @@
   position: absolute;
   bottom: 48px;
   left: 12px;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(100, 116, 139, 0.35);
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
   border-radius: 6px;
   padding: 8px 10px;
   min-width: 160px;
   backdrop-filter: blur(6px);
   z-index: 10;
+}
+
+/* At 3+ active airports the grouped list can grow tall — cap it and scroll. */
+.scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* ── Per-airport group (multi-airport mode) ───────────────────── */
+.group {
+  margin-bottom: 8px;
+}
+
+.group:last-child {
+  margin-bottom: 0;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--overlay-border);
+}
+
+.groupIdent {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
@@ -18,7 +50,7 @@
   gap: 6px;
   font-size: 9px;
   letter-spacing: 0.12em;
-  color: #64748b;
+  color: var(--text-muted);
   text-transform: uppercase;
   margin-bottom: 4px;
 }
@@ -26,8 +58,8 @@
 .atisBadge {
   font-size: 9px;
   letter-spacing: 0.08em;
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: var(--accent);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   border-radius: 3px;
   padding: 0 4px;
   text-transform: uppercase;
@@ -38,7 +70,7 @@
 .atisSection {
   margin-bottom: 6px;
   padding: 4px 0 4px 0;
-  border-bottom: 1px solid rgba(100, 116, 139, 0.2);
+  border-bottom: 1px solid var(--overlay-border);
   position: relative;
 }
 
@@ -52,7 +84,7 @@
 .atisLabel {
   font-size: 9px;
   letter-spacing: 0.08em;
-  color: #64748b;
+  color: var(--text-muted);
   text-transform: uppercase;
   flex-shrink: 0;
   width: 22px;
@@ -61,7 +93,7 @@
 .atisValue {
   font-family: 'Roboto Mono', monospace;
   font-size: 10px;
-  color: #cbd5e1;
+  color: var(--text);
 }
 
 /* Secondary "plan and brief" departure runways — de-emphasized so they read
@@ -69,8 +101,8 @@
 .atisValueAdvisory {
   font-family: 'Roboto Mono', monospace;
   font-size: 10px;
-  color: #94a3b8;
-  opacity: 0.75;
+  color: var(--text-muted);
+  opacity: 0.85;
   margin-left: 4px;
 }
 
@@ -81,13 +113,13 @@
   width: 340px;
   max-height: calc(100vh - 100px);
   overflow-y: auto;
-  background: rgba(15, 23, 42, 0.97);
-  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: var(--overlay-bg);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
   border-radius: 6px;
   padding: 10px 12px;
   font-size: 11px;
   line-height: 1.55;
-  color: #94a3b8;
+  color: var(--text-muted);
   white-space: pre-wrap;
   word-break: break-word;
   z-index: 100;
@@ -102,7 +134,7 @@
   margin-bottom: 4px;
   font-family: 'Roboto Mono', monospace;
   font-size: 11px;
-  color: #e2e8f0;
+  color: var(--text);
   position: relative;
   cursor: default;
 }
@@ -130,18 +162,18 @@
 }
 
 .nameSelectable:hover {
-  color: #7dd3fc;
+  color: var(--accent);
 }
 
 .nameSelected {
-  color: #38bdf8;
+  color: var(--accent);
   text-decoration: underline;
 }
 
 .badge {
   font-size: 9px;
-  color: #64748b;
-  border: 1px solid #334155;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 0 3px;
 }
@@ -151,8 +183,8 @@
   position: absolute;
   left: calc(100% + 10px);
   top: -4px;
-  background: rgba(15, 23, 42, 0.97);
-  border: 1px solid rgba(100, 116, 139, 0.4);
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
   border-radius: 5px;
   padding: 5px 7px;
   display: flex;
@@ -170,7 +202,7 @@
   border-radius: 3px;
   font-family: 'Roboto Mono', monospace;
   font-size: 11px;
-  color: #7dd3fc;
+  color: var(--accent);
   cursor: pointer;
   text-align: left;
   white-space: nowrap;
@@ -178,15 +210,15 @@
 }
 
 .callsign:hover {
-  background: rgba(56, 189, 248, 0.15);
-  color: #e0f2fe;
+  background: rgba(var(--accent-rgb), 0.15);
+  color: var(--accent);
 }
 
 /* ── No active planes state ───────────────────────────────────── */
 .noPlanes {
   font-family: 'Roboto Mono', monospace;
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--text-muted);
   padding: 2px 5px;
   white-space: nowrap;
   line-height: 1.4;
@@ -195,7 +227,8 @@
 .noPlanesSub {
   font-family: 'Roboto Mono', monospace;
   font-size: 9px;
-  color: #64748b;
+  color: var(--text-muted);
+  opacity: 0.85;
   padding: 1px 5px 2px;
   white-space: nowrap;
   line-height: 1.4;

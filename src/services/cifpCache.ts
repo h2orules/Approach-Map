@@ -93,12 +93,31 @@ export function __setKvStoreForTests(store: KVStore): void {
 let inflightPromise: Promise<void> | null = null
 let rolloverTimer: ReturnType<typeof setTimeout> | null = null
 
+// setTimeout stores its delay as a signed 32-bit int: anything above 2^31-1 ms
+// (~24.8 days) fires immediately instead. Early in a 28-day AIRAC cycle the
+// time to the next boundary exceeds that, so a naive setTimeout(next - now)
+// fires at once → refetch → reschedule → endless download/parse loop.
+const MAX_TIMEOUT_DELAY_MS = 0x7fffffff
+
 function scheduleRollover(): void {
   if (rolloverTimer) clearTimeout(rolloverTimer)
   const msUntilNext = nextCycleDate().getTime() - Date.now()
+
+  if (msUntilNext > MAX_TIMEOUT_DELAY_MS) {
+    // Too far out for one setTimeout — sleep the max and re-measure.
+    rolloverTimer = setTimeout(scheduleRollover, MAX_TIMEOUT_DELAY_MS)
+    return
+  }
+
   rolloverTimer = setTimeout(() => {
+    // Belt and braces: only refetch if the cached cycle really is stale. A
+    // timer that fires early (clock skew, timer clamping) just re-arms.
+    if (!isCycleStale(useCifpStore.getState().effectiveDate)) {
+      scheduleRollover()
+      return
+    }
     void fetchAndParseCifp()
-  }, msUntilNext)
+  }, Math.max(0, msUntilNext))
 }
 
 /** Persists a freshly parsed national CIFP as one IDB record per airport

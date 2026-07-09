@@ -277,6 +277,40 @@ describe('cifpCache', () => {
       expect(await kv.get('airportKeys')).toEqual(['KPAE'])
       expect(useCifpStore.getState().status).toBe('ready')
     })
+
+    it('does not refetch immediately when the next boundary is beyond the 32-bit setTimeout limit', async () => {
+      // setTimeout clamps delays > 2^31-1 ms (~24.8 days) to fire at once, so
+      // early in a 28-day cycle a naive setTimeout(nextCycle - now) loops
+      // download→parse forever. Freeze time to just after a cycle boundary
+      // (>24.8 days remaining) and prove the rollover stays quiet.
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date(currentCycleEffectiveDate().getTime() + 60 * 60 * 1000))
+      const { __setKvStoreForTests, getCifpData } = await freshCifpCache()
+      const dateStr = formatCycleDate(currentCycleEffectiveDate())
+      expect(nextCycleDate().getTime() - Date.now()).toBeGreaterThan(0x7fffffff)
+      const kv = createFakeStore({
+        parserVersion: 21,
+        effectiveDate: dateStr,
+        airportKeys: ['KSEA'],
+        'airport:KSEA': FAKE_KSEA,
+      })
+      __setKvStoreForTests(kv)
+      fetchMock.mockImplementation(fetchOk)
+
+      await getCifpData() // cache hit -- arms the rollover timer
+
+      // A day passes: with the old single setTimeout this had already fired
+      // (clamped to 0) and refetched in a loop. Nothing should happen.
+      await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000)
+      expect(fetchMock).not.toHaveBeenCalled()
+
+      // ...but the rollover must still fire once the boundary really arrives.
+      nextWorkerResult = { KPAE: FAKE_KPAE }
+      const msUntilNext = nextCycleDate().getTime() - Date.now()
+      await vi.advanceTimersByTimeAsync(msUntilNext + 1000)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(await kv.get('airportKeys')).toEqual(['KPAE'])
+    })
   })
 
   describe('setupVisibilityRefresh', () => {

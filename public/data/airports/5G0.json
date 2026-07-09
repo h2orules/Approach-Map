@@ -1,0 +1,1 @@
+{"key":"5G0","name":"Le Roy Airport","city":"Le Roy","state":"NY","lat":42.9814,"lon":-77.9375,"elev":780,"runways":[{"id":"10/28","lengthFt":3854,"widthFt":60,"surfaceCode":"ASP","lowEnd":{"id":"10","heading":93,"lat":42.98149872,"lon":-77.94239807,"displacedThresholdFt":0},"highEnd":{"id":"28","heading":273,"lat":42.98120117,"lon":-77.93260193,"displacedThresholdFt":0}}]}

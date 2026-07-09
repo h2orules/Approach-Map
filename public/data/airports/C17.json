@@ -1,0 +1,1 @@
+{"key":"C17","name":"Marion Airport","city":"Marion","state":"IA","lat":42.031101,"lon":-91.529297,"elev":862,"runways":[{"id":"17/35","lengthFt":3776,"widthFt":60,"surfaceCode":"COM","lowEnd":{"id":"17","heading":174,"lat":42.03490067,"lon":-91.5298996,"displacedThresholdFt":260},"highEnd":{"id":"35","heading":354,"lat":42.02460098,"lon":-91.52839661,"displacedThresholdFt":0}}]}

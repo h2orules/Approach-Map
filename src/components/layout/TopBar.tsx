@@ -6,6 +6,7 @@ import { AirspaceToggle } from '../controls/AirspaceToggle'
 import { TerrainToggle } from '../controls/TerrainToggle'
 import { ThemeToggle } from '../controls/ThemeToggle'
 import { CifpStatusBanner } from './CifpStatusBanner'
+import { NotForNavigation } from './NotForNavigation'
 import styles from './TopBar.module.css'
 
 export function TopBar() {
@@ -24,6 +25,7 @@ export function TopBar() {
         <AirspaceToggle />
       </div>
       <CifpStatusBanner />
+      <NotForNavigation />
     </header>
   )
 }

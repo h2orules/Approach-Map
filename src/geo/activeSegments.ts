@@ -7,10 +7,16 @@ import { matchPointToLine } from './lineMatching'
 const MAX_OFFSET_NM = 2
 
 /**
- * For each visible SID/STAR procedure, find every leg (segment between two
- * consecutive fixes) that at least one non-selected aircraft is actively flying.
- * Returns a GeoJSON FeatureCollection; each feature carries `color` (the
- * procedure's own color) for data-driven styling.
+ * For each visible SID/STAR procedure — and for the *feeder* legs of each
+ * visible APPROACH — find every leg (segment between two consecutive fixes)
+ * that at least one non-selected aircraft is actively flying. Returns a GeoJSON
+ * FeatureCollection; each feature carries `color` (the procedure's own color)
+ * for data-driven styling.
+ *
+ * Approaches draw their feeder transitions thin by default (ProcedureLayer), so
+ * only those need an active-flight thickening here; the final segment keeps its
+ * own detection-driven width. SID/STAR legs are all thin-by-default, so every
+ * leg is eligible.
  *
  * Segments are deduped: multiple aircraft on the same leg produce one feature.
  */
@@ -30,6 +36,8 @@ export function findActiveSegments(
 
     for (const feat of proc.geojson.features) {
       if (feat.geometry?.type !== 'LineString') continue
+      // Approaches: only the thin feeder legs are eligible for thickening.
+      if (proc.type === 'APPROACH' && feat.properties?.feeder !== true) continue
       const coords = feat.geometry.coordinates as [number, number][]
 
       for (const ac of flyingAircraft) {

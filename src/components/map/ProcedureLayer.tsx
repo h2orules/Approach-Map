@@ -170,11 +170,32 @@ export function ProcedureLayer({ procedure }: Props) {
             layout={{ 'line-join': 'round', 'line-cap': 'round' }}
           />
         )}
-        {/* Inbound path + holds: solid (procedure-turn barbs drawn separately below) */}
+        {/* Feeder transitions (initial fix → common IAF/IF, no MAP): drawn thin
+            regardless of detection so several feeders fanning into one approach
+            don't clutter the map. The specific feeder an aircraft is flying is
+            thickened by AutoActiveSegmentsLayer / FlownSegmentLayer on top. */}
+        <Layer
+          id={`proc-feeder-${procedure.id}`}
+          type="line"
+          filter={['==', ['get', 'feeder'], true]}
+          paint={{
+            'line-color': lineColor,
+            'line-width': 1.5 + (isSelected ? 1 : 0),
+            'line-opacity': 0.8,
+          }}
+          layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+        />
+        {/* Inbound path (final segment) + holds: solid (procedure-turn barbs and
+            the thin feeders above are drawn separately). */}
         <Layer
           id={`proc-line-${procedure.id}`}
           type="line"
-          filter={['all', ['==', ['get', 'segment'], 'transition'], ['!=', ['get', 'kind'], 'pt']]}
+          filter={[
+            'all',
+            ['==', ['get', 'segment'], 'transition'],
+            ['!=', ['get', 'kind'], 'pt'],
+            ['!=', ['get', 'feeder'], true],
+          ]}
           paint={{
             'line-color': lineColor,
             'line-width': baseWidth,

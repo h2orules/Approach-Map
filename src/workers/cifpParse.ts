@@ -131,15 +131,32 @@ function buildProcedureFeatures(
     })
   }
 
+  // A `feeder` inbound path is an APPROACH transition that never reaches the MAP
+  // — the leg(s) from an initial fix to the common IAF/IF where the final
+  // segment begins. On an approach with several feeders (e.g. KPAE R34L: PAE
+  // and SEA both to RARYO) these fan in and clutter the map, so the renderer
+  // draws them thin unless actively flown. Only approaches (some transition has
+  // a MAP) get the tag; every SID/STAR transition lacks a MAP and must NOT be
+  // treated as a feeder.
+  const hasMapAnywhere = transitions.some((t) => t.legs.some((l) => l.role === 'map'))
+
   for (const { id: transitionId, legs } of transitions) {
     const mapIdx = legs.findIndex((l) => l.role === 'map')
     const inboundEnd = mapIdx >= 0 ? mapIdx + 1 : legs.length
+    const isFeeder = hasMapAnywhere && mapIdx < 0
 
     const inbound = legs.slice(0, inboundEnd)
     const missed = mapIdx >= 0 ? legs.slice(mapIdx) : [] // start missed at the MAP for continuity
 
     if (inbound.length >= 2) {
-      features.push(lineFeature(legRunCoords(inbound), { kind: 'path', segment: 'transition', transitionId }))
+      features.push(
+        lineFeature(legRunCoords(inbound), {
+          kind: 'path',
+          segment: 'transition',
+          transitionId,
+          ...(isFeeder ? { feeder: true } : {}),
+        }),
+      )
     }
     if (missed.length >= 2) {
       features.push(lineFeature(legRunCoords(missed), { kind: 'path', segment: 'missed', transitionId }))

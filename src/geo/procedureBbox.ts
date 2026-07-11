@@ -1,4 +1,5 @@
 import type { Procedure } from '../types/procedure'
+import { buildArcMatchPaths } from './procedureMatch'
 
 /**
  * Axis-aligned lat/lon bounding box around a procedure's waypoints, padded so a
@@ -34,11 +35,20 @@ export function computeProcedureBbox(proc: Procedure, padNm: number): ProcBbox |
   let maxLat = -Infinity
   let minLon = Infinity
   let maxLon = -Infinity
-  for (const w of proc.waypoints) {
-    if (w.lat < minLat) minLat = w.lat
-    if (w.lat > maxLat) maxLat = w.lat
-    if (w.lon < minLon) minLon = w.lon
-    if (w.lon > maxLon) maxLon = w.lon
+  const grow = (lon: number, lat: number) => {
+    if (lat < minLat) minLat = lat
+    if (lat > maxLat) maxLat = lat
+    if (lon < minLon) minLon = lon
+    if (lon > maxLon) maxLon = lon
+  }
+  for (const w of proc.waypoints) grow(w.lon, w.lat)
+  // DME-arc feeders live off the representative path `waypoints` describes
+  // (KPAE VOR-A's CEVLI arc sits east of the box built from the final segment
+  // alone), so an aircraft established on the arc would be prefiltered out
+  // before it could ever match. Fold the sampled arc points into the box so
+  // detection matches the same geometry `evaluateMatch` does.
+  for (const path of buildArcMatchPaths(proc)) {
+    for (const [lon, lat] of path.coords) grow(lon, lat)
   }
 
   const dLat = padNm / 60

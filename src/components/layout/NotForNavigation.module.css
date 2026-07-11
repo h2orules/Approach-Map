@@ -1,0 +1,195 @@
+/* Trigger: anchored to the bottom of the topbar, horizontally centered. */
+.trigger {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  line-height: 1.2;
+  transition: color 0.12s ease;
+}
+
+.trigger:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Full-viewport backdrop (portaled to <body>). */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+}
+
+.close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* Scroll region — vertical only, never horizontal. */
+.scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 20px 24px 24px;
+}
+
+.title {
+  margin: 0 24px 12px 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.section {
+  margin-top: 18px;
+}
+
+.section:first-of-type {
+  margin-top: 0;
+}
+
+.section p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.section p:last-child {
+  margin-bottom: 0;
+}
+
+.heading {
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--overlay-border);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.diffGroup {
+  margin-bottom: 14px;
+}
+
+.diffGroup:last-child {
+  margin-bottom: 0;
+}
+
+.subheading {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.list li {
+  margin-bottom: 5px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.list li:last-child {
+  margin-bottom: 0;
+}
+
+.sourceList {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.sourceList li {
+  margin-bottom: 7px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.sourceList a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sourceList a:hover {
+  text-decoration: underline;
+}
+
+.sourceDetail {
+  color: var(--text-muted);
+}
+
+/* Mobile: fill the screen for readability. */
+@media (max-width: 640px) {
+  .backdrop {
+    padding: 0;
+  }
+
+  .dialog {
+    max-width: none;
+    max-height: 100%;
+    height: 100%;
+    border: none;
+    border-radius: 0;
+  }
+
+  .scroll {
+    padding: 18px 18px 28px;
+  }
+}

@@ -76,6 +76,19 @@ export const DETECT_CONFIRM_MIN_PROGRESS_NM = 1.5
 export const DETECT_CANDIDATE_TTL_MS = 15_000
 export const DETECT_CONFIRMED_TTL_MS = 30_000
 export const DETECT_REASSIGN_CLOSER_STREAK = 3
+// Holds (HILPT course reversals, missed-approach racetracks) are matched
+// against the drawn racetrack polyline, not the straight representative path —
+// otherwise a holding aircraft only matches on the inbound leg (which aligns
+// with the final course) and drops out through the outbound leg and both turns,
+// flickering ~once per lap. The tolerances are deliberately generous: the drawn
+// racetrack uses a 0.85 nm turn radius, but a real hold's size varies with speed
+// (turn radius ~1.1 nm at 200 kt), leg type (timing vs distance), and wind, so a
+// flown hold sits up to ~2 nm off the drawn one. A holding aircraft is
+// continuously turning, so the direction gate is wide too — position (the 2 nm
+// cross-track keeps matches inside the hold's vicinity) plus the confirm/TTL
+// hysteresis, not instantaneous heading, is what rejects transiting traffic.
+export const HOLD_MATCH_XT_NM = 2.0
+export const HOLD_MATCH_DIR_DEG = 75
 // Extra padding (nm) added around a procedure's waypoint bounding box before it
 // gates whether an aircraft can start a NEW detection track. Combined with
 // NEAR_AIRPORT_DISTANCE_NM (5) this yields a 6 nm pad — comfortably wider than

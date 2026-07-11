@@ -2,7 +2,12 @@ import * as turf from '@turf/turf'
 import type { InterpolatedAircraft } from '../types/aircraft'
 import type { Procedure, ProcedureType, ProcedureLeg, AltConstraint } from '../types/procedure'
 import { resolveAltConstraint } from '../utils/altitudeConstraint'
-import { NEAR_AIRPORT_DISTANCE_NM, GS_FEET_PER_NM } from '../config/constants'
+import {
+  NEAR_AIRPORT_DISTANCE_NM,
+  GS_FEET_PER_NM,
+  HOLD_MATCH_XT_NM,
+  HOLD_MATCH_DIR_DEG,
+} from '../config/constants'
 import { matchPointToLine, segmentFraction } from './lineMatching'
 import { dmeArc } from './procedureShapes'
 
@@ -137,6 +142,41 @@ export function buildArcMatchPaths(proc: Procedure): ArcMatchPath[] {
   return paths
 }
 
+/**
+ * A hold (HILPT / missed-approach racetrack) rendered as a match path: the
+ * drawn racetrack polyline plus whether it sits before the MAP (a course
+ * reversal) or after (a missed-approach hold), and the fix's own altitude
+ * crossing. Built from the procedure's GeoJSON so detection matches exactly the
+ * racetrack the map draws. See `buildHoldMatchPaths`.
+ */
+export interface HoldMatchPath {
+  coords: [number, number][]
+  /** true when the hold is a pre-MAP course reversal, false when missed-approach. */
+  preMap: boolean
+  alt: AltConstraint | null
+}
+
+/**
+ * Racetrack match paths for a procedure's holds. A holding aircraft flies the
+ * racetrack, not the straight representative path, so without this it only
+ * matches on the inbound leg and drops through the rest of the lap. The drawn
+ * racetrack (kind:'hold' GeoJSON features, built in the CIFP worker) is matched
+ * directly with generous tolerances (see HOLD_MATCH_XT_NM / HOLD_MATCH_DIR_DEG).
+ */
+export function buildHoldMatchPaths(proc: Procedure): HoldMatchPath[] {
+  const out: HoldMatchPath[] = []
+  for (const f of proc.geojson.features) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p = f.properties as any
+    if (!p || p.kind !== 'hold') continue
+    if (f.geometry?.type !== 'LineString') continue
+    const coords = f.geometry.coordinates as [number, number][]
+    if (coords.length < 2) continue
+    out.push({ coords, preMap: p.segment !== 'missed', alt: (p.alt as AltConstraint | null) ?? null })
+  }
+  return out
+}
+
 export interface PreparedProcedure {
   coords: [number, number][]
   gsInfo: GsInfo | null
@@ -144,6 +184,8 @@ export interface PreparedProcedure {
   mapWptIdx: number
   /** Arc-sampled feeder paths matched in addition to the representative. */
   arcPaths: ArcMatchPath[]
+  /** Hold racetrack paths matched in addition to the representative. */
+  holdPaths: HoldMatchPath[]
 }
 
 const prepCache = new WeakMap<Procedure, PreparedProcedure | null>()
@@ -164,6 +206,7 @@ export function prepareProcedure(proc: Procedure): PreparedProcedure | null {
           gsInfo: findGsInfo(proc),
           mapWptIdx: proc.type === 'APPROACH' ? findMapWptIdx(proc) : -1,
           arcPaths: buildArcMatchPaths(proc),
+          holdPaths: buildHoldMatchPaths(proc),
         }
   prepCache.set(proc, result)
   return result
@@ -195,6 +238,10 @@ export function evaluateMatch(
   let best = evaluateRepresentative(ac, proc, ctx, tol, prepared)
   for (const arc of prepared.arcPaths) {
     const ev = evaluateArcPath(ac, proc, ctx, tol, arc)
+    if (ev && (best === null || ev.crossTrackNm < best.crossTrackNm)) best = ev
+  }
+  for (const hold of prepared.holdPaths) {
+    const ev = evaluateHoldPath(ac, proc, ctx, tol, hold)
     if (ev && (best === null || ev.crossTrackNm < best.crossTrackNm)) best = ev
   }
   return best
@@ -339,4 +386,52 @@ function evaluateArcPath(
   }
 
   return { crossTrackNm, segIdx, alongTrackNm, altOk, preMap: true, pastMap: false }
+}
+
+/**
+ * Evidence for a hold racetrack. Matched with the deliberately generous hold
+ * tolerances (a flown hold varies from the drawn one — see HOLD_MATCH_XT_NM),
+ * so a holding aircraft keeps matching around the whole lap and the confirm/TTL
+ * hysteresis carries it through the turns. Altitude is the hold fix's own
+ * crossing constraint (falling back to type plausibility); pre/past-MAP follow
+ * the hold's segment so a pre-MAP course reversal and a missed-approach hold
+ * feed the reducer's departure/missed gate correctly.
+ */
+function evaluateHoldPath(
+  ac: InterpolatedAircraft,
+  proc: Procedure,
+  ctx: AirportContext,
+  tol: MatchTolerances,
+  hold: HoldMatchPath,
+): MatchEvidence | null {
+  const altFt = ac.altBaro as number
+  const match = matchPointToLine(hold.coords, ac.interpLat, ac.interpLon, ac.track, {
+    maxCrossTrackNm: HOLD_MATCH_XT_NM,
+    directionToleranceDeg: HOLD_MATCH_DIR_DEG,
+  })
+  if (!match) return null
+
+  const acPt = turf.point([ac.interpLon, ac.interpLat])
+  const distToAirport = turf.distance(acPt, turf.point([ctx.lon, ctx.lat]), {
+    units: 'nauticalmiles',
+  })
+  const fallbackThreshold = distToAirport <= NEAR_AIRPORT_DISTANCE_NM ? tol.altNearFt : tol.altFarFt
+
+  const expectedAlt = resolveAltConstraint(hold.alt)
+  let altOk: boolean
+  if (expectedAlt === null) {
+    altOk = altitudePlausibleForType(proc.type, altFt - ctx.elevationFt)
+  } else {
+    const threshold = isExactConstraint(hold.alt) ? tol.altConstrainedFt : fallbackThreshold
+    altOk = Math.abs(altFt - expectedAlt) <= threshold
+  }
+
+  return {
+    crossTrackNm: match.crossTrackNm,
+    segIdx: match.segIdx,
+    alongTrackNm: match.alongTrackNm,
+    altOk,
+    preMap: hold.preMap,
+    pastMap: !hold.preMap,
+  }
 }

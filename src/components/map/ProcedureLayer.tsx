@@ -185,7 +185,24 @@ export function ProcedureLayer({ procedure }: Props) {
           }}
           layout={{ 'line-join': 'round', 'line-cap': 'round' }}
         />
-        {/* Inbound path (final segment) + holds: solid (procedure-turn barbs and
+        {/* Transition holds (HILPT course reversals): an intermediate weight —
+            heavier than the thin feeders because the hold IS part of the
+            approach (unless ATC clears the aircraft to skip it), but lighter
+            than the active final. Thickened to the active width by
+            AutoActiveSegmentsLayer / FlownSegmentLayer when a plane is holding.
+            (Missed-approach holds stay dash-dot via proc-missed below.) */}
+        <Layer
+          id={`proc-hold-${procedure.id}`}
+          type="line"
+          filter={['all', ['==', ['get', 'kind'], 'hold'], ['==', ['get', 'segment'], 'transition']]}
+          paint={{
+            'line-color': lineColor,
+            'line-width': 2.25 + (isSelected ? 1 : 0),
+            'line-opacity': 0.85,
+          }}
+          layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+        />
+        {/* Inbound path (final segment): solid (procedure-turn barbs, holds, and
             the thin feeders above are drawn separately). */}
         <Layer
           id={`proc-line-${procedure.id}`}
@@ -194,6 +211,7 @@ export function ProcedureLayer({ procedure }: Props) {
             'all',
             ['==', ['get', 'segment'], 'transition'],
             ['!=', ['get', 'kind'], 'pt'],
+            ['!=', ['get', 'kind'], 'hold'],
             ['!=', ['get', 'feeder'], true],
           ]}
           paint={{

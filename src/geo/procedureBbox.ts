@@ -1,5 +1,5 @@
 import type { Procedure } from '../types/procedure'
-import { buildArcMatchPaths } from './procedureMatch'
+import { buildArcMatchPaths, buildHoldMatchPaths } from './procedureMatch'
 
 /**
  * Axis-aligned lat/lon bounding box around a procedure's waypoints, padded so a
@@ -49,6 +49,12 @@ export function computeProcedureBbox(proc: Procedure, padNm: number): ProcBbox |
   // detection matches the same geometry `evaluateMatch` does.
   for (const path of buildArcMatchPaths(proc)) {
     for (const [lon, lat] of path.coords) grow(lon, lat)
+  }
+  // Hold racetracks extend a few nm off their fix (up to ~a leg length plus a
+  // turn diameter) and are matched with a 2 nm cross-track — fold their points
+  // in too so a holding aircraft near the box edge isn't prefiltered out.
+  for (const hold of buildHoldMatchPaths(proc)) {
+    for (const [lon, lat] of hold.coords) grow(lon, lat)
   }
 
   const dLat = padNm / 60

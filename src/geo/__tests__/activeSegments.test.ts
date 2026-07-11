@@ -73,3 +73,54 @@ describe('findActiveSegments — approach feeders', () => {
     expect(findActiveSegments([ac], [proc('APPROACH')], 'sel1').features.length).toBe(0)
   })
 })
+
+// ── Hold racetrack thickening ───────────────────────────────────────────────
+import { holdTrack } from '../procedureShapes'
+import * as turf from '@turf/turf'
+
+const HFIX = { lat: 47.5, lon: -122.3 }
+
+function holdProc(): Procedure {
+  const track = holdTrack(HFIX.lat, HFIX.lon, 360, true, 4)
+  return {
+    id: 'KSEA-APPROACH-HOLD', icao: 'KSEA', name: 'R16C', type: 'APPROACH', runways: ['16C'],
+    waypoints: [], symbols: [],
+    geojson: {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: track }, properties: { kind: 'hold', segment: 'transition' } }],
+    },
+    hasGeometry: true, color: '#f0abfc',
+  }
+}
+
+// A point on the racetrack outbound leg + its tangent (as the detector sees a
+// holding aircraft).
+function onRacetrack(): { lat: number; lon: number; track: number } {
+  const track = holdTrack(HFIX.lat, HFIX.lon, 360, true, 4)
+  let idx = 0
+  track.forEach((p, i) => { if (p[0] > track[idx][0]) idx = i })
+  const nxt = track[(idx + 1) % track.length]
+  return { lat: track[idx][1], lon: track[idx][0], track: turf.bearing(turf.point(track[idx]), turf.point(nxt)) }
+}
+
+describe('findActiveSegments — hold racetracks', () => {
+  it('emits the WHOLE racetrack (not one leg) when an aircraft is flying the hold', () => {
+    const { lat, lon, track } = onRacetrack()
+    const fc = findActiveSegments([aircraft({ interpLat: lat, interpLon: lon, track })], [holdProc()], null)
+    expect(fc.features.length).toBe(1)
+    // Whole racetrack, not a 2-point segment.
+    expect((fc.features[0].geometry as { coordinates: unknown[] }).coordinates.length).toBeGreaterThan(6)
+    expect((fc.features[0].properties as { color: string }).color).toBe('#f0abfc')
+  })
+
+  it('emits nothing when no aircraft is flying the hold', () => {
+    const fc = findActiveSegments([aircraft({ interpLat: 47.5, interpLon: -122.0, track: 360 })], [holdProc()], null)
+    expect(fc.features.length).toBe(0)
+  })
+
+  it('thickens the hold even for the selected aircraft (unlike per-leg highlights)', () => {
+    const { lat, lon, track } = onRacetrack()
+    const ac = aircraft({ hex: 'sel1', interpLat: lat, interpLon: lon, track })
+    expect(findActiveSegments([ac], [holdProc()], 'sel1').features.length).toBe(1)
+  })
+})

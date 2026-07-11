@@ -329,3 +329,70 @@ describe('evaluateMatch — DME arc feeders', () => {
     expect(ev!.crossTrackNm).toBeLessThan(0.1)
   })
 })
+
+// ── Hold (HILPT) detection ──────────────────────────────────────────────────
+// A holding aircraft flies the racetrack, not the straight representative path,
+// so without matching the racetrack it only registers on the inbound leg.
+import { holdTrack } from '../procedureShapes'
+
+const HOLD_FIX = { lat: 47.5, lon: -122.3 }
+const HOLD_INBOUND_TRUE = 360 // holding inbound due north, right turns → outbound leg lies east
+
+function holdProc(withHold: boolean): Procedure {
+  const track = holdTrack(HOLD_FIX.lat, HOLD_FIX.lon, HOLD_INBOUND_TRUE, true, 4)
+  // Representative final: straight south from the hold fix (so the racetrack's
+  // outbound leg, offset east, is well off the representative).
+  const wpt = (id: string, lat: number) => ({
+    id, lat, lon: HOLD_FIX.lon, navaidType: 'FIX' as const, altConstraint: null, sequenceNumber: 10,
+  })
+  return {
+    id: 'KSEA-APPROACH-HOLD', icao: 'KSEA', name: 'R16C', type: 'APPROACH', runways: ['16C'],
+    waypoints: [wpt('HOLDF', HOLD_FIX.lat), wpt('RWY', HOLD_FIX.lat - 0.1)],
+    symbols: [],
+    geojson: {
+      type: 'FeatureCollection',
+      features: withHold
+        ? [{
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: track },
+            properties: { kind: 'hold', segment: 'transition', fixId: 'HOLDF', alt: { type: 'AT_OR_ABOVE', low: 2000 } },
+          }]
+        : [],
+    },
+    hasGeometry: true, color: '#34d399',
+  }
+}
+
+// The easternmost racetrack vertex sits on the outbound leg (offset east of the
+// inbound/final line); its tangent is the direction of travel there.
+function holdOutboundPoint(): { lat: number; lon: number; track: number } {
+  const track = holdTrack(HOLD_FIX.lat, HOLD_FIX.lon, HOLD_INBOUND_TRUE, true, 4)
+  let idx = 0
+  track.forEach((p, i) => { if (p[0] > track[idx][0]) idx = i })
+  const nxt = track[(idx + 1) % track.length]
+  return { lat: track[idx][1], lon: track[idx][0], track: turf.bearing(turf.point(track[idx]), turf.point(nxt)) }
+}
+
+describe('evaluateMatch — holds (HILPT racetrack)', () => {
+  it('matches an aircraft on the hold outbound leg (off the straight representative)', () => {
+    const { lat, lon, track } = holdOutboundPoint()
+    // Sanity: this point does NOT match without the racetrack geometry.
+    expect(evaluateMatch(aircraft({ interpLat: lat, interpLon: lon, track, altBaro: 2200 }), holdProc(false), CTX, CAND)).toBeNull()
+    // ...but does once the hold racetrack is present.
+    const ev = evaluateMatch(aircraft({ interpLat: lat, interpLon: lon, track, altBaro: 2200 }), holdProc(true), CTX, CAND)
+    expect(ev).not.toBeNull()
+    expect(ev!.preMap).toBe(true) // a pre-MAP course reversal
+    expect(ev!.altOk).toBe(true) // 2200 vs the hold's ≥2000
+  })
+
+  it('rejects an aircraft flying the racetrack the wrong way (reciprocal tangent)', () => {
+    const { lat, lon, track } = holdOutboundPoint()
+    const ac = aircraft({ interpLat: lat, interpLon: lon, track: (track + 180) % 360, altBaro: 2200 })
+    expect(evaluateMatch(ac, holdProc(true), CTX, CAND)).toBeNull()
+  })
+
+  it('does not match an aircraft nowhere near the hold', () => {
+    const ac = aircraft({ interpLat: 47.5, interpLon: -122.0, track: 360, altBaro: 2200 }) // ~12 nm east
+    expect(evaluateMatch(ac, holdProc(true), CTX, CAND)).toBeNull()
+  })
+})

@@ -8,6 +8,46 @@ function dest(p: Pt, distNm: number, bearing: number): Pt {
   return turf.destination(turf.point(p), distNm, bearing, NM).geometry.coordinates as Pt
 }
 
+/**
+ * A DME arc (ARINC 424 "AF" leg) as a polyline: the curved path at a roughly
+ * constant DME radius around `center`, from the start fix to the end fix, swept
+ * in the leg's turn direction (`right` = clockwise / increasing bearing from
+ * the station). The radius is interpolated between the two endpoints' actual
+ * measured distances, so the drawn arc meets both fixes exactly even when they
+ * sit a touch off the nominal radius. Returns `[start, …, end]` in [lon, lat]
+ * order. Falls back to a straight [start, end] when the sweep is degenerate.
+ */
+export function dmeArc(
+  centerLat: number,
+  centerLon: number,
+  startLat: number,
+  startLon: number,
+  endLat: number,
+  endLon: number,
+  right: boolean,
+): Pt[] {
+  const C: Pt = [centerLon, centerLat]
+  const S: Pt = [startLon, startLat]
+  const E: Pt = [endLon, endLat]
+  const cPt = turf.point(C)
+  const rS = turf.distance(cPt, turf.point(S), NM)
+  const rE = turf.distance(cPt, turf.point(E), NM)
+  const bS = turf.bearing(cPt, turf.point(S))
+  const bE = turf.bearing(cPt, turf.point(E))
+  const n360 = (d: number): number => ((d % 360) + 360) % 360
+  // Right turn sweeps to increasing bearing, left to decreasing; either way the
+  // magnitude is the short way from the start radial to the end radial.
+  const sweep = right ? n360(bE - bS) : -n360(bS - bE)
+  if (Math.abs(sweep) < 0.5) return [S, E]
+  const steps = Math.max(2, Math.ceil(Math.abs(sweep) / 4)) // ≤4° per segment
+  const out: Pt[] = []
+  for (let k = 0; k <= steps; k++) {
+    const t = k / steps
+    out.push(dest(C, rS + (rE - rS) * t, bS + sweep * t))
+  }
+  return out
+}
+
 /** Sweep an arc of `points` around `center`, from `startBrg` to `startBrg ± 180`. */
 function semicircle(center: Pt, radiusNm: number, startBrg: number, right: boolean, steps = 16): Pt[] {
   const out: Pt[] = []

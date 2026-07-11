@@ -104,6 +104,14 @@ export interface ProcedureLeg {
     barbCourseMag: number
     limitNm: number
   }
+  /**
+   * DME-arc ("AF" leg) center — the position of the recommended reference
+   * navaid the arc is flown around (e.g. the PAE VOR for KPAE VOR-A), resolved
+   * from the recommended-navaid ident during parsing. Present only on AF legs
+   * whose reference navaid resolved; drives the curved arc geometry (`dmeArc`)
+   * so the leg renders as a constant-radius arc, not a straight chord.
+   */
+  arc?: { centerLat: number; centerLon: number }
 }
 
 export interface ProcedureTransition {

@@ -27,7 +27,7 @@ import {
   deriveCourseReversal,
   deriveHoldInLieu,
 } from './cifpParseCore'
-import { holdTrack, procedureTurn } from '../geo/procedureShapes'
+import { holdTrack, procedureTurn, dmeArc } from '../geo/procedureShapes'
 
 /**
  * Progress callback invoked as the parse proceeds. The CIFP worker forwards
@@ -60,6 +60,28 @@ type AnyFeature = any
 
 function lineFeature(coords: Coord[], props: Record<string, unknown>): AnyFeature {
   return { type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: props }
+}
+
+/**
+ * Coordinates for a run of legs (the inbound or missed slice of a transition),
+ * replacing each DME-arc ("AF") leg's straight chord with the curved arc around
+ * its reference navaid. Non-arc legs contribute their own fix point; an arc leg
+ * contributes the sampled arc from the previous fix to its own fix (dropping the
+ * arc's first point, which duplicates the previous leg already emitted).
+ */
+function legRunCoords(legs: ProcedureLeg[]): Coord[] {
+  const coords: Coord[] = []
+  for (let i = 0; i < legs.length; i++) {
+    const l = legs[i]
+    if (l.pathTerm === 'AF' && l.arc && i > 0) {
+      const prev = legs[i - 1]
+      const arc = dmeArc(l.arc.centerLat, l.arc.centerLon, prev.lat, prev.lon, l.lat, l.lon, l.turnRight)
+      for (let k = 1; k < arc.length; k++) coords.push(arc[k])
+    } else {
+      coords.push([l.lon, l.lat])
+    }
+  }
+  return coords
 }
 
 /**
@@ -109,18 +131,35 @@ function buildProcedureFeatures(
     })
   }
 
+  // A `feeder` inbound path is an APPROACH transition that never reaches the MAP
+  // — the leg(s) from an initial fix to the common IAF/IF where the final
+  // segment begins. On an approach with several feeders (e.g. KPAE R34L: PAE
+  // and SEA both to RARYO) these fan in and clutter the map, so the renderer
+  // draws them thin unless actively flown. Only approaches (some transition has
+  // a MAP) get the tag; every SID/STAR transition lacks a MAP and must NOT be
+  // treated as a feeder.
+  const hasMapAnywhere = transitions.some((t) => t.legs.some((l) => l.role === 'map'))
+
   for (const { id: transitionId, legs } of transitions) {
     const mapIdx = legs.findIndex((l) => l.role === 'map')
     const inboundEnd = mapIdx >= 0 ? mapIdx + 1 : legs.length
+    const isFeeder = hasMapAnywhere && mapIdx < 0
 
     const inbound = legs.slice(0, inboundEnd)
     const missed = mapIdx >= 0 ? legs.slice(mapIdx) : [] // start missed at the MAP for continuity
 
     if (inbound.length >= 2) {
-      features.push(lineFeature(inbound.map((l) => [l.lon, l.lat]), { kind: 'path', segment: 'transition', transitionId }))
+      features.push(
+        lineFeature(legRunCoords(inbound), {
+          kind: 'path',
+          segment: 'transition',
+          transitionId,
+          ...(isFeeder ? { feeder: true } : {}),
+        }),
+      )
     }
     if (missed.length >= 2) {
-      features.push(lineFeature(missed.map((l) => [l.lon, l.lat]), { kind: 'path', segment: 'missed', transitionId }))
+      features.push(lineFeature(legRunCoords(missed), { kind: 'path', segment: 'missed', transitionId }))
     }
 
     // Holds and procedure turns as their own shapes
@@ -428,6 +467,15 @@ export function parseCifp(text: string, onProgress?: CifpParseProgress): Record<
     const courseMag = (parseInt(rec.magCourse) || 0) / 10
     const legNm = parseLegLen(rec.legLen)
     const turnRight = rec.turnDir !== 'L'
+    // DME-arc ("AF") legs are flown around the recommended reference navaid —
+    // resolve its position so the leg can be drawn as a constant-radius arc
+    // (dmeArc) instead of a straight chord (e.g. KPAE VOR-A around the PAE VOR).
+    const arcCenter =
+      rec.pathTerm === 'AF' && rec.recNav
+        ? waypointDb.get(rec.recNav) ??
+          localizerDb.get(`${icao}:${rec.recNav}`) ??
+          (rec.recNav === icao ? airportRefDb.get(icao) : undefined)
+        : undefined
     transition.set(rec.sequenceNumber, {
       seq: rec.sequenceNumber,
       fixId: rec.fixId,
@@ -448,6 +496,7 @@ export function parseCifp(text: string, onProgress?: CifpParseProgress): Record<
       // On a PI leg the coded magCourse is the barb course and legLen the
       // "remain within" limit — derive the real outbound/inbound courses.
       ...(rec.pathTerm === 'PI' ? { pi: derivePi(courseMag, turnRight, legNm) } : {}),
+      ...(arcCenter ? { arc: { centerLat: arcCenter.lat, centerLon: arcCenter.lon } } : {}),
     })
   }
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computeProcedureBbox, isInsideBbox, getProcedureBbox } from '../procedureBbox'
 import { evaluateMatch, type AirportContext, type MatchTolerances } from '../procedureMatch'
+import { dmeArc } from '../procedureShapes'
 import type { Procedure } from '../../types/procedure'
 import type { InterpolatedAircraft } from '../../types/aircraft'
 import {
@@ -226,5 +227,54 @@ describe('bbox soundness vs evaluateMatch', () => {
     const farAc = plane(47.45, -121.0, 180) // ~55 nm east of the line
     expect(isInsideBbox(bbox, 47.45, -121.0)).toBe(false)
     expect(evaluateMatch(farAc, proc, ctx, confirmedTol)).toBeNull()
+  })
+})
+
+// ── DME-arc feeders must be inside the prefilter box ────────────────────────
+// The representative path (waypoints) is the straight final at one longitude;
+// the arc feeder curves ~9 nm out to the west. Without folding the arc into the
+// box, an aircraft established on the arc sits outside the padded box and is
+// prefiltered out before it can ever start a track.
+const PAE = { lat: 47.91983, lon: -122.2778 }
+const YAVUR = { lat: 48.06974, lon: -122.2778 }
+const ECEPO = { lat: 47.88336, lon: -122.49407 }
+const ZELIG = { lat: 47.9698, lon: -122.2778 }
+const XUKRE = { lat: 47.92106, lon: -122.2778 }
+
+function arcProc(withArc: boolean): Procedure {
+  const base = { navaidType: 'FIX' as const, altConstraint: null, pathTerm: 'TF', role: 'normal' as const, flyover: false, turnRight: true, course: 0, legNm: 0, speedKt: 0, dmeNm: null, recNavId: '' }
+  const finalLegs = [
+    { ...base, seq: 10, fixId: 'YAVUR', ...YAVUR, role: 'if' as const },
+    { ...base, seq: 20, fixId: 'ZELIG', ...ZELIG, role: 'faf' as const },
+    { ...base, seq: 30, fixId: 'XUKRE', ...XUKRE, role: 'map' as const },
+  ]
+  const feederLegs = [
+    { ...base, seq: 10, fixId: 'ECEPO', ...ECEPO, role: 'iaf' as const },
+    { ...base, seq: 20, fixId: 'YAVUR', ...YAVUR, pathTerm: 'AF', ...(withArc ? { arc: { centerLat: PAE.lat, centerLon: PAE.lon } } : {}) },
+  ]
+  return {
+    id: 'KPAE-APPROACH-VOR-A', icao: 'KPAE', name: 'VOR-A', type: 'APPROACH', runways: [],
+    waypoints: finalLegs.map((l) => ({ id: l.fixId, lat: l.lat, lon: l.lon, navaidType: 'FIX' as const, altConstraint: null, sequenceNumber: l.seq })),
+    symbols: [], geojson: { type: 'FeatureCollection', features: [] }, hasGeometry: true, color: '#34d399',
+    transitions: [{ id: '(final)', legs: finalLegs }, { id: 'ECEPO', legs: feederLegs }],
+  }
+}
+
+describe('computeProcedureBbox — DME arc feeders', () => {
+  it('extends the box west to cover the arc that the representative path omits', () => {
+    const withArc = computeProcedureBbox(arcProc(true), REDUCER_PAD)!
+    const noArc = computeProcedureBbox(arcProc(false), REDUCER_PAD)!
+    // The arc reaches ECEPO at lon ≈ -122.494, far west of the final's -122.2778.
+    expect(withArc.minLon).toBeLessThan(noArc.minLon)
+    expect(withArc.minLon).toBeLessThan(-122.49)
+  })
+
+  it('contains an aircraft established mid-arc (which the waypoint-only box excludes)', () => {
+    const arc = dmeArc(PAE.lat, PAE.lon, ECEPO.lat, ECEPO.lon, YAVUR.lat, YAVUR.lon, true)
+    const mid = arc[Math.floor(arc.length / 2)]
+    const withArc = computeProcedureBbox(arcProc(true), REDUCER_PAD)!
+    const noArc = computeProcedureBbox(arcProc(false), REDUCER_PAD)!
+    expect(isInsideBbox(withArc, mid[1], mid[0])).toBe(true)
+    expect(isInsideBbox(noArc, mid[1], mid[0])).toBe(false)
   })
 })

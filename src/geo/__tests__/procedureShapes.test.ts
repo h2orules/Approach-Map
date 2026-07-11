@@ -5,6 +5,7 @@ import {
   holdOutboundLabelAnchor,
   procedureTurn,
   procedureTurnDrawnLengthNm,
+  dmeArc,
 } from '../procedureShapes'
 
 const finite = (pts: [number, number][]) =>
@@ -126,5 +127,56 @@ describe('procedureTurn', () => {
     const barbBrg = turf.bearing(turf.point(pts[1]), turf.point(pts[2]))
     expect(((barbBrg - 45 + 540) % 360) - 180).toBeCloseTo(0, 1)
     for (const p of pts.slice(1)) expect(side(F, p, 90)).toBeLessThanOrEqual(1e-6)
+  })
+})
+
+describe('dmeArc', () => {
+  // KPAE VOR-A: 9.0 nm DME arc around the PAE VOR. ECEPO (256° true) sweeps
+  // clockwise (right turn) to YAVUR (360°/north); CEVLI (50.8°) sweeps
+  // counter-clockwise (left) to YAVUR. Coordinates from live FAA CIFP.
+  const PAE = { lat: 47.91983333, lon: -122.27780278 }
+  const YAVUR = { lat: 48.06973889, lon: -122.2778 }
+  const ECEPO = { lat: 47.88336389, lon: -122.49406667 }
+  const CEVLI = { lat: 48.014225, lon: -122.10442778 }
+
+  const distNm = (a: [number, number], b: [number, number]) =>
+    turf.distance(turf.point(a), turf.point(b), { units: 'nauticalmiles' })
+
+  it('samples a right-turn arc that starts at the start fix and ends at the end fix', () => {
+    const arc = dmeArc(PAE.lat, PAE.lon, ECEPO.lat, ECEPO.lon, YAVUR.lat, YAVUR.lon, true)
+    expect(arc.length).toBeGreaterThan(6)
+    expect(finite(arc)).toBe(true)
+    expect(arc[0][0]).toBeCloseTo(ECEPO.lon, 4)
+    expect(arc[0][1]).toBeCloseTo(ECEPO.lat, 4)
+    expect(arc[arc.length - 1][0]).toBeCloseTo(YAVUR.lon, 4)
+    expect(arc[arc.length - 1][1]).toBeCloseTo(YAVUR.lat, 4)
+  })
+
+  it('keeps every sampled point on the ~9 nm radius from the station', () => {
+    const arc = dmeArc(PAE.lat, PAE.lon, ECEPO.lat, ECEPO.lon, YAVUR.lat, YAVUR.lon, true)
+    const center: [number, number] = [PAE.lon, PAE.lat]
+    for (const p of arc) expect(distNm(center, p)).toBeGreaterThan(8.5)
+    for (const p of arc) expect(distNm(center, p)).toBeLessThan(9.5)
+  })
+
+  it('bulges outside the straight chord (i.e. it is actually curved)', () => {
+    const arc = dmeArc(PAE.lat, PAE.lon, ECEPO.lat, ECEPO.lon, YAVUR.lat, YAVUR.lon, true)
+    const chord = turf.lineString([
+      [ECEPO.lon, ECEPO.lat],
+      [YAVUR.lon, YAVUR.lat],
+    ])
+    const mid = arc[Math.floor(arc.length / 2)]
+    // The arc midpoint sits well off the chord (a straight chord would be ~0).
+    const offNm = turf.pointToLineDistance(turf.point(mid), chord, { units: 'nauticalmiles' })
+    expect(offNm).toBeGreaterThan(0.3)
+  })
+
+  it('sweeps the short way in the turn direction (left turn from CEVLI stays east of the station)', () => {
+    const arc = dmeArc(PAE.lat, PAE.lon, CEVLI.lat, CEVLI.lon, YAVUR.lat, YAVUR.lon, false)
+    expect(arc[0][0]).toBeCloseTo(CEVLI.lon, 4)
+    expect(arc[arc.length - 1][1]).toBeCloseTo(YAVUR.lat, 4)
+    // Every point stays on the east side (lon >= station) — the ~51° short arc
+    // from 50.8° to 0° never wraps around the west side.
+    for (const p of arc) expect(p[0]).toBeGreaterThanOrEqual(PAE.lon - 0.02)
   })
 })

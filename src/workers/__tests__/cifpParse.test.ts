@@ -157,6 +157,19 @@ describe('parseCifp (KAWO FL34 end-to-end fixture)', () => {
     expect(kinds).toContain('pt') // the AW procedure turn
   })
 
+  it('tags approach feeder transitions (no MAP leg) feeder:true, but not the final segment', () => {
+    const proc = parseCifp(FIXTURE_TEXT).KAWO.procedures[0]
+    type PathProps = { kind: string; transitionId: string; feeder?: boolean }
+    const pathFeat = (tid: string) =>
+      proc.geojson.features.find(
+        (f) => (f.properties as PathProps).kind === 'path' && (f.properties as PathProps).transitionId === tid,
+      )!.properties as PathProps
+    // PAE feeder (PAE → SAVOY, never reaches the MAP) is a feeder.
+    expect(pathFeat('PAE').feeder).toBe(true)
+    // The final/common transition (SAVOY → WATON → RW34 MAP) is not.
+    expect(pathFeat('(common)').feeder).toBeUndefined()
+  })
+
   it('invokes the progress callback and finishes at 100%', () => {
     const onProgress = vi.fn()
     parseCifp(FIXTURE_TEXT, onProgress)

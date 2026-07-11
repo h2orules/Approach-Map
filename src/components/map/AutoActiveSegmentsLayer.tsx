@@ -14,34 +14,38 @@ interface Props {
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 
 /**
- * For each visible SID/STAR, draws only the legs that non-selected aircraft
- * are actively flying, thick in the procedure's own color. Non-active legs
- * stay at the base 1.5px drawn by ProcedureLayer.
+ * Draws the legs that non-selected aircraft are actively flying, thick in the
+ * procedure's own color: every leg of a visible SID/STAR, and the thin *feeder*
+ * legs of a visible approach (their final segment keeps its own width). Legs
+ * nobody is flying stay at the base width ProcedureLayer draws.
  */
 export function AutoActiveSegmentsLayer({ procedures }: Props) {
   const selectedHex = useSelectionStore((s) => selectedHexOf(s.selected))
   const [segments, setSegments] = useState<FeatureCollection>(EMPTY)
 
-  const sidStarProcs = useMemo(
-    () => procedures.filter((p) => p.type === 'SID' || p.type === 'STAR'),
+  // SID/STAR (every leg) plus approaches (feeder legs only, decided inside
+  // findActiveSegments) — an approach with no feeder features contributes
+  // nothing, so this stays cheap.
+  const eligibleProcs = useMemo(
+    () => procedures.filter((p) => p.type === 'SID' || p.type === 'STAR' || p.type === 'APPROACH'),
     [procedures],
   )
 
   useEffect(() => {
-    if (sidStarProcs.length === 0) {
+    if (eligibleProcs.length === 0) {
       setSegments(EMPTY)
       return
     }
 
     const recompute = () => {
       const aircraft = Array.from(useAircraftStore.getState().aircraftMap.values())
-      setSegments(findActiveSegments(aircraft, sidStarProcs, selectedHex))
+      setSegments(findActiveSegments(aircraft, eligibleProcs, selectedHex))
     }
 
     recompute()
     const id = setInterval(recompute, 1000)
     return () => clearInterval(id)
-  }, [sidStarProcs, selectedHex])
+  }, [eligibleProcs, selectedHex])
 
   return (
     <Source id="auto-active-segments" type="geojson" data={segments}>

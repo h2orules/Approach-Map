@@ -82,7 +82,7 @@ describe('cifpCache', () => {
       expect(await kv.get('data')).toBeUndefined()
       expect(await kv.get('airport:KSEA')).toEqual(FAKE_KSEA)
       expect(await kv.get('airport:KPAE')).toEqual(FAKE_KPAE)
-      expect(await kv.get('parserVersion')).toBe(21)
+      expect(await kv.get('parserVersion')).toBe(23)
       expect(await kv.get('airportKeys')).toEqual(['KSEA', 'KPAE'])
 
       const state = useCifpStore.getState()
@@ -100,7 +100,7 @@ describe('cifpCache', () => {
       const { __setKvStoreForTests, getCifpData, ensureAirport, useCifpStore } = await freshCifpCache()
       const dateStr = formatCycleDate(currentCycleEffectiveDate())
       const kv = createFakeStore({
-        parserVersion: 21,
+        parserVersion: 23,
         effectiveDate: dateStr,
         airportKeys: ['KSEA', 'KPAE'],
         'airport:KSEA': FAKE_KSEA,
@@ -154,7 +154,7 @@ describe('cifpCache', () => {
 
     it('re-fetches when the stored cycle date is stale', async () => {
       const { __setKvStoreForTests, getCifpData } = await freshCifpCache()
-      const kv = createFakeStore({ parserVersion: 21, effectiveDate: '2000-01-01', airportKeys: ['KSEA'] })
+      const kv = createFakeStore({ parserVersion: 23, effectiveDate: '2000-01-01', airportKeys: ['KSEA'] })
       __setKvStoreForTests(kv)
       fetchMock.mockImplementation(() => fetchFail())
 
@@ -166,7 +166,7 @@ describe('cifpCache', () => {
     it('re-fetches when airportKeys is missing/empty even though version and date are fresh', async () => {
       const { __setKvStoreForTests, getCifpData } = await freshCifpCache()
       const dateStr = formatCycleDate(currentCycleEffectiveDate())
-      const kv = createFakeStore({ parserVersion: 21, effectiveDate: dateStr, airportKeys: [] })
+      const kv = createFakeStore({ parserVersion: 23, effectiveDate: dateStr, airportKeys: [] })
       __setKvStoreForTests(kv)
       fetchMock.mockImplementation(() => fetchFail())
 
@@ -188,7 +188,7 @@ describe('cifpCache', () => {
 
       expect(await kv.get('data')).toBeUndefined()
       expect(await kv.get('airport:KSEA')).toEqual(FAKE_KSEA)
-      expect(await kv.get('parserVersion')).toBe(21)
+      expect(await kv.get('parserVersion')).toBe(23)
       expect(await kv.get('airportKeys')).toEqual(['KSEA'])
     })
   })
@@ -238,7 +238,7 @@ describe('cifpCache', () => {
 
       const { __setKvStoreForTests, ensureAirport, useCifpStore } = await freshCifpCache()
       const kv = createFakeStore({
-        parserVersion: 21,
+        parserVersion: 23,
         effectiveDate: formatCycleDate(currentCycleEffectiveDate()),
         airportKeys: Object.keys(result),
         'airport:KAWO': result.KAWO,
@@ -257,7 +257,7 @@ describe('cifpCache', () => {
       const { __setKvStoreForTests, getCifpData, useCifpStore } = await freshCifpCache()
       const dateStr = formatCycleDate(currentCycleEffectiveDate())
       const kv = createFakeStore({
-        parserVersion: 21,
+        parserVersion: 23,
         effectiveDate: dateStr,
         airportKeys: ['KSEA'],
         'airport:KSEA': FAKE_KSEA,
@@ -289,7 +289,7 @@ describe('cifpCache', () => {
       const dateStr = formatCycleDate(currentCycleEffectiveDate())
       expect(nextCycleDate().getTime() - Date.now()).toBeGreaterThan(0x7fffffff)
       const kv = createFakeStore({
-        parserVersion: 21,
+        parserVersion: 23,
         effectiveDate: dateStr,
         airportKeys: ['KSEA'],
         'airport:KSEA': FAKE_KSEA,
@@ -318,7 +318,7 @@ describe('cifpCache', () => {
       const { __setKvStoreForTests, getCifpData, setupVisibilityRefresh, useCifpStore } = await freshCifpCache()
       const dateStr = formatCycleDate(currentCycleEffectiveDate())
       const kv = createFakeStore({
-        parserVersion: 21,
+        parserVersion: 23,
         effectiveDate: dateStr,
         airportKeys: ['KSEA'],
         'airport:KSEA': FAKE_KSEA,
@@ -350,7 +350,7 @@ describe('cifpCache', () => {
       const { __setKvStoreForTests, getCifpData, setupVisibilityRefresh } = await freshCifpCache()
       const dateStr = formatCycleDate(currentCycleEffectiveDate())
       const kv = createFakeStore({
-        parserVersion: 21,
+        parserVersion: 23,
         effectiveDate: dateStr,
         airportKeys: ['KSEA'],
         'airport:KSEA': FAKE_KSEA,

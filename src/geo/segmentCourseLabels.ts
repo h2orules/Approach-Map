@@ -39,8 +39,9 @@ export interface CourseLabel {
   noPt: boolean
 }
 
-// Course reversals / holds render as their own shapes, not straight segments.
-const SKIP_TERMS = new Set(['PI', 'HM', 'HF', 'HA'])
+// Course reversals / holds / DME arcs render as their own shapes, not straight
+// segments — a chord course label on a curved arc (AF) would be misleading.
+const SKIP_TERMS = new Set(['PI', 'HM', 'HF', 'HA', 'AF'])
 
 /**
  * Group a transition's straight legs into FAA-style magnetic course labels.

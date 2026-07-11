@@ -43,7 +43,10 @@ import { createIndexedDbStore, type KVStore } from './db'
 // key). useCifpStore.data now holds only lazily-warmed airports (via
 // ensureAirport(key)) instead of the whole country, so a cold start from IDB
 // doesn't load every airport's geometry into memory up front.
-const PARSER_VERSION = 21
+// v22: DME-arc ("AF") legs render as a constant-radius arc around their
+// reference navaid (ProcedureLeg.arc) instead of a straight chord — e.g. KPAE
+// VOR-A around the PAE VOR.
+const PARSER_VERSION = 22
 
 export type CifpStatus = 'idle' | 'fetching' | 'parsing' | 'ready' | 'error'
 

@@ -51,21 +51,46 @@ function pathAt(
 }
 
 describe('scanTerrain — MVA sector', () => {
-  it('clears the sector minimum with margin -> null', () => {
+  it('at or above the sector minimum -> null, DEM never consulted', () => {
     const elevAt = vi.fn()
     const result = scanTerrain(pathAt(IN_SECTOR, 5100), [SECTOR], elevAt, BASE_OPTS)
     expect(result).toBeNull()
-    expect(elevAt).not.toHaveBeenCalled() // MVA covers this point — DEM never consulted
+    expect(elevAt).not.toHaveBeenCalled() // above the vectoring floor — clear
   })
 
-  it('below the sector minimum -> alert', () => {
-    const result = scanTerrain(pathAt(IN_SECTOR, 4500), [SECTOR], vi.fn(), BASE_OPTS)
+  it('below the floor but comfortable DEM ground clearance -> null (VFR under a Bravo shelf)', () => {
+    // 1375 ft over ground at 0 ft = 1375 ft clearance — well above the 1000 ft
+    // alert threshold — even though it's far below the 5000 ft MVA floor. This
+    // is the FFL640 case: below the vectoring minimum is not a terrain conflict.
+    const elevAt = vi.fn().mockReturnValue(0)
+    const result = scanTerrain(pathAt(IN_SECTOR, 1375), [SECTOR], elevAt, BASE_OPTS)
+    expect(result).toBeNull()
+    expect(elevAt).toHaveBeenCalledWith(IN_SECTOR.lat, IN_SECTOR.lon)
+  })
+
+  it('below the floor and marginal DEM clearance -> DEM tier wins (alert)', () => {
+    // 950 ft over ground at 0 ft = 950 ft clearance -> alert, regardless of MVA.
+    const elevAt = vi.fn().mockReturnValue(0)
+    const result = scanTerrain(pathAt(IN_SECTOR, 950), [SECTOR], elevAt, BASE_OPTS)
     expect(result).toBe('alert')
   })
 
-  it('more than TERRAIN_MVA_WARN_BELOW_FT under the sector minimum -> warning', () => {
-    // 5000 - 900 = 4100; 4000 is below that.
-    const result = scanTerrain(pathAt(IN_SECTOR, 4000), [SECTOR], vi.fn(), BASE_OPTS)
+  it('below the floor and very low DEM clearance -> warning', () => {
+    const elevAt = vi.fn().mockReturnValue(0)
+    const result = scanTerrain(pathAt(IN_SECTOR, 90), [SECTOR], elevAt, BASE_OPTS)
+    expect(result).toBe('warning')
+  })
+
+  it('below the floor with a COLD DEM tile -> conservative MVA-floor fallback (alert)', () => {
+    const elevAt = vi.fn().mockReturnValue(undefined)
+    const result = scanTerrain(pathAt(IN_SECTOR, 4500), [SECTOR], elevAt, BASE_OPTS)
+    expect(result).toBe('alert')
+  })
+
+  it('cold DEM tile, more than TERRAIN_MVA_WARN_BELOW_FT under the floor -> warning', () => {
+    // 5000 - 900 = 4100; 4000 is below that, DEM cold -> MVA-floor fallback.
+    const elevAt = vi.fn().mockReturnValue(undefined)
+    const result = scanTerrain(pathAt(IN_SECTOR, 4000), [SECTOR], elevAt, BASE_OPTS)
     expect(result).toBe('warning')
   })
 

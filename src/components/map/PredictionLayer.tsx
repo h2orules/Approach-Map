@@ -54,15 +54,18 @@ export function PredictionLayer() {
   const selectedHex = useSelectionStore((s) => selectedHexOf(s.selected))
   const showPredictedPaths = useSettingsStore((s) => s.showPredictedPaths)
   const predictionMinutes = useSettingsStore((s) => s.predictionMinutes)
+  const showTrafficAlerts = useSettingsStore((s) => s.showTrafficAlerts)
 
+  // Force-shown conflict paths are a traffic-alert feature — gated with it.
   const conflictHexes = useMemo(() => {
     const set = new Set<string>()
+    if (!showTrafficAlerts) return set
     for (const pair of conflictPairs) {
       set.add(pair.hexA)
       set.add(pair.hexB)
     }
     return set
-  }, [conflictPairs])
+  }, [conflictPairs, showTrafficAlerts])
 
   const selected = useMemo(() => {
     if (!showPredictedPaths || !selectedHex || conflictHexes.has(selectedHex)) {
@@ -84,6 +87,12 @@ export function PredictionLayer() {
   const conflict = useMemo(() => {
     const lines: Feature<LineString>[] = []
     const dots: Feature<Point>[] = []
+    if (!showTrafficAlerts) {
+      return {
+        lines: { type: 'FeatureCollection', features: lines } as FeatureCollection<LineString>,
+        dots: { type: 'FeatureCollection', features: dots } as FeatureCollection<Point>,
+      }
+    }
     for (const pair of conflictPairs) {
       const color = tierColor(pair.tier)
       for (const hex of [pair.hexA, pair.hexB]) {
@@ -100,7 +109,7 @@ export function PredictionLayer() {
       lines: { type: 'FeatureCollection', features: lines } as FeatureCollection<LineString>,
       dots: { type: 'FeatureCollection', features: dots } as FeatureCollection<Point>,
     }
-  }, [conflictPairs, predictions])
+  }, [conflictPairs, predictions, showTrafficAlerts])
 
   return (
     <>

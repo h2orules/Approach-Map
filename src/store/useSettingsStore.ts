@@ -25,6 +25,12 @@ interface SettingsStore {
   predictionMinutes: 1 | 2 | 3 | 5
   /** Draw range rings around the selected aircraft. */
   showRangeRings: boolean
+  /** Draw predicted hold-entry paths (direct/teardrop/parallel). Off by default. */
+  showHoldEntries: boolean
+  /** Show terrain (MSAW-style) alert/warning chrome. */
+  showTerrainAlerts: boolean
+  /** Show traffic alert/warning + TCAS TA/RA chrome and force-shown conflict paths. */
+  showTrafficAlerts: boolean
   /** Slider position (0–19) for the lower altitude filter handle. */
   altFilterMin: number
   /** Slider position (0–19) for the upper altitude filter handle. */
@@ -43,6 +49,9 @@ interface SettingsStore {
   togglePredictedPaths: () => void
   setPredictionMinutes: (m: 1 | 2 | 3 | 5) => void
   toggleRangeRings: () => void
+  toggleHoldEntries: () => void
+  toggleTerrainAlerts: () => void
+  toggleTrafficAlerts: () => void
   setAltFilterMin: (pos: number) => void
   setAltFilterMax: (pos: number) => void
 }
@@ -63,6 +72,9 @@ export const useSettingsStore = create<SettingsStore>()(
       showPredictedPaths: true,
       predictionMinutes: 3,
       showRangeRings: false,
+      showHoldEntries: false,
+      showTerrainAlerts: true,
+      showTrafficAlerts: true,
       altFilterMin: 0,
       altFilterMax: 19,
 
@@ -81,6 +93,9 @@ export const useSettingsStore = create<SettingsStore>()(
       togglePredictedPaths: () => set((s) => ({ showPredictedPaths: !s.showPredictedPaths })),
       setPredictionMinutes: (m) => set({ predictionMinutes: m }),
       toggleRangeRings: () => set((s) => ({ showRangeRings: !s.showRangeRings })),
+      toggleHoldEntries: () => set((s) => ({ showHoldEntries: !s.showHoldEntries })),
+      toggleTerrainAlerts: () => set((s) => ({ showTerrainAlerts: !s.showTerrainAlerts })),
+      toggleTrafficAlerts: () => set((s) => ({ showTrafficAlerts: !s.showTrafficAlerts })),
       setAltFilterMin: (pos) => set({ altFilterMin: Math.max(0, Math.min(19, pos)) }),
       setAltFilterMax: (pos) => set({ altFilterMax: Math.max(0, Math.min(19, pos)) }),
     }),

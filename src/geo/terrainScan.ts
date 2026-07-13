@@ -1,8 +1,12 @@
-// Pure MSAW-style terrain scan over a predicted path: MVA sectors are
-// checked first (they already bake in an obstacle buffer), and only where no
-// sector covers a point does the scan fall back to DEM ground elevation
-// (src/services/terrainElevation.ts). Thresholds follow ForeFlight Hazard
-// Advisor conventions (amber "alert" / red "warning").
+// Pure MSAW-style terrain scan over a predicted path. Terrain proximity is
+// judged by actual DEM ground clearance (src/services/terrainElevation.ts);
+// MVA sectors gate WHERE that matters — below an MVA floor the DEM clearance
+// decides the tier, and the MVA floor itself is only used (conservatively) as
+// a fallback where the DEM tile isn't cached yet. Above the MVA floor, or with
+// comfortable DEM clearance below it, there's no conflict — an aircraft well
+// above the ground but under the vectoring minimum (VFR beneath a Bravo shelf)
+// is fine. Thresholds follow ForeFlight Hazard Advisor conventions (amber
+// "alert" / red "warning").
 import type { Position } from 'geojson'
 import type { MvaSector } from '../utils/aixmMva'
 import type { PredictedPath, PredPoint } from '../types/path'
@@ -176,9 +180,26 @@ export function scanTerrain(
 
     if (containing.length > 0) {
       const minAltFt = Math.min(...containing.map((c) => c.sector.minAltFt))
-      if (point.altFt < minAltFt - TERRAIN_MVA_WARN_BELOW_FT) return 'warning'
-      if (point.altFt < minAltFt) worst = 'alert'
-      continue // MVA covers this point — no DEM check.
+      if (point.altFt >= minAltFt) continue // above the vectoring floor — clear.
+      // Below the MVA floor. The floor is a minimum VECTORING altitude
+      // (highest obstacle + ~1000 ft + airspace buffers), NOT ground
+      // proximity — an aircraft can be far below it yet comfortably above the
+      // actual terrain (e.g. VFR under a Bravo shelf over flat ground, the
+      // FFL640 case). Corroborate with the real DEM ground clearance and let
+      // it win: only when DEM confirms marginal clearance — or DEM is cold —
+      // does the MVA penetration stand.
+      const groundFt = elevAt(point.lat, point.lon)
+      if (groundFt !== undefined) {
+        const clearanceFt = point.altFt - groundFt
+        if (clearanceFt < TERRAIN_WARN_CLEARANCE_FT) return 'warning'
+        if (clearanceFt < TERRAIN_ALERT_CLEARANCE_FT) worst = 'alert'
+        // else: good ground clearance → below-MVA is not a terrain conflict.
+      } else {
+        // DEM tile not cached — fall back to the conservative MVA-floor logic.
+        if (point.altFt < minAltFt - TERRAIN_MVA_WARN_BELOW_FT) return 'warning'
+        worst = 'alert'
+      }
+      continue
     }
 
     const groundFt = elevAt(point.lat, point.lon)

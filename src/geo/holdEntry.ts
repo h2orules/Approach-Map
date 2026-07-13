@@ -6,6 +6,9 @@ import {
   HOLD_ENTRY_PASS_NM,
   HOLD_ENTRY_ALT_TOL_FT,
   HOLD_ENTRY_CLEAR_POLLS,
+  HOLD_ENTRY_CONFIRM_POLLS,
+  HOLD_ENTRY_ABANDON_BRG_DEG,
+  HOLD_ENTRY_MAX_CLIMB_FPM,
   HOLD_ENTRY_TEARDROP_OFFSET_DEG,
   HOLD_MATCH_DIR_DEG,
 } from '../config/constants'
@@ -26,8 +29,6 @@ const norm360 = (d: number): number => ((d % 360) + 360) % 360
 const FIX_CROSS_NM = 0.5
 const ESTABLISHED_TRACK_DEG = 20
 const ESTABLISHED_XT_NM = 0.5
-// Lateral offset of the drawn parallel-entry outbound leg on the non-holding side.
-const PARALLEL_OFFSET_NM = 0.5
 // Default drawn leg length when the CIFP hold feature carries none.
 const DEFAULT_HOLD_LEG_NM = 4
 // Clear an entry that has gone this long without a qualifying poll, regardless
@@ -237,19 +238,41 @@ function turnArc(from: Pt, hIn: number, hOut: number, right: boolean, r: number)
   return out
 }
 
+const NM_PER_DEG = 60
+
 /**
- * A 45°-style intercept from `from` back onto the hold's inbound course line,
- * then the final run to the fix. Places the join point so the last segment
- * lies exactly on the inbound course. Returns `[joinPoint, fix]`.
+ * Join point where the ray leaving `from` on heading `hdg` crosses the hold's
+ * inbound-course line (the line through `fix` at bearing `lineBrg`). Because the
+ * join lies ON that ray, the segment `from → join` is collinear with the
+ * roll-out heading (no dog-leg), and because it lies ON the course line, the
+ * following `join → fix` segment runs along the inbound course. This replaced a
+ * project-onto-the-course version whose join point was NOT on the roll-out ray,
+ * producing a visible mid-path jog where the arc met the intercept. Planar
+ * (equirectangular about the fix) — exact at hold scale. Falls back to the
+ * foot of the perpendicular when the ray points away from the line.
  */
-function interceptToFix(from: Pt, fix: Pt, recip: number): Pt[] {
-  const d = turf.distance(turf.point(fix), turf.point(from), NM)
-  const brg = turf.bearing(turf.point(fix), turf.point(from))
-  const theta = ((brg - recip + 540) % 360) - 180
-  const along = d * Math.cos(theta * DEG)
-  const cross = Math.abs(d * Math.sin(theta * DEG))
-  const backNm = Math.max(along - cross, 0.05)
-  return [dest(fix, backNm, recip), fix]
+function courseIntercept(from: Pt, hdg: number, fix: Pt, lineBrg: number): Pt {
+  const cosLat = Math.cos(fix[1] * DEG)
+  const fx = (from[0] - fix[0]) * NM_PER_DEG * cosLat
+  const fy = (from[1] - fix[1]) * NM_PER_DEG
+  const rx = Math.sin(hdg * DEG)
+  const ry = Math.cos(hdg * DEG)
+  const lx = Math.sin(lineBrg * DEG)
+  const ly = Math.cos(lineBrg * DEG)
+  const det = lx * ry - rx * ly
+  let jx: number
+  let jy: number
+  const t = Math.abs(det) < 1e-9 ? -1 : (fx * ly - lx * fy) / det
+  if (t >= 0) {
+    jx = fx + t * rx
+    jy = fy + t * ry
+  } else {
+    // Ray points away from the line — fall back to the perpendicular foot.
+    const s = fx * lx + fy * ly
+    jx = s * lx
+    jy = s * ly
+  }
+  return [fix[0] + jx / (NM_PER_DEG * cosLat), fix[1] + jy / NM_PER_DEG]
 }
 
 /**
@@ -294,17 +317,24 @@ export function holdEntryPath(spec: HoldSpec, entry: HoldEntryKind): [number, nu
     const T = dest(F, L, out)
     const intercept = norm360(inb + (right ? -45 : 45))
     const arc = turnArc(T, out, intercept, right, r)
-    return [F, T, ...arc.slice(1), ...interceptToFix(arc[arc.length - 1], F, recip)]
+    const join = courseIntercept(arc[arc.length - 1], intercept, F, recip)
+    return [F, T, ...arc.slice(1), join, F]
   }
 
-  // Parallel: outbound past the fix parallel to the reciprocal, offset onto the
-  // NON-holding side, one leg length, then a >180° turn in the hold's direction
-  // (through the outbound and inbound headings to a 45° intercept heading),
-  // rejoining the inbound course outside the fix.
-  const nonSide = norm360(inb + (right ? -90 : 90))
-  const OE = dest(dest(F, L, recip), PARALLEL_OFFSET_NM, nonSide)
-  const arc = turnArc(OE, recip, norm360(inb + (right ? 45 : -45)), right, r)
-  return [F, OE, ...arc.slice(1), ...interceptToFix(arc[arc.length - 1], F, recip)]
+  // Parallel (AIM 5-3-8): from the fix, fly the RECIPROCAL of the inbound course
+  // outbound — overlying the hold's own inbound leg, right on the course line —
+  // for one leg length, then a course-reversal turn in the OPPOSITE direction to
+  // the hold that curves INTO the holding (protected) side and rolls out
+  // intercepting the inbound course back to the fix. The turn is opposite the
+  // hold's direction on purpose: the aircraft parallels outbound on the
+  // non-holding side, so it must reverse toward the protected side. Turning the
+  // hold's OWN direction (the old bug) swung the entry out onto the far,
+  // non-holding side — the wrong side entirely.
+  const OE = dest(F, L, recip)
+  const rollout = norm360(inb + (right ? -45 : 45))
+  const arc = turnArc(OE, recip, rollout, !right, r)
+  const join = courseIntercept(arc[arc.length - 1], rollout, F, recip)
+  return [F, OE, ...arc.slice(1), join, F]
 }
 
 // ── Trigger evaluation ──────────────────────────────────────────────────────
@@ -334,6 +364,10 @@ function evaluateTrigger(
   spec: HoldSpec,
   pred: PredictedPath | undefined,
 ): Qualification | null {
+  // Climbing → departing or overflying, not entering a hold (holds are level or
+  // descending). Catches the climbing-overflight-crossing-a-fix false trigger.
+  if (ac.baroRate > HOLD_ENTRY_MAX_CLIMB_FPM) return null
+
   const acPt = turf.point([ac.lon, ac.lat])
   const fixPt = turf.point([spec.fixLon, spec.fixLat])
   const distNm = turf.distance(acPt, fixPt, NM)
@@ -388,10 +422,14 @@ export interface HoldEntryState {
   entries: Map<string, HoldEntryPrediction>
   /** Last poll's distance-to-fix per hex — divergence bookkeeping. */
   lastDistNm: Map<string, number>
+  /** Consecutive qualifying polls per hex that has not yet been drawn — an
+   *  entry only appears once this reaches HOLD_ENTRY_CONFIRM_POLLS, so a
+   *  transient one-poll qualification (a maneuvering aircraft) never latches. */
+  pending: Map<string, { specKey: string; count: number }>
 }
 
 export function emptyHoldEntryState(): HoldEntryState {
-  return { entries: new Map(), lastDistNm: new Map() }
+  return { entries: new Map(), lastDistNm: new Map(), pending: new Map() }
 }
 
 export interface HoldEntryInput {
@@ -414,6 +452,7 @@ export interface HoldEntryInput {
 export function reduceHoldEntries(prev: HoldEntryState, input: HoldEntryInput): HoldEntryState {
   const entries = new Map<string, HoldEntryPrediction>()
   const lastDistNm = new Map<string, number>()
+  const pending = new Map<string, { specKey: string; count: number }>()
   const specByKey = new Map(input.specs.map((s) => [s.key, s]))
 
   for (const ac of input.aircraft) {
@@ -431,7 +470,18 @@ export function reduceHoldEntries(prev: HoldEntryState, input: HoldEntryInput): 
     }
 
     if (!prevRec) {
+      // Not yet drawn — require sustained qualification (HOLD_ENTRY_CONFIRM_POLLS
+      // consecutive polls on the same spec) before an entry appears, so a
+      // maneuvering aircraft that momentarily points at a fix doesn't strand a
+      // loop on the map (the FFL640 case).
       if (!best) continue
+      const prevPending = prev.pending.get(hex)
+      const count =
+        prevPending && prevPending.specKey === best.spec.key ? prevPending.count + 1 : 1
+      if (count < HOLD_ENTRY_CONFIRM_POLLS) {
+        pending.set(hex, { specKey: best.spec.key, count })
+        continue
+      }
       const entry = classifyHoldEntry(best.arrivalTrack, best.spec.inboundCourseTrue, best.spec.turnRight)
       entries.set(hex, {
         hex,
@@ -482,6 +532,19 @@ export function reduceHoldEntries(prev: HoldEntryState, input: HoldEntryInput): 
         crossedFix,
       }
     } else {
+      // Pre-crossing abandon: before the aircraft reaches the fix, if its track
+      // has swung well off the bearing to the fix it isn't going to enter —
+      // clear at once instead of waiting out HOLD_ENTRY_CLEAR_POLLS (a stale
+      // loop lingering behind a maneuvering aircraft is exactly what looked
+      // wrong). Gated on !crossedFix because a hold entry legitimately turns the
+      // aircraft away from the fix once it's executing.
+      if (!crossedFix) {
+        const brgToFix = turf.bearing(
+          turf.point([ac.lon, ac.lat]),
+          turf.point([spec.fixLon, spec.fixLat]),
+        )
+        if (bearingDelta(ac.track, brgToFix) > HOLD_ENTRY_ABANDON_BRG_DEG) continue
+      }
       // Hard stale-out: clear regardless of geometry once too long has passed
       // without a qualifying poll (breaks the "distance flat, trigger failing
       // forever" deadlock that would otherwise never increment divergedPolls).
@@ -496,5 +559,5 @@ export function reduceHoldEntries(prev: HoldEntryState, input: HoldEntryInput): 
     lastDistNm.set(hex, distNm)
   }
 
-  return { entries, lastDistNm }
+  return { entries, lastDistNm, pending }
 }

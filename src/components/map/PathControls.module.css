@@ -59,6 +59,19 @@
   box-shadow: inset 0 0 0 1.5px #1a1a1a;
 }
 
+.dotHold {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1.5px #1a1a1a;
+}
+
+.dotTerrain {
+  background: #fbbf24; /* ALERT_AMBER */
+}
+
+.dotTraffic {
+  background: #ef4444; /* WARNING_RED */
+}
+
 .off .dot {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px currentColor;

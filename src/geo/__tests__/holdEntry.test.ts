@@ -10,6 +10,7 @@ import {
   type HoldEntryState,
 } from '../holdEntry'
 import { dest, holdTrack } from '../procedureShapes'
+import { HOLD_ENTRY_CONFIRM_POLLS } from '../../config/constants'
 import type { Procedure, AltConstraint } from '../../types/procedure'
 import type { InterpolatedAircraft } from '../../types/aircraft'
 import type { HoldSpec, PredictedPath } from '../../types/path'
@@ -106,6 +107,25 @@ function holdFeature(over: Record<string, unknown> = {}, coords?: Pt[]): Feature
     },
     geometry: { type: 'LineString', coordinates: coords ?? holdTrack(FIX_LAT, FIX_LON, 360, true, 4) },
   }
+}
+
+/**
+ * Feed HOLD_ENTRY_CONFIRM_POLLS consecutive qualifying polls (1000ms apart,
+ * starting at nowMs 0) so a fresh hex clears the confirm gate and an entry
+ * appears on the final poll — `reduceHoldEntries` no longer creates an entry
+ * on the first qualifying poll (the FFL640 fix). `makeInputAt(nowMs)` must
+ * return an input that qualifies for the SAME spec every time it's called, or
+ * the pending count resets instead of accumulating.
+ */
+function confirmEntry(
+  makeInputAt: (nowMs: number) => HoldEntryInput,
+  start: HoldEntryState = emptyHoldEntryState(),
+): HoldEntryState {
+  let s = start
+  for (let i = 0; i < HOLD_ENTRY_CONFIRM_POLLS; i++) {
+    s = reduceHoldEntries(s, makeInputAt(i * 1000))
+  }
+  return s
 }
 
 function makeProc(over: Partial<Procedure> = {}): Procedure {
@@ -320,12 +340,21 @@ describe('holdEntryPath', () => {
     expect(path[1][0]).toBeLessThan(FIX_LON) // west = holding side for left turns
   })
 
-  it('parallel outbound lies on the NON-holding side', () => {
+  it('parallel outbound overlies the inbound course; entry on the holding side', () => {
+    // The outbound leg flies the reciprocal of the inbound course FROM the fix,
+    // overlying the hold's own inbound leg — on the course line (longitude ≈ fix
+    // for an inbound-360 hold), not offset to either side.
     const rightPath = holdEntryPath(spec, 'parallel')
-    expect(rightPath[1][0]).toBeLessThan(FIX_LON) // west of an inbound-360 right hold
+    expect(Math.abs(rightPath[1][0] - FIX_LON)).toBeLessThan(0.02)
+    // The reversal turns INTO the protected side, so the whole entry sits on the
+    // holding side — same as the drawn racetrack, never swung to the far side.
+    const rightTrack = centroidSide(holdTrack(FIX_LAT, FIX_LON, 360, true, 4), FIX, 360)
+    expect(Math.sign(centroidSide(rightPath, FIX, 360))).toBe(Math.sign(rightTrack))
 
     const leftPath = holdEntryPath(makeSpec({ turnRight: false }), 'parallel')
-    expect(leftPath[1][0]).toBeGreaterThan(FIX_LON)
+    expect(Math.abs(leftPath[1][0] - FIX_LON)).toBeLessThan(0.02)
+    const leftTrack = centroidSide(holdTrack(FIX_LAT, FIX_LON, 360, false, 4), FIX, 360)
+    expect(Math.sign(centroidSide(leftPath, FIX, 360))).toBe(Math.sign(leftTrack))
   })
 
   it('parallel rejoins the inbound course outside the fix', () => {
@@ -374,9 +403,10 @@ describe('holdEntryPath MGNUM-style geometry', () => {
       // Same sign as the drawn racetrack — never mirrored to the far side.
       expect(Math.sign(entrySide)).toBe(Math.sign(trackSide))
     }
-    // Parallel is deliberately drawn on the NON-holding side.
+    // Parallel too: it parallels outbound on the course, then reverses INTO the
+    // protected side, so it also sits on the holding side (same as the racetrack).
     const parSide = centroidSide(holdEntryPath(spec, 'parallel'), FIX, INB)
-    expect(Math.sign(parSide)).toBe(-Math.sign(trackSide))
+    expect(Math.sign(parSide)).toBe(Math.sign(trackSide))
   })
 
   it.each([true, false])('no entry path has a spurious mid-path reversal (right=%s)', (right) => {
@@ -439,7 +469,7 @@ describe('direct entry superimposes on the drawn racetrack', () => {
 
 describe('reduceHoldEntries trigger gates', () => {
   it('creates an entry when every gate passes', () => {
-    const s = reduceHoldEntries(emptyHoldEntryState(), makeInput())
+    const s = confirmEntry((nowMs) => makeInput({ nowMs }))
     const rec = s.entries.get(HEX)
     expect(rec).toBeDefined()
     expect(rec!.specKey).toBe('KXYZ-R34|SAVOY')
@@ -451,17 +481,34 @@ describe('reduceHoldEntries trigger gates', () => {
 
   it('classifies from the predicted arrival track (parallel case)', () => {
     const pos = dest(FIX, 5, 300)
-    const input = makeInput({
-      aircraft: [makeAc({ lat: pos[1], lon: pos[0], interpLat: pos[1], interpLon: pos[0], track: 120 })],
-      predictions: new Map([[HEX, makePred(4000, 300)]]),
-    })
-    const s = reduceHoldEntries(emptyHoldEntryState(), input)
+    const makeAt = (nowMs: number): HoldEntryInput =>
+      makeInput({
+        nowMs,
+        aircraft: [makeAc({ lat: pos[1], lon: pos[0], interpLat: pos[1], interpLon: pos[0], track: 120 })],
+        predictions: new Map([[HEX, makePred(4000, 300)]]),
+      })
+    const s = confirmEntry(makeAt)
     expect(s.entries.get(HEX)?.entry).toBe('parallel') // r = 120
   })
 
   it('rejects a track 11° off the bearing to the fix', () => {
     const s = reduceHoldEntries(emptyHoldEntryState(), makeInput({ aircraft: [makeAc({ track: 41 })] }))
     expect(s.entries.size).toBe(0)
+  })
+
+  it('rejects a climbing aircraft (departing/overflying, not holding)', () => {
+    // Every other gate passes, but baroRate exceeds HOLD_ENTRY_MAX_CLIMB_FPM.
+    const s = confirmEntry((nowMs) =>
+      makeInput({ nowMs, aircraft: [makeAc({ baroRate: 1500 })] }),
+    )
+    expect(s.entries.size).toBe(0)
+  })
+
+  it('allows a level or descending aircraft', () => {
+    const s = confirmEntry((nowMs) =>
+      makeInput({ nowMs, aircraft: [makeAc({ baroRate: -600 })] }),
+    )
+    expect(s.entries.get(HEX)).toBeDefined()
   })
 
   it('rejects an ETA over 180 s', () => {
@@ -500,15 +547,13 @@ describe('reduceHoldEntries trigger gates', () => {
 
   it('rejects a predicted altitude 2500 ft above an AT_OR_BELOW constraint', () => {
     const spec = makeSpec({ alt: { type: 'AT_OR_BELOW', low: 4000 } })
-    const bad = reduceHoldEntries(
-      emptyHoldEntryState(),
-      makeInput({ specs: [spec], predictions: new Map([[HEX, makePred(6500)]]) }),
+    const bad = confirmEntry((nowMs) =>
+      makeInput({ nowMs, specs: [spec], predictions: new Map([[HEX, makePred(6500)]]) }),
     )
     expect(bad.entries.size).toBe(0)
 
-    const ok = reduceHoldEntries(
-      emptyHoldEntryState(),
-      makeInput({ specs: [spec], predictions: new Map([[HEX, makePred(4500)]]) }),
+    const ok = confirmEntry((nowMs) =>
+      makeInput({ nowMs, specs: [spec], predictions: new Map([[HEX, makePred(4500)]]) }),
     )
     expect(ok.entries.size).toBe(1)
   })
@@ -526,7 +571,7 @@ describe('reduceHoldEntries trigger gates', () => {
 
 describe('reduceHoldEntries lifecycle', () => {
   function created(): HoldEntryState {
-    return reduceHoldEntries(emptyHoldEntryState(), makeInput())
+    return confirmEntry((nowMs) => makeInput({ nowMs }))
   }
 
   it('keeps path identity stable across qualifying polls', () => {
@@ -593,9 +638,15 @@ describe('reduceHoldEntries lifecycle', () => {
 
   function divergingInput(nowMs: number, distOut: number): HoldEntryInput {
     const pos = dest(FIX, distOut, 210)
+    // Track is 20° off the bearing to the fix (30°): outside the qualify gate
+    // (HOLD_ENTRY_BRG_DEG=10, so it never re-qualifies) but inside the
+    // pre-crossing abandon gate (HOLD_ENTRY_ABANDON_BRG_DEG=45), so this
+    // exercises the gradual diverge counter rather than the immediate abandon
+    // clear (a directly-away track like the old 210 now triggers that instead
+    // — covered separately below).
     return makeInput({
       nowMs,
-      aircraft: [makeAc({ lat: pos[1], lon: pos[0], interpLat: pos[1], interpLon: pos[0], track: 210 })],
+      aircraft: [makeAc({ lat: pos[1], lon: pos[0], interpLat: pos[1], interpLon: pos[0], track: 50 })],
     })
   }
 
@@ -615,9 +666,12 @@ describe('reduceHoldEntries lifecycle', () => {
     // strand the loop forever. The stale-out must clear it regardless.
     const stalled = (nowMs: number): HoldEntryInput => {
       const pos = dest(FIX, 5, 210)
+      // Track 30° off the bearing to the fix: fails to qualify but stays
+      // inside the pre-crossing abandon gate, so only the stale-timeout path
+      // (not the immediate abandon clear) can retire this entry.
       return makeInput({
         nowMs,
-        aircraft: [makeAc({ lat: pos[1], lon: pos[0], interpLat: pos[1], interpLon: pos[0], track: 300 })],
+        aircraft: [makeAc({ lat: pos[1], lon: pos[0], interpLat: pos[1], interpLon: pos[0], track: 60 })],
       })
     }
     let s = created() // lastQualifiedMs = 1000
@@ -689,7 +743,7 @@ describe('reduceHoldEntries LOFAL freeze', () => {
 
   it('creates a DIRECT entry coincident with the drawn racetrack, then freezes it past the fix', () => {
     // ASA1508-style: NW of the fix arriving ~135° (r ≈ 10 for the left hold → direct).
-    let s = reduceHoldEntries(emptyHoldEntryState(), inputAt(1000, 315, 5, 135, makePred(4000, 315)))
+    let s = confirmEntry((nowMs) => inputAt(nowMs, 315, 5, 135, makePred(4000, 315)))
     const rec1 = s.entries.get(HEX)
     expect(rec1).toBeDefined()
     expect(rec1!.entry).toBe('direct')
@@ -756,5 +810,133 @@ describe('reduceHoldEntries LOFAL freeze', () => {
     expect(after.specKey).toBe(spec.key)
     expect(after.path).toBe(before.path)
     expect(after.entry).toBe(before.entry)
+  })
+})
+
+// ── FFL640 regression: transient qualification must not latch ──────────────
+
+describe('reduceHoldEntries confirm-polls latch (FFL640 regression)', () => {
+  it('does NOT create an entry from a single qualifying poll that is not repeated', () => {
+    // First poll qualifies — pending only, no entry yet.
+    const s1 = reduceHoldEntries(emptyHoldEntryState(), makeInput({ nowMs: 0 }))
+    expect(s1.entries.size).toBe(0)
+    expect(s1.pending.get(HEX)).toEqual({ specKey: 'KXYZ-R34|SAVOY', count: 1 })
+
+    // Next poll: track swings away (e.g. the aircraft was maneuvering) — no
+    // longer heading at the fix, so it fails to qualify. This must NEVER
+    // latch an entry, even transiently, or a loop strands on screen behind a
+    // maneuvering aircraft (the field failure this guards against).
+    const s2 = reduceHoldEntries(s1, makeInput({ nowMs: 1000, aircraft: [makeAc({ track: 90 })] }))
+    expect(s2.entries.size).toBe(0)
+    expect(s2.pending.has(HEX)).toBe(false)
+  })
+
+  it('DOES create an entry after HOLD_ENTRY_CONFIRM_POLLS consecutive qualifying polls', () => {
+    const s = confirmEntry((nowMs) => makeInput({ nowMs }))
+    const rec = s.entries.get(HEX)
+    expect(rec).toBeDefined()
+    expect(rec!.specKey).toBe('KXYZ-R34|SAVOY')
+  })
+})
+
+// ── Pre-crossing abandon regression ─────────────────────────────────────────
+
+describe('reduceHoldEntries pre-crossing abandon', () => {
+  function farEntry(): HoldEntryState {
+    return confirmEntry((nowMs) => makeInput({ nowMs }))
+  }
+
+  it('clears immediately when track swings >45° off the bearing to the fix before crossing', () => {
+    const s1 = farEntry()
+    expect(s1.entries.get(HEX)?.crossedFix).toBe(false)
+
+    // Track 60° off the bearing to the fix (30°) — over HOLD_ENTRY_ABANDON_BRG_DEG
+    // (45°) and short of the fix (still ~5 nm out, crossedFix false): clears
+    // THIS poll instead of waiting out HOLD_ENTRY_CLEAR_POLLS.
+    const s2 = reduceHoldEntries(s1, makeInput({ nowMs: 2000, aircraft: [makeAc({ track: 90 })] }))
+    expect(s2.entries.has(HEX)).toBe(false)
+  })
+
+  it('does NOT immediately clear on a <45° deviation (falls through to the diverge counter instead)', () => {
+    const s1 = farEntry()
+    // Track 20° off the bearing to the fix — fails to qualify (over the ≤10°
+    // qualify gate) but stays within the 45° abandon gate, so this poll must
+    // NOT clear the entry immediately.
+    const s2 = reduceHoldEntries(s1, makeInput({ nowMs: 2000, aircraft: [makeAc({ track: 50 })] }))
+    expect(s2.entries.has(HEX)).toBe(true)
+    // Distance unchanged from the last qualifying poll → the diverge counter
+    // it fell through to hasn't incremented either.
+    expect(s2.entries.get(HEX)!.divergedPolls).toBe(0)
+  })
+
+  it('does not abandon on track once past the fix (executing the entry)', () => {
+    let s = farEntry()
+    const pos = dest(FIX, 0.4, 210) // within FIX_CROSS_NM
+    s = reduceHoldEntries(
+      s,
+      makeInput({
+        nowMs: 2000,
+        aircraft: [makeAc({ lat: pos[1], lon: pos[0], interpLat: pos[1], interpLon: pos[0], track: 120 })],
+      }),
+    )
+    expect(s.entries.get(HEX)?.crossedFix).toBe(true)
+
+    // Track 90°+ off the bearing to the fix is normal once executing an
+    // entry (the aircraft is turning away to fly the racetrack) — the
+    // pre-crossing abandon must NOT fire now that crossedFix is true.
+    s = reduceHoldEntries(
+      s,
+      makeInput({
+        nowMs: 3000,
+        aircraft: [makeAc({ lat: pos[1], lon: pos[0], interpLat: pos[1], interpLon: pos[0], track: 200 })],
+      }),
+    )
+    expect(s.entries.has(HEX)).toBe(true)
+  })
+})
+
+// ── Teardrop/parallel join geometry regression (no mid-path jog) ────────────
+
+describe('holdEntryPath classification-driven join geometry', () => {
+  // Given a target AIM sector value `r` (see classifyHoldEntry's docblock),
+  // returns the arrival track that produces it for either turn direction —
+  // classifyHoldEntry mirrors right-turn sectors for left-turn holds via
+  // r → 360 − r, so the raw (pre-mirror) track offset must be the complement.
+  const arrivalTrackFor = (inbound: number, turnRight: boolean, r: number): number =>
+    (((inbound + (turnRight ? r : 360 - r)) % 360) + 360) % 360
+
+  it.each([true, false])('teardrop entry (turnRight=%s): no mid-path jog, rolls out inbound, joins from the outbound side', (right) => {
+    const spec = makeSpec({ turnRight: right, inboundCourseTrue: 360 })
+    const arrivalTrack = arrivalTrackFor(spec.inboundCourseTrue, right, 200) // (180,250] → teardrop
+    const kind = classifyHoldEntry(arrivalTrack, spec.inboundCourseTrue, right)
+    expect(kind).toBe('teardrop')
+
+    const path = holdEntryPath(spec, kind)
+    // The only intentional corner is the ~45° roll-out intercept; anything
+    // ≥100° would be the old jog where the arc met the intercept.
+    expect(maxKinkDeg(path)).toBeLessThan(100)
+    // Final segment lies exactly on the inbound course.
+    const last = brg(path[path.length - 2], path[path.length - 1])
+    expect(brgDelta(last, spec.inboundCourseTrue % 360)).toBeLessThan(5)
+    // The join point sits on the outbound (reciprocal) side of the fix, so
+    // the final segment approaches the fix FROM the outbound direction.
+    const join = path[path.length - 2]
+    const recip = (spec.inboundCourseTrue + 180) % 360
+    expect(brgDelta(brg(FIX, join), recip)).toBeLessThan(5)
+  })
+
+  it.each([true, false])('parallel entry (turnRight=%s): no mid-path jog, rolls out inbound, joins from the outbound side', (right) => {
+    const spec = makeSpec({ turnRight: right, inboundCourseTrue: 360 })
+    const arrivalTrack = arrivalTrackFor(spec.inboundCourseTrue, right, 120) // (70,180] → parallel
+    const kind = classifyHoldEntry(arrivalTrack, spec.inboundCourseTrue, right)
+    expect(kind).toBe('parallel')
+
+    const path = holdEntryPath(spec, kind)
+    expect(maxKinkDeg(path)).toBeLessThan(100)
+    const last = brg(path[path.length - 2], path[path.length - 1])
+    expect(brgDelta(last, spec.inboundCourseTrue % 360)).toBeLessThan(5)
+    const join = path[path.length - 2]
+    const recip = (spec.inboundCourseTrue + 180) % 360
+    expect(brgDelta(brg(FIX, join), recip)).toBeLessThan(5)
   })
 })

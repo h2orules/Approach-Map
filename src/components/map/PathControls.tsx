@@ -13,9 +13,15 @@ export function PathControls() {
   const showPredictedPaths = useSettingsStore((s) => s.showPredictedPaths)
   const predictionMinutes = useSettingsStore((s) => s.predictionMinutes)
   const showRangeRings = useSettingsStore((s) => s.showRangeRings)
+  const showHoldEntries = useSettingsStore((s) => s.showHoldEntries)
+  const showTerrainAlerts = useSettingsStore((s) => s.showTerrainAlerts)
+  const showTrafficAlerts = useSettingsStore((s) => s.showTrafficAlerts)
   const togglePredictedPaths = useSettingsStore((s) => s.togglePredictedPaths)
   const setPredictionMinutes = useSettingsStore((s) => s.setPredictionMinutes)
   const toggleRangeRings = useSettingsStore((s) => s.toggleRangeRings)
+  const toggleHoldEntries = useSettingsStore((s) => s.toggleHoldEntries)
+  const toggleTerrainAlerts = useSettingsStore((s) => s.toggleTerrainAlerts)
+  const toggleTrafficAlerts = useSettingsStore((s) => s.toggleTrafficAlerts)
 
   return (
     <div className={styles.container} data-map-overlay="">
@@ -55,6 +61,39 @@ export function PathControls() {
       >
         <span className={`${styles.dot} ${styles.dotRings}`} />
         RINGS
+      </button>
+
+      <button
+        type="button"
+        className={`${styles.toggle} ${showHoldEntries ? '' : styles.off}`}
+        onClick={toggleHoldEntries}
+        title={showHoldEntries ? 'Hide predicted hold entries' : 'Show predicted hold entries'}
+        aria-pressed={showHoldEntries}
+      >
+        <span className={`${styles.dot} ${styles.dotHold}`} />
+        HOLD
+      </button>
+
+      <button
+        type="button"
+        className={`${styles.toggle} ${showTerrainAlerts ? '' : styles.off}`}
+        onClick={toggleTerrainAlerts}
+        title={showTerrainAlerts ? 'Hide terrain alerts' : 'Show terrain alerts'}
+        aria-pressed={showTerrainAlerts}
+      >
+        <span className={`${styles.dot} ${styles.dotTerrain}`} />
+        TERR
+      </button>
+
+      <button
+        type="button"
+        className={`${styles.toggle} ${showTrafficAlerts ? '' : styles.off}`}
+        onClick={toggleTrafficAlerts}
+        title={showTrafficAlerts ? 'Hide traffic alerts (TA/RA)' : 'Show traffic alerts (TA/RA)'}
+        aria-pressed={showTrafficAlerts}
+      >
+        <span className={`${styles.dot} ${styles.dotTraffic}`} />
+        TFC
       </button>
     </div>
   )

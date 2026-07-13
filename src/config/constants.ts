@@ -244,6 +244,21 @@ export const HOLD_ENTRY_MAX_ETA_S = 180
 export const HOLD_ENTRY_PASS_NM = 1.0
 export const HOLD_ENTRY_ALT_TOL_FT = 2000
 export const HOLD_ENTRY_CLEAR_POLLS = 3
+// A predicted entry must qualify on this many CONSECUTIVE polls before it's
+// drawn — a low maneuvering aircraft can transiently satisfy the bearing/ETA
+// gates for one poll while turning, which used to strand an entry loop on the
+// map. Sustained intent (a plane actually tracking to the fix) survives.
+export const HOLD_ENTRY_CONFIRM_POLLS = 2
+// Before reaching the fix, if the aircraft's track diverges from the bearing to
+// the fix by more than this, it isn't entering — clear immediately rather than
+// waiting out HOLD_ENTRY_CLEAR_POLLS. (After crossing the fix the aircraft turns
+// away by design to fly the entry, so this only applies pre-crossing.)
+export const HOLD_ENTRY_ABANDON_BRG_DEG = 45
+// An aircraft climbing faster than this is departing or overflying, not entering
+// a hold (holds are flown level or descending) — don't predict an entry for it.
+// Guards against a climbing overflight crossing a fix and getting a spurious
+// (and, for a parallel entry, far-side-looking) entry drawn.
+export const HOLD_ENTRY_MAX_CLIMB_FPM = 500
 // AIM 5-3-8 teardrop entry: outbound offset ~30° from the reciprocal of the
 // inbound course, on the holding side.
 export const HOLD_ENTRY_TEARDROP_OFFSET_DEG = 30

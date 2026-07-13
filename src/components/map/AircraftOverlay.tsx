@@ -41,6 +41,17 @@ function alertChipInfo(alert: AircraftAlert): { text: string; isRed: boolean } {
   return { text: alert.kind === 'terrain' ? 'TERRAIN' : 'TRAFFIC', isRed }
 }
 
+/** An alert only counts when its category is toggled on (PathControls TERR/TFC). */
+function visibleAlert(
+  alert: AircraftAlert | undefined,
+  showTerrainAlerts: boolean,
+  showTrafficAlerts: boolean,
+): AircraftAlert | undefined {
+  if (!alert) return undefined
+  if (alert.kind === 'terrain') return showTerrainAlerts ? alert : undefined
+  return showTrafficAlerts ? alert : undefined
+}
+
 function AircraftIcon() {
   return (
     <svg width={42} height={42} viewBox="0 0 24 24" className={styles.icon}>
@@ -74,6 +85,11 @@ export function AircraftOverlay({ mapRef }: Props) {
   // poll — same cadence as the aircraft-set revision below — without the rAF
   // loop ever touching this store.
   const pathRevision = usePathStore((s) => s.pathRevision)
+  // Alert-category display toggles (PathControls). Subscribed (not getState) so
+  // toggling re-renders the chrome immediately; the rAF loop below reads them
+  // from getState per frame for the z-order/visibility side.
+  const showTerrainAlerts = useSettingsStore((s) => s.showTerrainAlerts)
+  const showTrafficAlerts = useSettingsStore((s) => s.showTrafficAlerts)
 
   // Snapshot the airborne aircraft set; only changes on a poll.
   const aircraft = useMemo(
@@ -90,7 +106,14 @@ export function AircraftOverlay({ mapRef }: Props) {
       const map = mapRef.current?.getMap()
       if (map) {
         const store = useAircraftStore.getState()
-        const { altFilterMin, altFilterMax, showTisb, showVfr } = useSettingsStore.getState()
+        const {
+          altFilterMin,
+          altFilterMax,
+          showTisb,
+          showVfr,
+          showTerrainAlerts: terrOn,
+          showTrafficAlerts: tfcOn,
+        } = useSettingsStore.getState()
         const { alerts, forcedVisibleHexes } = usePathStore.getState()
         const minFt = positionToMinFt(altFilterMin)
         const maxFt = positionToMaxFt(altFilterMax)
@@ -104,8 +127,10 @@ export function AircraftOverlay({ mapRef }: Props) {
           // these takes effect immediately without a React re-render. A hex
           // in forcedVisibleHexes (TA/RA participant) always renders through
           // these filters.
+          // forcedVisibleHexes reveals TA/RA participants through the filters —
+          // but only while traffic alerts are actually being shown.
           const hidden =
-            !forcedVisibleHexes.has(hex) &&
+            !(tfcOn && forcedVisibleHexes.has(hex)) &&
             (alt < minFt ||
               alt > maxFt ||
               (!showTisb && hex.startsWith('~')) ||
@@ -121,7 +146,7 @@ export function AircraftOverlay({ mapRef }: Props) {
           node.style.transform = `translate(${p.x}px, ${p.y}px)`
           node.style.color = altitudeColor(ac.altBaro)
 
-          const alert = alerts.get(hex)
+          const alert = visibleAlert(alerts.get(hex), terrOn, tfcOn)
           const baseZ = Math.max(1, Math.floor(alt / 100))
           // Alerted aircraft float above all non-alerted traffic, still
           // ranked by altitude among themselves.
@@ -206,7 +231,7 @@ export function AircraftOverlay({ mapRef }: Props) {
         const dest = ac.destination || 'Unkwn'
         const isVfr = ac.squawk === VFR_SQUAWK
         const isTisb = ac.hex.startsWith('~')
-        const alert = alerts.get(ac.hex)
+        const alert = visibleAlert(alerts.get(ac.hex), showTerrainAlerts, showTrafficAlerts)
         const chip = alert ? alertChipInfo(alert) : null
 
         // Line 1: callsign or tail number — kept separate from the data rows

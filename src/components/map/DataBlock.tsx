@@ -14,6 +14,7 @@ import { decodeCallsign, airlineLogoUrl } from '../../utils/airlines'
 import { decodeAircraftType } from '../../utils/aircraftTypes'
 import { getAirportByIcao } from '../../hooks/useAirportSearch'
 import { usePathStore } from '../../store/usePathStore'
+import { useSettingsStore } from '../../store/useSettingsStore'
 import type { AircraftAlert } from '../../types/path'
 import { VFR_SQUAWK } from '../../config/constants'
 import { bearingDelta } from '../../geo/lineMatching'
@@ -117,7 +118,19 @@ export function DataBlock({ aircraft, onClose }: Props) {
   // per poll when an alert appears/clears/changes tier.
   const pathRevision = usePathStore((s) => s.pathRevision)
   void pathRevision
-  const alert = usePathStore.getState().alerts.get(aircraft.hex)
+  const showTerrainAlerts = useSettingsStore((s) => s.showTerrainAlerts)
+  const showTrafficAlerts = useSettingsStore((s) => s.showTrafficAlerts)
+  const rawAlert = usePathStore.getState().alerts.get(aircraft.hex)
+  // Only surface an alert whose category toggle (PathControls TERR/TFC) is on.
+  const alert = rawAlert
+    ? rawAlert.kind === 'terrain'
+      ? showTerrainAlerts
+        ? rawAlert
+        : undefined
+      : showTrafficAlerts
+        ? rawAlert
+        : undefined
+    : undefined
   const chip = alert ? alertChipInfo(alert) : null
 
   const originAirport = aircraft.origin ? getAirportByIcao(aircraft.origin) : undefined

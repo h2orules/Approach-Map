@@ -3,6 +3,7 @@ import { Source, Layer } from 'react-map-gl'
 import type { Feature, FeatureCollection, LineString } from 'geojson'
 import { usePathStore } from '../../store/usePathStore'
 import { useProcedureStore, computeVisibility } from '../../store/useProcedureStore'
+import { useSettingsStore } from '../../store/useSettingsStore'
 import { HOLD_ENTRY_DASH } from '../../config/constants'
 
 // Neutral slate for a context line when its procedure carries no color.
@@ -28,6 +29,7 @@ function procIdOf(specKey: string): string {
  * `computeVisibility` returns true and the extra context line drops out.
  */
 export function HoldEntryLayer() {
+  const showHoldEntries = useSettingsStore((s) => s.showHoldEntries)
   const holdEntries = usePathStore((s) => s.holdEntries)
   const procedures = useProcedureStore((s) => s.procedures)
   const userToggles = useProcedureStore((s) => s.userToggles)
@@ -67,6 +69,10 @@ export function HoldEntryLayer() {
     }
     return { type: 'FeatureCollection', features }
   }, [holdEntries, procedures, userToggles, autoVisible])
+
+  // Off by default — a display toggle (PathControls "HOLD"). The engine keeps
+  // computing entries regardless, so toggling on shows them immediately.
+  if (!showHoldEntries) return null
 
   return (
     <>

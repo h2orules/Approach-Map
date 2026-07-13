@@ -61,7 +61,7 @@ const KNOWN_DIFFERENCES: { heading: string; items: string[] }[] = [
     items: [
       'Only aircraft broadcasting ADS-B appear — non-equipped, blocked, or non-transmitting traffic (including some military) is invisible.',
       'Positions are polled every few seconds and dead-reckoned between polls, so a target on screen is an estimate that lags reality by seconds.',
-      'No separation, TCAS, conflict, or wake information of any kind is shown or implied.',
+      'Though traffic is depicted with advisory conflict indicators, separation, wake turbulence, and deconfliction is not guaranteed or implied.',
       'Callsign-to-route (origin → destination) is best-effort crowd-sourced data and is frequently missing or wrong.',
     ],
   },

@@ -7,7 +7,10 @@ import { useAircraftStore } from '../../store/useAircraftStore'
 import { useCifpStore, getRunwayInfoForAirport } from '../../services/cifpCache'
 import { pickProfileTransition, buildProfileModel, alongTrackNm } from '../../geo/profileMath'
 import type { ProfileModel, LiveAircraft } from '../../geo/profileMath'
+import { buildProfileTrail } from '../../geo/profileTrail'
+import type { ProfileTrailPoint } from '../../geo/profileTrail'
 import { pickPanelAnchor, type Rect } from '../../geo/panelPlacement'
+import { getTrack } from '../../services/trackLog'
 import {
   PROFILE_PANEL_MIN_W,
   PROFILE_PANEL_MIN_H,
@@ -212,6 +215,29 @@ export function ProfilePanel({ mapRef }: Props) {
     return () => clearInterval(id)
   }, [procedure, transition, detectedHexesForProc, selectedHex])
 
+  // ── Selected aircraft's flown-history trace (deviation from the published
+  //    vertical path). Independent of the detection/assignment gate above —
+  //    the trail exists whenever the selection has a tracklog, not only once
+  //    it's confirmed flying this approach — but shares the same transition,
+  //    projection, and refresh cadence as the live-aircraft dots above. No
+  //    selection (or no kept points) means no trail. ──
+  const [selectedTrail, setSelectedTrail] = useState<ProfileTrailPoint[][]>([])
+  useEffect(() => {
+    if (!transition || !model || !selectedHex || model.fixes.length === 0) {
+      setSelectedTrail([])
+      return
+    }
+    const maxDistNm = model.fixes[model.fixes.length - 1].distNm
+
+    const tick = () => {
+      setSelectedTrail(buildProfileTrail(getTrack(selectedHex), transition, maxDistNm))
+    }
+
+    tick()
+    const id = setInterval(tick, PROFILE_AIRCRAFT_UPDATE_MS)
+    return () => clearInterval(id)
+  }, [transition, model, selectedHex])
+
   if (!procedure) return null
 
   return (
@@ -241,6 +267,7 @@ export function ProfilePanel({ mapRef }: Props) {
               <ProfileSvg
                 model={model}
                 liveAircraft={liveAircraft}
+                selectedTrail={selectedTrail}
                 width={Math.max(svgSize.width, 1)}
                 height={Math.max(svgSize.height, 1)}
               />

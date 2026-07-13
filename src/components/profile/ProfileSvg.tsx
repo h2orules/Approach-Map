@@ -9,11 +9,16 @@ import {
   placeProfileLabels,
 } from '../../geo/profileMath'
 import type { ProfileFix, ProfileModel, LiveAircraft } from '../../geo/profileMath'
+import type { ProfileTrailPoint } from '../../geo/profileTrail'
 import styles from './ProfileSvg.module.css'
 
 interface Props {
   model: ProfileModel
   liveAircraft?: LiveAircraft[]
+  /** Selected aircraft's flown-history trace (distNm/altFt), pre-segmented on
+   *  time/distance gaps — see src/geo/profileTrail.ts. Empty/omitted when no
+   *  aircraft is selected. Drawn as the lowest layer in the plot. */
+  selectedTrail?: ProfileTrailPoint[][]
   width: number
   height: number
 }
@@ -454,7 +459,7 @@ function HoldInLieuFigure({
 
 // Memoized: the live-aircraft tick re-renders the parent every second, but
 // the static profile geometry only depends on model/width/height.
-export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], width, height }: Props) {
+export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], selectedTrail = [], width, height }: Props) {
   if (model.fixes.length < 2) {
     return (
       <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -628,9 +633,24 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], w
 
   return (
     <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+      {/* selected aircraft's flown-history trace — rendered FIRST (no background
+          rect exists to sit above), so it's the lowest layer in the plot: the
+          descent path, fix symbols/labels, holds, glideslope, and every live
+          aircraft dot (including marker cones below) all draw on top of it. */}
+      {selectedTrail.map((seg, i) =>
+        seg.length >= 2 ? (
+          <path
+            key={`trail-${i}`}
+            className={styles.selectedTrail}
+            d={seg.map((pt, j) => `${j === 0 ? 'M' : 'L'} ${xScale(pt.distNm)} ${yScale(pt.altFt)}`).join(' ')}
+            fill="none"
+          />
+        ) : null,
+      )}
+
       {/* marker-beacon cones — narrow dotted triangles rising from the ground at
-          each marker fix up to the top of the plot. Rendered first so they sit
-          behind every other layer. */}
+          each marker fix up to the top of the plot. Rendered early (just above
+          the selected-aircraft trail) so they sit behind every other layer. */}
       {model.fixes.map((f, i) =>
         f.marker ? (
           <polygon

@@ -211,3 +211,156 @@ export const AIRSPACE_FETCH_HALF_DEG = 1.0
 // Airspace changes on the 56-day chart cycle; 28 days is a conservative
 // "recheck occasionally" cache window (not tied to a published revision date).
 export const AIRSPACE_CACHE_MAX_AGE_MS = 28 * 24 * 60 * 60 * 1000
+
+// ── Tracklog ────────────────────────────────────────────────────────────────
+export const TRACKLOG_MAX_POINTS = 720 // ~1h at 5s polls
+// A gap between consecutive points longer than this breaks the drawn trail
+// (coverage dropout, stale target) instead of connecting across it.
+export const TRACKLOG_GAP_BREAK_MS = 30_000
+// Max cross-track distance (nm) from the profile's transition line for a
+// tracklog point to count as "near the approach" — see src/geo/profileTrail.ts.
+export const PROFILE_TRACK_XT_MAX_NM = 3
+
+// ── Path prediction ─────────────────────────────────────────────────────────
+export const PREDICT_STEP_S = 5
+export const PREDICT_MAX_S = 300
+// Observed turn rates below the min are treated as straight flight; above the
+// max as noise (clamped) — standard rate is 3°/s.
+export const TURN_RATE_MIN_DPS = 0.5
+export const TURN_RATE_MAX_DPS = 4.0
+// A detected turn is held at its observed rate for HOLD_S seconds of the
+// prediction, then decays linearly to straight flight by DECAY_END_S.
+export const PREDICT_TURN_HOLD_S = 15
+export const PREDICT_TURN_DECAY_END_S = 45
+// Within this many feet of a constraint/profile altitude, the prediction
+// captures onto the profile instead of extrapolating the raw baro rate.
+export const PREDICT_PROFILE_CAPTURE_FT = 150
+export const PREDICT_MIN_DESCENT_FPM = 500
+export const PREDICTION_MINUTES_OPTIONS = [1, 2, 3, 5] as const
+
+// ── Hold-entry prediction ───────────────────────────────────────────────────
+export const HOLD_ENTRY_BRG_DEG = 10
+export const HOLD_ENTRY_MAX_ETA_S = 180
+export const HOLD_ENTRY_PASS_NM = 1.0
+export const HOLD_ENTRY_ALT_TOL_FT = 2000
+export const HOLD_ENTRY_CLEAR_POLLS = 3
+// A predicted entry must qualify on this many CONSECUTIVE polls before it's
+// drawn — a low maneuvering aircraft can transiently satisfy the bearing/ETA
+// gates for one poll while turning, which used to strand an entry loop on the
+// map. Sustained intent (a plane actually tracking to the fix) survives.
+export const HOLD_ENTRY_CONFIRM_POLLS = 2
+// Before reaching the fix, if the aircraft's track diverges from the bearing to
+// the fix by more than this, it isn't entering — clear immediately rather than
+// waiting out HOLD_ENTRY_CLEAR_POLLS. (After crossing the fix the aircraft turns
+// away by design to fly the entry, so this only applies pre-crossing.)
+export const HOLD_ENTRY_ABANDON_BRG_DEG = 45
+// An aircraft climbing faster than this is departing or overflying, not entering
+// a hold (holds are flown level or descending) — don't predict an entry for it.
+// Guards against a climbing overflight crossing a fix and getting a spurious
+// (and, for a parallel entry, far-side-looking) entry drawn.
+export const HOLD_ENTRY_MAX_CLIMB_FPM = 500
+// AIM 5-3-8 teardrop entry: outbound offset ~30° from the reciprocal of the
+// inbound course, on the holding side.
+export const HOLD_ENTRY_TEARDROP_OFFSET_DEG = 30
+// Mapbox line-dasharray for the predicted entry path (dot-dash).
+export const HOLD_ENTRY_DASH: number[] = [0.01, 2, 2.5, 2]
+
+// ── Traffic conflicts ───────────────────────────────────────────────────────
+// The TCAS TA/RA sensitivity-level table itself lives in src/geo/tcasTables.ts;
+// these are the CPA-projection horizon, the pair prefilter, and the
+// ATC-radar-style separation-alert thresholds.
+export const CONFLICT_HORIZON_S = 180
+export const CONFLICT_PREFILTER_NM = 30
+export const CONFLICT_PREFILTER_DALT_FT = 6000
+export const RADAR_ALERT_SEP_NM = 2.0
+export const RADAR_ALERT_DALT_FT = 1200
+export const RADAR_ALERT_HORIZON_S = 45
+export const RADAR_WARN_SEP_NM = 1.3
+export const RADAR_WARN_DALT_FT = 1200
+export const RADAR_WARN_HORIZON_S = 25
+// RA escape-maneuver model: assumed vertical rate after a pilot-response
+// delay (TCAS II assumes 1500 fpm within 5 s for an initial RA).
+export const RA_ESCAPE_FPM = 1500
+export const RA_RESPONSE_DELAY_S = 5
+// Suppress traffic alerts close to the ground near a known airport, where
+// converging final/pattern traffic is normal (TCAS inhibits low-AGL alerts too).
+// ForeFlight-style near-airport desensitization: pattern-altitude traffic
+// (parallel/in-trail arrivals, low pattern work) shouldn't alert.
+export const TRAFFIC_SUPPRESS_AGL_FT = 1000
+export const TRAFFIC_SUPPRESS_AIRPORT_NM = 3
+// Radar-tier alerts require actual convergence into the separation window: a
+// qualifying sample must close at least this much versus the t=0 separation
+// (or the pair must enter the window from outside it). Stable formation /
+// simultaneous-parallel-approach pairs sitting at constant separation already
+// inside the window must NOT latch a radar alert — ForeFlight's published
+// semantics are "path WILL intersect the threshold within 45 s", i.e. converging.
+export const RADAR_MIN_CLOSURE_NM = 0.1
+// Formation / duplicate-track suppression: a pair sustaining near-identical
+// position, altitude, track, and speed is either intentional formation flying
+// or two ADS-B/TIS-B tracks of the same airframe (duplicate reception) — not a
+// conflict. Matched velocity means zero closure, so nothing is lost by
+// skipping the pair entirely (both the TCAS and radar tiers).
+export const FORMATION_SUPPRESS_NM = 0.5
+export const FORMATION_SUPPRESS_DALT_FT = 400
+export const FORMATION_SUPPRESS_TRK_DEG = 10
+export const FORMATION_SUPPRESS_GS_KT = 10
+// TIS-B shadow suppression: a TIS-B pseudo-track (hex starting '~') can be a
+// rebroadcast of a radar trackfile up to ~60 s stale, which at typical GA
+// speeds trails 2+ nm behind the live position — well outside
+// FORMATION_SUPPRESS_NM. A co-moving pair where at least one side is TIS-B is
+// therefore checked against wider tolerances so a stale shadow of the same
+// (or a nearby) airframe isn't mistaken for a converging target.
+export const TISB_SHADOW_NM = 2.5
+export const TISB_SHADOW_DALT_FT = 500
+export const TISB_SHADOW_TRK_DEG = 15
+export const TISB_SHADOW_GS_KT = 20
+
+// ── Terrain alerting ────────────────────────────────────────────────────────
+export const TERRAIN_TILE_ZOOM = 9
+export const TERRAIN_TILE_CACHE_MAX = 48
+export const TERRAIN_ALERT_CLEARANCE_FT = 1000 // ForeFlight Hazard Advisor amber
+export const TERRAIN_WARN_CLEARANCE_FT = 100 // ForeFlight red
+// An MVA sector already carries ~1000 ft of obstacle buffer, so warn only when
+// the aircraft is meaningfully below the sector value, not merely under it.
+export const TERRAIN_MVA_WARN_BELOW_FT = 900
+// Within this many feet of an approach's expected profile altitude, terrain
+// alerts are suppressed (a normal approach descends toward terrain by design).
+export const TERRAIN_ONAPPROACH_TOL_FT = 400
+// Skip the first seconds of the scan ahead of the aircraft — terrain there is
+// effectively underneath it, and this kills spurious own-runway alerts.
+export const TERRAIN_SCAN_SKIP_FIRST_S = 10
+// Terrain look-ahead horizon. Deliberately much shorter than the 180 s traffic
+// horizon (CONFLICT_HORIZON_S): extrapolating baro rate 3 minutes ahead drives
+// every ordinary descending IFR arrival "through" distant MVA floors it will
+// actually level off above. Real MSAW projects far less — roughly the next
+// radar scan or two — so 60 s already errs on the side of caution.
+export const TERRAIN_SCAN_HORIZON_S = 60
+// MSAW-style approach/departure exclusion volume around ANY known airport: a
+// predicted sample within TERRAIN_AIRPORT_EXCLUDE_NM of a known airport and
+// below its field elevation + TERRAIN_AIRPORT_EXCLUDE_FT is a normal
+// arrival/departure, not a terrain conflict — excluded regardless of whether the
+// aircraft has a confirmed approach assignment (FAA MSAW carves out approach
+// corridors this way).
+export const TERRAIN_AIRPORT_EXCLUDE_NM = 4
+export const TERRAIN_AIRPORT_EXCLUDE_FT = 1500
+// TAWS-style landing-configuration inhibit: an aircraft slow AND low above the
+// ACTUAL ground (not a charted field) is landing or departing at some strip,
+// charted or not — this covers airports absent from the index (no MSAW
+// exclusion volume above), e.g. private/grass strips. Below typical GA cruise
+// speed; jets land at charted airports already covered by
+// TERRAIN_AIRPORT_EXCLUDE_NM/_FT above.
+export const TERRAIN_LANDING_GS_KT = 95
+export const TERRAIN_LANDING_AGL_FT = 700
+
+// ── Range rings / path colors ───────────────────────────────────────────────
+// Ring radii bucketed by map zoom: the first bucket whose minZoom the current
+// zoom meets wins.
+export const RING_ZOOM_BUCKETS: { minZoom: number; radiiNm: [number, number, number] }[] = [
+  { minZoom: 11, radiiNm: [1, 3, 6] },
+  { minZoom: 9.5, radiiNm: [2, 5, 10] },
+  { minZoom: 8, radiiNm: [5, 10, 15] },
+  { minZoom: -Infinity, radiiNm: [12, 25, 50] },
+]
+export const PREDICTION_LINE_COLOR = '#ffffff'
+export const ALERT_AMBER = '#fbbf24' // distinct from AIRCRAFT_COLOR #f59e0b (src/utils/colorScheme.ts)
+export const WARNING_RED = '#ef4444'

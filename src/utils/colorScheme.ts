@@ -12,7 +12,9 @@ import type { Procedure, ProcedureType } from '../types/procedure'
  * procedure types in different hues so type stays readable within an airport,
  * while the family shift keeps airports distinguishable from one another.
  * All ramps avoid the reserved aircraft (#f59e0b), active-segment (#ff2bd6),
- * highlight (#facc15), centerline (#6b7280) and runway (#64748b) colors.
+ * highlight (#facc15), centerline (#6b7280) and runway (#64748b) colors, as
+ * well as the traffic/terrain alert chrome — ALERT_AMBER (#fbbf24) and
+ * WARNING_RED (#ef4444), which live in src/config/constants.ts.
  */
 export const PROCEDURE_COLOR_FAMILIES: ReadonlyArray<Record<ProcedureType, readonly string[]>> = [
   {
@@ -105,28 +107,58 @@ function lerp3(a: RGB, b: RGB, t: number): RGB {
 }
 
 /**
- * Heatmap stops below Class A: orange at SFC → green near 18 000 ft.
+ * Heatmap stops below Class A: brick red-brown at SFC → light sky near
+ * 18 000 ft, walking through vermillion/orange/amber/gold/yellow/chartreuse/
+ * lime/green/emerald/teal/cyan.
  *
- * Stops are spaced at 3 000 ft in the approach/terminal range (0–9 000 ft)
- * so a 500 ft altitude change covers ~17% of a segment and is clearly
- * perceptible.  Above 9 000 ft the spacing widens because en-route
- * altitude discrimination matters less.
+ * Below 3 000 ft (takeoff, landing, traffic-pattern, and maneuvering
+ * altitudes) stops sit every 200 ft, spending the entire warm arc there so a
+ * 200 ft change reads as a small-but-visible shift and a 600 ft change (e.g.
+ * 800 ft pattern work vs 1 400 ft transit) is unmistakable. From
+ * 3 000–18 000 ft the walk continues every 3 000–4 000 ft, since en-route
+ * altitude discrimination matters less. The final stop lands on a light sky
+ * blue so the ramp hands off smoothly in hue (though not lightness — see
+ * altitudeColor below) into the ≥18 000 ft Class-A lerp, which starts at a
+ * dark navy and brightens with altitude.
+ *
+ * None of these exactly reuse the reserved UI colors documented above this
+ * ramp's callers: AIRCRAFT_COLOR/'ground' (#f59e0b), ACTIVE_SEGMENT_COLOR
+ * (#ff2bd6), ACTIVE_PROCEDURE_HIGHLIGHT (#facc15), or the traffic/terrain
+ * alert chrome ALERT_AMBER (#fbbf24) / WARNING_RED (#ef4444) in
+ * src/config/constants.ts — every stop keeps ≥30 RGB-space distance from
+ * all five (the 0 ft brick is ~90 from WARNING_RED and much darker).
  */
 const HEATMAP: Array<[number, RGB]> = [
-  [0,     hexToRgb('#fb923c')],  // orange-400
-  [3000,  hexToRgb('#fbbf24')],  // amber-400
-  [6000,  hexToRgb('#facc15')],  // yellow-400
-  [9000,  hexToRgb('#bef264')],  // lime-300
-  [13000, hexToRgb('#4ade80')],  // green-400
-  [18000, hexToRgb('#4ade80')],  // green-400   — hold at green before Class A
+  [0,     hexToRgb('#8a340f')],  // brick / burnt red-brown
+  [200,   hexToRgb('#9c400f')],
+  [400,   hexToRgb('#ae4e10')],  // vermillion-brown
+  [600,   hexToRgb('#c05e10')],
+  [800,   hexToRgb('#cd7311')],  // orange
+  [1000,  hexToRgb('#d68b15')],  // amber-orange
+  [1200,  hexToRgb('#dca51a')],  // gold
+  [1400,  hexToRgb('#ddc122')],  // yellow
+  [1600,  hexToRgb('#d3d629')],  // yellow-chartreuse
+  [1800,  hexToRgb('#b8d92c')],  // chartreuse
+  [2000,  hexToRgb('#9bda2e')],
+  [2200,  hexToRgb('#7dd832')],  // lime
+  [2400,  hexToRgb('#61d33a')],
+  [2600,  hexToRgb('#4ccb45')],  // lime-green
+  [2800,  hexToRgb('#3fc550')],
+  [3000,  hexToRgb('#38bf5a')],  // green
+  [6000,  hexToRgb('#2bb388')],  // emerald
+  [9000,  hexToRgb('#2ba8ac')],  // teal
+  [13000, hexToRgb('#30a8d9')],  // cyan
+  [18000, hexToRgb('#4fc3f7')],  // sky — hands off to Class A blue lerp
 ]
 
 /**
  * Returns the display colour for an aircraft at the given barometric altitude.
  *
- * Below 18 000 ft  — heatmap gradient (blue → cyan → green → yellow → red).
- * 18 000 ft and above (Class A) — goldenrod intensity: dark amber at the floor,
- *   brightening to full goldenrod (#f59e0b) at high altitudes.
+ * Below 18 000 ft — HEATMAP gradient, brick red-brown at SFC walking
+ *   through orange/gold/yellow/lime/green/emerald/teal/cyan to a light sky at
+ *   18 000 ft, densely sampled every 200 ft below 3 000 ft.
+ * 18 000 ft and above (Class A) — dark sky-blue at the floor, brightening to
+ *   a bright sky-blue (#38bdf8) at high altitudes.
  */
 export function altitudeColor(alt: number | 'ground'): string {
   if (alt === 'ground') return '#f59e0b'

@@ -1,0 +1,123 @@
+/* ── Path-prediction control cluster ─────────────────────────────────────── */
+/*  Shares TrafficFilter's white NavigationControl-style box so the two sit    */
+/*  in the same bottom-right control stack (positioned by AppMap).            */
+
+.container {
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: all;
+  user-select: none;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  background: #f3f4f6;
+  padding: 3px 6px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #1a1a1a;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, opacity 0.1s;
+}
+
+.toggle:hover {
+  border-color: #9ca3af;
+  background: #e5e7eb;
+}
+
+/* Hidden state: dimmed + struck through, dot hollowed out. */
+.off {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotPred {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1.5px #1a1a1a;
+}
+
+.dotRings {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px #1a1a1a;
+}
+
+.dotHold {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1.5px #1a1a1a;
+}
+
+.dotTerrain {
+  background: #fbbf24; /* ALERT_AMBER */
+}
+
+.dotTraffic {
+  background: #ef4444; /* WARNING_RED */
+}
+
+.off .dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+/* Segmented 1'/2'/3'/5' prediction-length group, between the two toggles. */
+.segmented {
+  display: flex;
+  gap: 2px;
+  transition: opacity 0.1s;
+}
+
+.segmentedOff {
+  opacity: 0.5;
+}
+
+.segment {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  background: #f3f4f6;
+  padding: 3px 0;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #1a1a1a;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.segment:hover:not(:disabled) {
+  border-color: #9ca3af;
+  background: #e5e7eb;
+}
+
+.segment:disabled {
+  cursor: default;
+}
+
+.segmentActive {
+  background: #1e293b;
+  border-color: #1e293b;
+  color: #ffffff;
+}
+
+.segmentActive:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #1e293b;
+}

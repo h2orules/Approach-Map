@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
+import * as turf from '@turf/turf'
 import { parseCifp } from '../cifpParse'
+import { magneticToTrue } from '../../utils/arincRecords'
 
 // Regression test for the cifpParser.worker.ts -> cifpParse.ts extraction seam
 // (see CLAUDE.md: "Pure, node-runnable CIFP parse"). Builds a full synthetic
@@ -183,5 +185,105 @@ describe('parseCifp (KAWO FL34 end-to-end fixture)', () => {
     const a = parseCifp(FIXTURE_TEXT)
     const b = parseCifp(FIXTURE_TEXT)
     expect(a).toEqual(b)
+  })
+})
+
+// Hold-racetrack orientation regression. The `kind:'hold'` racetrack geometry is
+// built in TRUE bearings (holdTrack expects true) from the leg's MAGNETIC inbound
+// course, converted with the airport magvar (see cifpParse.ts). A past defect
+// passed the raw magnetic course straight into holdTrack (no magneticToTrue), so
+// the drawn loop's long axis was rotated by the full magnetic variation off the
+// straight legs through the same fix — visibly tilted ~magvar° while both were
+// still labeled the same magnetic course (KSEA MGNUM at ~16°E was the report
+// case). This locks the invariant for BOTH hold classes: a transition hold
+// (HILPT / single-leg HF, e.g. KAWO R34 SAVOY) and a missed-approach hold (HM).
+describe('parseCifp hold racetrack orientation (magvar-converted true bearing)', () => {
+  // holdTrack emits [A, F, …] — A is the start of the inbound straight, F the
+  // fix. The inbound leg's geodetic bearing is bearing(A → F).
+  const drawnHoldInboundBearing = (coords: [number, number][]): number => {
+    const b = turf.bearing(turf.point(coords[0]), turf.point(coords[1]))
+    return ((b % 360) + 360) % 360
+  }
+
+  // KAWO airport reference (PA) record — verbatim, magvar +17.0E. A large,
+  // nonzero variation makes an omitted conversion fail loudly (17° of tilt).
+  const PA = PA_KAWO
+  // Terminal-waypoint (P/C) + runway (P/G) records for the referenced fixes.
+  const PC_SAVOY_ = mkLine({ 4: 'P', 12: 'C', 13: 'SAVOY', 32: 'N48000000', 41: 'W122100000' })
+  const PC_WATON_ = mkLine({ 4: 'P', 12: 'C', 13: 'WATON', 32: 'N48050000', 41: 'W122150000' })
+  const PC_AW_ = mkLine({ 4: 'P', 12: 'C', 13: 'AW', 32: 'N47500000', 41: 'W122200000' })
+  const PG_RW34_ = mkLine({ 4: 'P', 12: 'G', 6: 'KAWO', 13: 'RW34', 32: 'N48070000', 41: 'W122160000' })
+
+  // Transition hold: a single-leg HF (hold-in-lieu-of-PT) at SAVOY, its own
+  // transition (route type 'A' at col 20, transition id 'SAVOY'), left turns,
+  // inbound course 342.1° magnetic.
+  const HF_SAVOY = mkLine({
+    4: 'P', 6: 'KAWO', 12: 'F', 13: 'R34', 19: 'A', 20: 'SAVOY',
+    26: '010', 29: 'SAVOY', 38: '0', 42: 'E', 43: 'L', 47: 'HF',
+    70: '3421', 74: '0040', 82: '+', 84: '02000',
+  })
+  // Final (blank) transition: IF SAVOY → FAF WATON → MAP RW34 → missed HM at AW.
+  // The HM (inbound 161.0° magnetic, left turns) sits after the MAP so it is
+  // tagged segment 'missed' — a different fix/course from the HILPT above so the
+  // missed-vs-transition dedup keeps both.
+  const IF_SAVOY = mkLine({
+    4: 'P', 6: 'KAWO', 12: 'F', 13: 'R34', 26: '010', 29: 'SAVOY', 38: '0', 42: 'I', 47: 'IF', 82: '+', 84: '02000',
+  })
+  const FAF_WATON = mkLine({
+    4: 'P', 6: 'KAWO', 12: 'F', 13: 'R34', 26: '020', 29: 'WATON', 38: '0', 42: 'F', 47: 'CF',
+    70: '3441', 74: '0060', 82: '+', 84: '01700',
+  })
+  const MAP_RW34 = mkLine({
+    4: 'P', 6: 'KAWO', 12: 'F', 13: 'R34', 26: '030', 29: 'RW34', 38: '0', 42: 'M', 47: 'CF', 70: '3441', 74: '0047',
+  })
+  const HM_AW = mkLine({
+    4: 'P', 6: 'KAWO', 12: 'F', 13: 'R34', 26: '040', 29: 'AW', 38: '0', 42: 'E', 43: 'L', 47: 'HM',
+    70: '1610', 74: 'T010', 82: '+', 84: '05000',
+  })
+
+  const HOLD_TEXT = [PA, PC_SAVOY_, PC_WATON_, PC_AW_, PG_RW34_, HF_SAVOY, IF_SAVOY, FAF_WATON, MAP_RW34, HM_AW].join('\n')
+
+  const holdFeatures = () => {
+    const proc = parseCifp(HOLD_TEXT).KAWO.procedures[0]
+    return proc.geojson.features.filter((f) => (f.properties as { kind: string }).kind === 'hold')
+  }
+
+  it('resolves the +17.0E magvar the conversion depends on', () => {
+    expect(parseCifp(HOLD_TEXT).KAWO.magVarDeg).toBeCloseTo(17.0, 5)
+  })
+
+  it('draws the transition HILPT (HF) racetrack inbound leg at magneticToTrue(course, magvar)', () => {
+    const f = holdFeatures().find(
+      (f) => (f.properties as { fixId: string; segment: string }).fixId === 'SAVOY',
+    )!
+    const props = f.properties as { segment: string; inboundCourseMag: number }
+    expect(props.segment).toBe('transition')
+    expect(props.inboundCourseMag).toBeCloseTo(342.1, 5)
+    const drawn = drawnHoldInboundBearing((f.geometry as unknown as { coordinates: [number, number][] }).coordinates)
+    // Correct true bearing (342.1 + 17.0 = 359.1), NOT the raw magnetic 342.1.
+    expect(drawn).toBeCloseTo(magneticToTrue(342.1, 17), 0) // within ~1°
+    expect(Math.abs(((drawn - 342.1 + 540) % 360) - 180)).toBeGreaterThan(10) // clearly magvar-rotated
+  })
+
+  it('draws the missed-approach (HM) racetrack inbound leg at magneticToTrue(course, magvar)', () => {
+    const f = holdFeatures().find(
+      (f) => (f.properties as { fixId: string; segment: string }).fixId === 'AW',
+    )!
+    const props = f.properties as { segment: string; inboundCourseMag: number }
+    expect(props.segment).toBe('missed')
+    expect(props.inboundCourseMag).toBeCloseTo(161.0, 5)
+    const drawn = drawnHoldInboundBearing((f.geometry as unknown as { coordinates: [number, number][] }).coordinates)
+    // Correct true bearing (161.0 + 17.0 = 178.0), NOT the raw magnetic 161.0.
+    expect(drawn).toBeCloseTo(magneticToTrue(161.0, 17), 0) // within ~1°
+    expect(Math.abs(((drawn - 161.0 + 540) % 360) - 180)).toBeGreaterThan(10) // clearly magvar-rotated
+  })
+
+  it('keeps every hold feature (both classes) parallel to its own true course', () => {
+    for (const f of holdFeatures()) {
+      const props = f.properties as { inboundCourseMag: number }
+      const drawn = drawnHoldInboundBearing((f.geometry as unknown as { coordinates: [number, number][] }).coordinates)
+      const expected = magneticToTrue(props.inboundCourseMag, 17)
+      expect(Math.abs(((drawn - expected + 540) % 360) - 180)).toBeLessThan(1)
+    }
   })
 })

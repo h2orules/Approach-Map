@@ -19,6 +19,18 @@ interface SettingsStore {
   showTisb: boolean
   /** Show VFR traffic (squawking 1200). */
   showVfr: boolean
+  /** Draw predicted-path lines ahead of moving aircraft. */
+  showPredictedPaths: boolean
+  /** How far ahead (minutes) the predicted path extends. */
+  predictionMinutes: 1 | 2 | 3 | 5
+  /** Draw range rings around the selected aircraft. */
+  showRangeRings: boolean
+  /** Draw predicted hold-entry paths (direct/teardrop/parallel). Off by default. */
+  showHoldEntries: boolean
+  /** Show terrain (MSAW-style) alert/warning chrome. */
+  showTerrainAlerts: boolean
+  /** Show traffic alert/warning + TCAS TA/RA chrome and force-shown conflict paths. */
+  showTrafficAlerts: boolean
   /** Slider position (0–19) for the lower altitude filter handle. */
   altFilterMin: number
   /** Slider position (0–19) for the upper altitude filter handle. */
@@ -34,6 +46,12 @@ interface SettingsStore {
   toggleAirspace: () => void
   toggleTisb: () => void
   toggleVfr: () => void
+  togglePredictedPaths: () => void
+  setPredictionMinutes: (m: 1 | 2 | 3 | 5) => void
+  toggleRangeRings: () => void
+  toggleHoldEntries: () => void
+  toggleTerrainAlerts: () => void
+  toggleTrafficAlerts: () => void
   setAltFilterMin: (pos: number) => void
   setAltFilterMax: (pos: number) => void
 }
@@ -51,6 +69,12 @@ export const useSettingsStore = create<SettingsStore>()(
       showAirspace: false,
       showTisb: true,
       showVfr: true,
+      showPredictedPaths: true,
+      predictionMinutes: 3,
+      showRangeRings: false,
+      showHoldEntries: false,
+      showTerrainAlerts: true,
+      showTrafficAlerts: true,
       altFilterMin: 0,
       altFilterMax: 19,
 
@@ -66,6 +90,12 @@ export const useSettingsStore = create<SettingsStore>()(
       toggleAirspace: () => set((s) => ({ showAirspace: !s.showAirspace })),
       toggleTisb: () => set((s) => ({ showTisb: !s.showTisb })),
       toggleVfr: () => set((s) => ({ showVfr: !s.showVfr })),
+      togglePredictedPaths: () => set((s) => ({ showPredictedPaths: !s.showPredictedPaths })),
+      setPredictionMinutes: (m) => set({ predictionMinutes: m }),
+      toggleRangeRings: () => set((s) => ({ showRangeRings: !s.showRangeRings })),
+      toggleHoldEntries: () => set((s) => ({ showHoldEntries: !s.showHoldEntries })),
+      toggleTerrainAlerts: () => set((s) => ({ showTerrainAlerts: !s.showTerrainAlerts })),
+      toggleTrafficAlerts: () => set((s) => ({ showTrafficAlerts: !s.showTrafficAlerts })),
       setAltFilterMin: (pos) => set({ altFilterMin: Math.max(0, Math.min(19, pos)) }),
       setAltFilterMax: (pos) => set({ altFilterMax: Math.max(0, Math.min(19, pos)) }),
     }),

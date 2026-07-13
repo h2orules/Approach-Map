@@ -63,7 +63,9 @@ export function HoldEntryLayer() {
         features.push({
           type: 'Feature',
           geometry: f.geometry,
-          properties: { __ctxColor: color },
+          // __ctxLabel identifies the otherwise-fix-less thin line as its parent
+          // approach (the sidebar ident, e.g. "I34C") along the line.
+          properties: { __ctxColor: color, __ctxLabel: proc.name },
         })
       }
     }
@@ -89,6 +91,27 @@ export function HoldEntryLayer() {
             'line-opacity': 0.5,
           }}
           layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+        />
+        {/* Identify the fix-less context line with its parent approach's ident,
+            placed along the line so the thin lines aren't a mystery. */}
+        <Layer
+          id="hold-entry-context-label"
+          type="symbol"
+          layout={{
+            'symbol-placement': 'line',
+            'symbol-spacing': 250,
+            'text-field': ['coalesce', ['get', '__ctxLabel'], ''],
+            'text-size': 10,
+            'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+            'text-allow-overlap': false,
+            'text-keep-upright': true,
+          }}
+          paint={{
+            'text-color': ['coalesce', ['get', '__ctxColor'], CONTEXT_FALLBACK_COLOR],
+            'text-halo-color': 'rgba(10,15,20,0.9)',
+            'text-halo-width': 1.4,
+            'text-opacity': 0.9,
+          }}
         />
       </Source>
 

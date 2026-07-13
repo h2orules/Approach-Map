@@ -215,3 +215,23 @@
     opacity: 0.15;
   }
 }
+
+/* ── Anisotropic zoom (AxisStretchFrame) ─────────────────────────────────── */
+/* The popup lives inside the stretched map frame; counter-scale its content
+   (with the origin pinned to the anchored corner, so the block stays attached
+   to its quadrant offset point) so the data block stays crisp. */
+:global([data-axis-stretch]) .popup :global(.mapboxgl-popup-content) {
+  transform: scale(var(--axis-inv-sx, 1), var(--axis-inv-sy, 1));
+}
+:global([data-axis-stretch]) .popup:global(.mapboxgl-popup-anchor-bottom-left) :global(.mapboxgl-popup-content) {
+  transform-origin: bottom left;
+}
+:global([data-axis-stretch]) .popup:global(.mapboxgl-popup-anchor-top-left) :global(.mapboxgl-popup-content) {
+  transform-origin: top left;
+}
+:global([data-axis-stretch]) .popup:global(.mapboxgl-popup-anchor-top-right) :global(.mapboxgl-popup-content) {
+  transform-origin: top right;
+}
+:global([data-axis-stretch]) .popup:global(.mapboxgl-popup-anchor-bottom-right) :global(.mapboxgl-popup-content) {
+  transform-origin: bottom right;
+}

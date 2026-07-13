@@ -214,3 +214,15 @@
   text-shadow:
     0 0 2px #0b0f14, 0 0 2px #0b0f14, 0 0 3px #0b0f14;
 }
+
+/* ── Anisotropic zoom (AxisStretchFrame) ─────────────────────────────────── */
+/* While the map frame is stretched, counter-scale marker content so glyphs
+   and text stay crisp/undistorted; the 0×0 .container (and center-anchored
+   .segDist) keep their anchor because the scale happens about it. The vars
+   are set by AxisStretchFrame; the rules only match while stretched. The
+   rotated course/barb/hold labels are handled inline in WaypointMarkers.tsx
+   instead (their rotation angle also needs re-deriving under the stretch). */
+:global([data-axis-stretch]) .container,
+:global([data-axis-stretch]) .segDist {
+  transform: scale(var(--axis-inv-sx, 1), var(--axis-inv-sy, 1));
+}

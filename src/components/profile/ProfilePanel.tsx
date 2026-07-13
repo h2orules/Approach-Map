@@ -11,6 +11,8 @@ import { buildProfileTrail } from '../../geo/profileTrail'
 import type { ProfileTrailPoint } from '../../geo/profileTrail'
 import { pickPanelAnchor, type Rect } from '../../geo/panelPlacement'
 import { getTrack } from '../../services/trackLog'
+import { useMapStore } from '../../store/useMapStore'
+import { stretchScales } from '../../utils/axisZoom'
 import {
   PROFILE_PANEL_MIN_W,
   PROFILE_PANEL_MIN_H,
@@ -119,19 +121,26 @@ export function ProfilePanel({ mapRef }: Props) {
       { x: containerW - PROFILE_MARGIN_PX - width, y: containerH - PROFILE_MARGIN_PX - height, w: width, h: height },
     ]
 
+    // map.project() returns map-container (layout) pixels; under anisotropic
+    // zoom the container is CSS-stretched (AxisStretchFrame), so scale to the
+    // visual pixels this panel is positioned in. (1, 1) at normal zoom.
+    const { sx, sy } = stretchScales(useMapStore.getState().axisRatio)
     const obstaclePts: Array<{ x: number; y: number }> = []
     for (const p of procedures) {
       if (!computeVisibility(userToggles, autoVisible, p.id)) continue
       for (const sym of p.symbols) {
-        obstaclePts.push(map.project([sym.lon, sym.lat]))
+        const pt = map.project([sym.lon, sym.lat])
+        obstaclePts.push({ x: pt.x * sx, y: pt.y * sy })
       }
     }
 
-    // Measure the other absolutely-positioned overlays sharing this container
+    // Measure the other absolutely-positioned overlays sharing the map root
     // (they mark themselves with data-map-overlay) so placement avoids their
     // real on-screen footprint rather than numbers copied from their CSS.
+    // Resolved via the data-map-root wrapper (AppMap) rather than the
+    // container's direct parent, which is the AxisStretchFrame.
     const reservedRects: Rect[] = []
-    const host = map.getContainer().parentElement
+    const host = map.getContainer().closest('[data-map-root]')
     if (host) {
       for (const el of Array.from(host.querySelectorAll<HTMLElement>('[data-map-overlay]'))) {
         const r = el.getBoundingClientRect()

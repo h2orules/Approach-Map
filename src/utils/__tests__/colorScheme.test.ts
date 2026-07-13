@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest'
-import { assignProcedureColors, PROCEDURE_COLOR_FAMILIES } from '../colorScheme'
+import { assignProcedureColors, PROCEDURE_COLOR_FAMILIES, altitudeColor } from '../colorScheme'
 import type { Procedure } from '../../types/procedure'
+
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16)
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff]
+}
+
+function rgbDistance(a: string, b: string): number {
+  const [r1, g1, b1] = hexToRgb(a)
+  const [r2, g2, b2] = hexToRgb(b)
+  return Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2)
+}
 
 function proc(icao: string, name: string, type: Procedure['type']): Procedure {
   return {
@@ -96,5 +107,79 @@ describe('assignProcedureColors', () => {
         }
       }
     }
+  })
+})
+
+describe('altitudeColor', () => {
+  // Perceptibility floors: adjacent 200 ft bands below 3000 ft shift modestly
+  // (the ramp actually produces ~13-30 RGB units per step), while 600 ft of
+  // separation must read as a clearly different color (~55+ actual).
+  const ADJACENT_200FT_FLOOR = 12
+  const APART_600FT_FLOOR = 35
+
+  it('returns the reserved ground amber for "ground", unchanged', () => {
+    expect(altitudeColor('ground')).toBe('#f59e0b')
+  })
+
+  it('is sensitive below 3000 ft: 700 vs 1200 vs 1700 ft are all clearly distinct', () => {
+    const c700 = altitudeColor(700)
+    const c1200 = altitudeColor(1200)
+    const c1700 = altitudeColor(1700)
+    expect(rgbDistance(c700, c1200)).toBeGreaterThan(APART_600FT_FLOOR)
+    expect(rgbDistance(c1200, c1700)).toBeGreaterThan(APART_600FT_FLOOR)
+    expect(rgbDistance(c700, c1700)).toBeGreaterThan(APART_600FT_FLOOR)
+  })
+
+  it('adjacent 200 ft bands below 3000 ft each shift perceptibly', () => {
+    for (let ft = 200; ft <= 3000; ft += 200) {
+      expect(rgbDistance(altitudeColor(ft - 200), altitudeColor(ft))).toBeGreaterThan(
+        ADJACENT_200FT_FLOOR,
+      )
+    }
+  })
+
+  it('bands 600 ft apart below 3000 ft are clearly different', () => {
+    for (let ft = 600; ft <= 3000; ft += 200) {
+      expect(rgbDistance(altitudeColor(ft - 600), altitudeColor(ft))).toBeGreaterThan(
+        APART_600FT_FLOOR,
+      )
+    }
+  })
+
+  it('pins the named stop colors across the full 0-18000 ft walk', () => {
+    expect(altitudeColor(0)).toBe('#8a340f')
+    expect(altitudeColor(400)).toBe('#ae4e10')
+    expect(altitudeColor(800)).toBe('#cd7311')
+    expect(altitudeColor(1200)).toBe('#dca51a')
+    expect(altitudeColor(1600)).toBe('#d3d629')
+    expect(altitudeColor(2000)).toBe('#9bda2e')
+    expect(altitudeColor(2400)).toBe('#61d33a')
+    expect(altitudeColor(2800)).toBe('#3fc550')
+    expect(altitudeColor(3000)).toBe('#38bf5a')
+    expect(altitudeColor(6000)).toBe('#2bb388')
+    expect(altitudeColor(9000)).toBe('#2ba8ac')
+    expect(altitudeColor(13000)).toBe('#30a8d9')
+  })
+
+  it('never emits an exact reserved UI color for airborne altitudes', () => {
+    const reserved = new Set(['#f59e0b', '#facc15', '#ff2bd6', '#fbbf24', '#ef4444'])
+    for (let ft = 0; ft <= 20000; ft += 250) {
+      expect(reserved.has(altitudeColor(ft))).toBe(false)
+    }
+  })
+
+  it('Class A (>=18000 ft) behavior is unchanged: dark navy at the floor, brightening toward sky-400', () => {
+    expect(altitudeColor(18000)).toBe('#0c4a6e')
+    const c30000 = altitudeColor(30000)
+    const c60000 = altitudeColor(60000)
+    expect(altitudeColor(60000)).toBe('#38bdf8')
+    // Monotonically brightening with altitude within Class A.
+    expect(rgbDistance('#0c4a6e', c30000)).toBeGreaterThan(0)
+    expect(rgbDistance(c30000, c60000)).toBeGreaterThan(0)
+    const [, g18000] = hexToRgb(altitudeColor(18000))
+    const [, g30000] = hexToRgb(c30000)
+    const [, g60000] = hexToRgb(c60000)
+    expect(g30000).toBeGreaterThan(g18000)
+    expect(g60000).toBeGreaterThan(g30000)
   })
 })

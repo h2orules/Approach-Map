@@ -4,7 +4,7 @@ type Pt = [number, number]
 
 const NM = { units: 'nauticalmiles' as const }
 
-function dest(p: Pt, distNm: number, bearing: number): Pt {
+export function dest(p: Pt, distNm: number, bearing: number): Pt {
   return turf.destination(turf.point(p), distNm, bearing, NM).geometry.coordinates as Pt
 }
 
@@ -49,7 +49,7 @@ export function dmeArc(
 }
 
 /** Sweep an arc of `points` around `center`, from `startBrg` to `startBrg ± 180`. */
-function semicircle(center: Pt, radiusNm: number, startBrg: number, right: boolean, steps = 16): Pt[] {
+export function semicircle(center: Pt, radiusNm: number, startBrg: number, right: boolean, steps = 16): Pt[] {
   const out: Pt[] = []
   for (let i = 0; i <= steps; i++) {
     const f = i / steps
@@ -67,8 +67,8 @@ function semicircle(center: Pt, radiusNm: number, startBrg: number, right: boole
  */
 // Hold racetrack sizing (shared by holdTrack and holdOutboundLabelAnchor so the
 // label lands exactly on the drawn outbound leg).
-const HOLD_TURN_R = 0.85 // nm — turn radius / half the track width
-const clampHoldLeg = (legNm: number): number => Math.min(Math.max(legNm || 0, 1.5), 6)
+export const HOLD_TURN_R = 0.85 // nm — turn radius / half the track width
+export const clampHoldLeg = (legNm: number): number => Math.min(Math.max(legNm || 0, 1.5), 6)
 
 export function holdTrack(
   fixLat: number,

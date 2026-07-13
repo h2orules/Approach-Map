@@ -29,6 +29,11 @@
 
 /* ── Mini data label — three centered lines below the icon ───────────────── */
 
+/* transform is the base position; AircraftOverlay.tsx's rAF loop may set an
+   inline style.transform on this element (or .dataLabelWrap below) to push a
+   conflicting pair's labels apart, repeating this translate(-50%, 22px) since
+   an inline style fully replaces the rule below rather than composing with
+   it. Cleared back to '' once the pair-separation eases out to rest. */
 .dataLabel {
   position: absolute;
   left: 0;
@@ -167,4 +172,87 @@
 
 .selected .altspd {
   color: #cbd5e1;
+}
+
+/* ── Traffic/terrain alert chrome (src/store/usePathStore.ts) ─────────────
+   Only rendered when the hex has an AircraftAlert — see AircraftOverlay.tsx.
+   .dataLabelWrap replaces the plain .dataLabel as the positioned element (same
+   translate(-50%, 22px) as the non-alerted .dataLabel, so the callsign line
+   doesn't shift when an alert appears/disappears) and stacks, top to bottom:
+   the unboxed callsign row, the .alertBox/.warnBox border around just the
+   data rows (altitude/speed/track + type/route/TIS-B), the chip, and — red
+   tier only — the blinking bar. The nested .dataLabel (now wrapping only the
+   data rows, inside the box) goes back to static/no-transform since
+   .dataLabelWrap carries the positioning. */
+
+/* See the .dataLabel comment above — same inline pair-separation override
+   applies to this element when it's the alerted variant. */
+.dataLabelWrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, 22px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.dataLabelWrap .dataLabel {
+  position: static;
+  transform: none;
+}
+
+/* Amber tier ('alert' | 'ta'): 1px amber outline around the data rows only
+   (callsign row sits above, unboxed), no fill. */
+.alertBox {
+  border: 1px solid #fbbf24; /* ALERT_AMBER */
+  border-radius: 2px;
+  padding: 2px 5px;
+  background: transparent;
+}
+
+/* Red tier ('warning' | 'ra'): pairs with the blinking bar below (.warnBar);
+   the outline itself stays amber like .alertBox. */
+.warnBox {
+}
+
+.chip {
+  margin-top: 3px;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.alertChip {
+  background: #fbbf24; /* ALERT_AMBER */
+  color: #1a1406;
+}
+
+.warnChip {
+  background: #ef4444; /* WARNING_RED */
+  color: #ffffff;
+}
+
+.warnBar {
+  align-self: stretch;
+  height: 5px;
+  margin-top: 3px;
+  border-radius: 1px;
+  background: #ef4444; /* WARNING_RED */
+}
+
+/* Blink is applied only to the red fill bar (not text elements), so labels
+   and chip text stay legible while the bar flashes. */
+.blink {
+  animation: blink 1s steps(2, jump-none) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.15;
+  }
 }

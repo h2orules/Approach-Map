@@ -19,6 +19,11 @@ import { MvaLayer } from './MvaLayer'
 import { AirspaceLayer } from './AirspaceLayer'
 import { LocFeatherLayer } from './LocFeatherLayer'
 import { WaypointMarkers } from './WaypointMarkers'
+import { RangeRingsLayer } from './RangeRingsLayer'
+import { TrackLogLayer } from './TrackLogLayer'
+import { HoldEntryLayer } from './HoldEntryLayer'
+import { PredictionLayer } from './PredictionLayer'
+import { PathControls } from './PathControls'
 import { RenderBudgetHint } from './RenderBudgetHint'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
 import { AltitudeFilter } from './AltitudeFilter'
@@ -28,6 +33,7 @@ import { useAircraftInterpolation } from '../../hooks/useAircraftInterpolation'
 import { useAircraftPoll } from '../../hooks/useAircraftPoll'
 import { useProcedures } from '../../hooks/useProcedures'
 import { useProcedureDetection } from '../../hooks/useProcedureDetection'
+import { usePathEngine } from '../../hooks/usePathEngine'
 import { useRouteEnrichment } from '../../hooks/useRouteEnrichment'
 import { useDatis } from '../../hooks/useDatis'
 import { useRunways } from '../../hooks/useRunways'
@@ -40,6 +46,10 @@ import type { Procedure } from '../../types/procedure'
 
 // Render order: lowest value drawn first (bottom), highest last (top).
 // Approaches are ordered I > R > H > L so precision ILS sits on top.
+// The path-prediction overlays mount between FlownSegmentLayer and
+// WaypointMarkers, drawn bottom-to-top as RangeRingsLayer -> TrackLogLayer ->
+// HoldEntryLayer -> PredictionLayer, so a predicted path sits above the
+// historical track log and both sit above the range rings.
 const APPROACH_RENDER_PRIORITY: Record<string, number> = { L: 2, H: 3, R: 4, I: 5 }
 function approachRenderOrder(p: Procedure): number {
   if (p.type === 'SID') return 0
@@ -65,6 +75,10 @@ export function AppMap() {
   useAircraftPoll()
   useProcedures()
   useProcedureDetection()
+  // Same-dependency effects run in hook call order, so the path engine sees
+  // this poll's detection assignments — must stay immediately after
+  // useProcedureDetection(). Do not reorder.
+  usePathEngine()
   useRouteEnrichment()
   useDatis()
   useRunways()
@@ -173,6 +187,14 @@ export function AppMap() {
 
         <FlownSegmentLayer procedures={visibleProcedures} />
 
+        <RangeRingsLayer />
+
+        <TrackLogLayer />
+
+        <HoldEntryLayer />
+
+        <PredictionLayer />
+
         <WaypointMarkers procedures={visibleProcedures} />
 
         <SelectedAircraftDataBlock />
@@ -198,6 +220,7 @@ export function AppMap() {
           pointerEvents: 'none',
         }}
       >
+        <PathControls />
         <TrafficFilter />
         <AltitudeFilter />
       </div>

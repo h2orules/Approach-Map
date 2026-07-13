@@ -1,0 +1,12 @@
+/* Small "N NM" chip anchored to each range ring's 12/6 o'clock point. */
+.chip {
+  background: rgba(15, 23, 42, 0.85);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: 'Roboto Mono', 'DejaVu Sans Mono', monospace;
+  font-size: 9px;
+  white-space: nowrap;
+  pointer-events: none;
+}

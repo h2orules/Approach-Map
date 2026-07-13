@@ -158,3 +158,60 @@
 .descending {
   color: #f87171;
 }
+
+/* ── Traffic/terrain alert chrome (src/store/usePathStore.ts) ─────────────
+   Only rendered when the selected aircraft's hex has an AircraftAlert — see
+   DataBlock.tsx. .alertWrap centers the chip/bar under .block. */
+
+.alertWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Amber tier ('alert' | 'ta'): 1px amber outline on the existing block. */
+.alertBox {
+  border-color: #fbbf24; /* ALERT_AMBER */
+}
+
+.chip {
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.alertChip {
+  background: #fbbf24; /* ALERT_AMBER */
+  color: #1a1406;
+}
+
+.warnChip {
+  background: #ef4444; /* WARNING_RED */
+  color: #ffffff;
+}
+
+/* Red tier ('warning' | 'ra'): blinking bar below the block. */
+.warnBar {
+  align-self: stretch;
+  height: 5px;
+  margin-top: 4px;
+  border-radius: 1px;
+  background: #ef4444; /* WARNING_RED */
+}
+
+/* Blink is applied only to the red fill bar (not text elements), so labels
+   and chip text stay legible while the bar flashes. */
+.blink {
+  animation: blink 1s steps(2, jump-none) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.15;
+  }
+}

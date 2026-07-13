@@ -4,6 +4,8 @@ import { useAircraftStore } from '../../store/useAircraftStore'
 import { useSelectionStore, selectedHexOf } from '../../store/useSelectionStore'
 import { useSettingsStore } from '../../store/useSettingsStore'
 import { usePathStore } from '../../store/usePathStore'
+import { useMapStore } from '../../store/useMapStore'
+import { stretchScales, stretchTrackDeg } from '../../utils/axisZoom'
 import type { AircraftAlert } from '../../types/path'
 import { formatAltitude, formatSpeed, formatHeading } from '../../utils/formatters'
 import { altitudeColor } from '../../utils/colorScheme'
@@ -90,6 +92,10 @@ export function AircraftOverlay({ mapRef }: Props) {
   // from getState per frame for the z-order/visibility side.
   const showTerrainAlerts = useSettingsStore((s) => s.showTerrainAlerts)
   const showTrafficAlerts = useSettingsStore((s) => s.showTrafficAlerts)
+  // Anisotropic zoom: icons are drawn crisp (unstretched), so their rotation
+  // is adjusted to match the visually stretched trajectory below.
+  const axisRatio = useMapStore((s) => s.axisRatio)
+  const { sx: stretchSx, sy: stretchSy } = stretchScales(axisRatio)
 
   // Snapshot the airborne aircraft set; only changes on a poll.
   const aircraft = useMemo(
@@ -117,6 +123,10 @@ export function AircraftOverlay({ mapRef }: Props) {
         const { alerts, forcedVisibleHexes } = usePathStore.getState()
         const minFt = positionToMinFt(altFilterMin)
         const maxFt = positionToMaxFt(altFilterMax)
+        // Anisotropic zoom: this overlay sits OUTSIDE the stretched map frame
+        // (so aircraft stay crisp), which means map.project()'s layout-space
+        // pixels must be scaled to visual pixels here. (1, 1) at normal zoom.
+        const { sx, sy } = stretchScales(useMapStore.getState().axisRatio)
 
         for (const [hex, node] of nodes.current) {
           const ac = store.aircraftMap.get(hex)
@@ -143,6 +153,8 @@ export function AircraftOverlay({ mapRef }: Props) {
           node.style.display = ''
 
           const p = map.project([ac.interpLon, ac.interpLat])
+          p.x *= sx
+          p.y *= sy
           node.style.transform = `translate(${p.x}px, ${p.y}px)`
           node.style.color = altitudeColor(ac.altBaro)
 
@@ -167,6 +179,8 @@ export function AircraftOverlay({ mapRef }: Props) {
             const other = otherHex ? store.aircraftMap.get(otherHex) : undefined
             if (other) {
               const op = map.project([other.interpLon, other.interpLat])
+              op.x *= sx
+              op.y *= sy
               let dx = p.x - op.x
               let dy = p.y - op.y
               const dist = Math.hypot(dx, dy)
@@ -303,7 +317,9 @@ export function AircraftOverlay({ mapRef }: Props) {
           >
             <div
               className={styles.iconWrap}
-              style={{ transform: `translate(-50%, -50%) rotate(${ac.track}deg)` }}
+              style={{
+                transform: `translate(-50%, -50%) rotate(${stretchTrackDeg(ac.track, stretchSx, stretchSy)}deg)`,
+              }}
             >
               <AircraftIcon />
             </div>

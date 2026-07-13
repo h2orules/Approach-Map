@@ -24,6 +24,8 @@ import { TrackLogLayer } from './TrackLogLayer'
 import { HoldEntryLayer } from './HoldEntryLayer'
 import { PredictionLayer } from './PredictionLayer'
 import { PathControls } from './PathControls'
+import { AxisStretchFrame } from './AxisStretchFrame'
+import { AxisZoomControls } from './AxisZoomControls'
 import { RenderBudgetHint } from './RenderBudgetHint'
 import { ActiveProceduresOverlay } from '../layout/ActiveProceduresOverlay'
 import { AltitudeFilter } from './AltitudeFilter'
@@ -139,66 +141,73 @@ export function AppMap() {
   const handleMouseLeave = useCallback(() => setHoverCursor(false), [])
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <Map
-        ref={mapRef}
-        longitude={viewport.longitude}
-        latitude={viewport.latitude}
-        zoom={viewport.zoom}
-        onMove={handleMove}
-        mapStyle={getMapStyle()}
-        mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
-        style={{ width: '100%', height: '100%' }}
-        attributionControl={false}
-        interactiveLayerIds={interactiveLayerIds}
-        cursor={hoverCursor ? 'pointer' : undefined}
-        onClick={handleMapClick}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <NavigationControl position="bottom-right" />
+    <div style={{ width: '100%', height: '100%', position: 'relative' }} data-map-root="">
+      {/* AxisStretchFrame implements the anisotropic (per-axis) zoom: at 1:1
+          it's a pass-through; otherwise it CSS-stretches the map frame along
+          the more-zoomed axis and takes over pointer handling. The DOM
+          overlays below (AircraftOverlay, control stack, ProfilePanel) stay
+          OUTSIDE the frame so they render unstretched. */}
+      <AxisStretchFrame mapRef={mapRef}>
+        <Map
+          ref={mapRef}
+          longitude={viewport.longitude}
+          latitude={viewport.latitude}
+          zoom={viewport.zoom}
+          onMove={handleMove}
+          mapStyle={getMapStyle()}
+          mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+          style={{ width: '100%', height: '100%' }}
+          attributionControl={false}
+          interactiveLayerIds={interactiveLayerIds}
+          cursor={hoverCursor ? 'pointer' : undefined}
+          onClick={handleMapClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          <NavigationControl position="bottom-right" />
 
-        {/* Terrain and safe-altitude overlays are always mounted (visibility
-            toggled via layout.visibility) rather than conditionally rendered,
-            so their runtime GL layers keep a stable position in the render
-            order across toggles — see the z-order rationale comment atop
-            TerrainLayer.tsx. */}
-        <TerrainLayer />
+          {/* Terrain and safe-altitude overlays are always mounted (visibility
+              toggled via layout.visibility) rather than conditionally rendered,
+              so their runtime GL layers keep a stable position in the render
+              order across toggles — see the z-order rationale comment atop
+              TerrainLayer.tsx. */}
+          <TerrainLayer />
 
-        <SafeAltitudeLayer items={safeAltItems} />
+          <SafeAltitudeLayer items={safeAltItems} />
 
-        <MvaLayer />
+          <MvaLayer />
 
-        <AirspaceLayer />
+          <AirspaceLayer />
 
-        <LocFeatherLayer />
+          <LocFeatherLayer />
 
-        <RunwayLayer runways={runways} />
+          <RunwayLayer runways={runways} />
 
-        <AirportLabelsLayer />
+          <AirportLabelsLayer />
 
-        {showCenterlines && <ExtendedCenterlineLayer runways={runways} />}
+          {showCenterlines && <ExtendedCenterlineLayer runways={runways} />}
 
-        {visibleProcedures.map((p) => (
-          <ProcedureLayer key={p.id} procedure={p} />
-        ))}
+          {visibleProcedures.map((p) => (
+            <ProcedureLayer key={p.id} procedure={p} />
+          ))}
 
-        <AutoActiveSegmentsLayer procedures={visibleProcedures} />
+          <AutoActiveSegmentsLayer procedures={visibleProcedures} />
 
-        <FlownSegmentLayer procedures={visibleProcedures} />
+          <FlownSegmentLayer procedures={visibleProcedures} />
 
-        <RangeRingsLayer />
+          <RangeRingsLayer />
 
-        <TrackLogLayer />
+          <TrackLogLayer />
 
-        <HoldEntryLayer />
+          <HoldEntryLayer />
 
-        <PredictionLayer />
+          <PredictionLayer />
 
-        <WaypointMarkers procedures={visibleProcedures} />
+          <WaypointMarkers procedures={visibleProcedures} />
 
-        <SelectedAircraftDataBlock />
-      </Map>
+          <SelectedAircraftDataBlock />
+        </Map>
+      </AxisStretchFrame>
 
       {/* DOM overlay so aircraft render above the waypoint markers and stay crisp */}
       <AircraftOverlay mapRef={mapRef} />
@@ -220,6 +229,7 @@ export function AppMap() {
           pointerEvents: 'none',
         }}
       >
+        <AxisZoomControls />
         <PathControls />
         <TrafficFilter />
         <AltitudeFilter />

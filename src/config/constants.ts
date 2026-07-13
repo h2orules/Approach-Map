@@ -364,3 +364,15 @@ export const RING_ZOOM_BUCKETS: { minZoom: number; radiiNm: [number, number, num
 export const PREDICTION_LINE_COLOR = '#ffffff'
 export const ALERT_AMBER = '#fbbf24' // distinct from AIRCRAFT_COLOR #f59e0b (src/utils/colorScheme.ts)
 export const WARNING_RED = '#ef4444'
+
+// ── Anisotropic (per-axis) zoom ─────────────────────────────────────────────
+// The map can be zoomed further along one screen axis than the other (e.g.
+// zoom in horizontally to separate parallel-runway traffic while staying
+// zoomed out vertically to see the whole approach). Implemented as a CSS
+// scale of the map frame along the more-zoomed axis — see
+// src/components/map/AxisStretchFrame.tsx and src/utils/axisZoom.ts.
+// Zoom-level step applied per +/- click of the per-axis controls.
+export const AXIS_ZOOM_STEP = 0.5
+// Max |zoomY - zoomX| in zoom levels (3 → up to 8× stretch). Bounds both the
+// visual distortion and the CSS upscale blur.
+export const AXIS_ZOOM_MAX_RATIO = 3

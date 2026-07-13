@@ -58,3 +58,25 @@ button {
 .mapboxgl-popup-anchor-bottom-left .mapboxgl-popup-tip {
   border-top-color: transparent !important;
 }
+
+/* ── Anisotropic zoom (AxisStretchFrame) ─────────────────────────────────── */
+/* The mapbox control corners (NavigationControl, logo) render inside the
+   stretched map frame; counter-scale them about their pinned corner so the
+   buttons stay crisp and correctly sized. --axis-inv-* vars are set by
+   AxisStretchFrame; these rules only match while the map is stretched. */
+[data-axis-stretch] .mapboxgl-ctrl-bottom-right {
+  transform: scale(var(--axis-inv-sx, 1), var(--axis-inv-sy, 1));
+  transform-origin: bottom right;
+}
+[data-axis-stretch] .mapboxgl-ctrl-bottom-left {
+  transform: scale(var(--axis-inv-sx, 1), var(--axis-inv-sy, 1));
+  transform-origin: bottom left;
+}
+[data-axis-stretch] .mapboxgl-ctrl-top-right {
+  transform: scale(var(--axis-inv-sx, 1), var(--axis-inv-sy, 1));
+  transform-origin: top right;
+}
+[data-axis-stretch] .mapboxgl-ctrl-top-left {
+  transform: scale(var(--axis-inv-sx, 1), var(--axis-inv-sy, 1));
+  transform-origin: top left;
+}

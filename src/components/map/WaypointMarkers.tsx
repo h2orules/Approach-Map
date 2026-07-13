@@ -17,6 +17,8 @@ import {
 } from '../../geo/procedureShapes'
 import { magneticToTrue } from '../../utils/arincRecords'
 import { isOverWaypointBudget } from '../../utils/renderBudget'
+import { useMapStore } from '../../store/useMapStore'
+import { stretchScales, stretchRotationDeg } from '../../utils/axisZoom'
 import styles from './WaypointMarkers.module.css'
 
 const norm360 = (d: number): number => ((d % 360) + 360) % 360
@@ -559,6 +561,16 @@ export function WaypointMarkers({ procedures }: Props) {
     }
   }, [mapRef, symbols, procedures])
 
+  // Anisotropic zoom (AxisStretchFrame): the un-rotated markers are
+  // counter-scaled in CSS (see the module stylesheet), but the rotated
+  // course/barb/hold labels carry inline transforms, so the counter-scale is
+  // composed here — and their angle is re-derived so the crisp label stays
+  // parallel to the visually stretched leg it annotates.
+  const axisRatio = useMapStore((s) => s.axisRatio)
+  const { sx: strSx, sy: strSy } = stretchScales(axisRatio)
+  const labelScale = axisRatio === 0 ? '' : `scale(${1 / strSx}, ${1 / strSy}) `
+  const labelRot = (deg: number) => stretchRotationDeg(deg, strSx, strSy)
+
   return (
     <>
       {placements.map((pl) => {
@@ -648,7 +660,10 @@ export function WaypointMarkers({ procedures }: Props) {
         <Marker key={cl.key} longitude={cl.lon} latitude={cl.lat} anchor="center">
           <div
             className={styles.courseLabel}
-            style={{ color: cl.color, transform: `rotate(${cl.rot}deg) translateY(${cl.flipped ? 9 : -9}px)` }}
+            style={{
+              color: cl.color,
+              transform: `${labelScale}rotate(${labelRot(cl.rot)}deg) translateY(${cl.flipped ? 9 : -9}px)`,
+            }}
           >
             {cl.text}
           </div>
@@ -661,7 +676,10 @@ export function WaypointMarkers({ procedures }: Props) {
         <Marker key={bl.key} longitude={bl.lon} latitude={bl.lat} anchor="center">
           <div
             className={styles.barbLabel}
-            style={{ color: bl.color, transform: `rotate(${bl.rot}deg) translateY(${bl.flipped ? 8 : -8}px)` }}
+            style={{
+              color: bl.color,
+              transform: `${labelScale}rotate(${labelRot(bl.rot)}deg) translateY(${bl.flipped ? 8 : -8}px)`,
+            }}
           >
             {bl.text}
           </div>
@@ -676,7 +694,10 @@ export function WaypointMarkers({ procedures }: Props) {
         <Marker key={hl.key} longitude={hl.lon} latitude={hl.lat} anchor="center">
           <div
             className={styles.holdCourseLabel}
-            style={{ color: hl.color, transform: `rotate(${hl.rot}deg) translateY(${hl.flipped ? 10 : -10}px)` }}
+            style={{
+              color: hl.color,
+              transform: `${labelScale}rotate(${labelRot(hl.rot)}deg) translateY(${hl.flipped ? 10 : -10}px)`,
+            }}
           >
             <span className={styles.courseLabel} style={{ color: hl.color }}>{hl.text}</span>
             {hl.alt && <AltLabel c={hl.alt} />}

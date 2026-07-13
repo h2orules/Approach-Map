@@ -10,3 +10,10 @@
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* Anisotropic zoom (AxisStretchFrame): keep the chip text crisp while the
+   map frame is stretched — it's center-anchored, so the counter-scale
+   happens about its ring point. */
+:global([data-axis-stretch]) .chip {
+  transform: scale(var(--axis-inv-sx, 1), var(--axis-inv-sy, 1));
+}

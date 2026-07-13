@@ -1,0 +1,84 @@
+/* ── Per-axis zoom control cluster ───────────────────────────────────────── */
+/*  Shares PathControls/TrafficFilter's white NavigationControl-style box so  */
+/*  it slots into the same bottom-right stack (positioned by AppMap).         */
+
+.container {
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: all;
+  user-select: none;
+}
+
+.axisRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.axisLabel {
+  width: 14px;
+  text-align: center;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1a1a;
+  flex-shrink: 0;
+}
+
+.btn {
+  flex: 1;
+  min-width: 26px;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  background: #f3f4f6;
+  padding: 3px 0;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: #1a1a1a;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: #9ca3af;
+  background: #e5e7eb;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.reset {
+  width: 100%;
+  border: 1px solid #1e293b;
+  border-radius: 3px;
+  background: #1e293b;
+  padding: 3px 6px;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s, opacity 0.1s;
+}
+
+.reset:hover:not(:disabled) {
+  background: #334155;
+}
+
+/* At 1:1 the reset is informational only — render it like an idle toggle. */
+.resetIdle {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #1a1a1a;
+  opacity: 0.5;
+  cursor: default;
+}

@@ -1,0 +1,21 @@
+/* ── Anisotropic-zoom frame ──────────────────────────────────────────────── */
+/*  Outer fills the map area and clips the (sub)pixel overhang of the scaled  */
+/*  inner frame; inner is laid out smaller along the more-zoomed axis and     */
+/*  scaled back up (origin top left so layout↔visual is a pure divide).       */
+
+.outer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* Our own pointer pan/pinch handlers run while stretched. */
+  touch-action: none;
+}
+
+.inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: top left;
+}

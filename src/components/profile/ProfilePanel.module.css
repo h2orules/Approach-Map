@@ -38,14 +38,22 @@
 }
 
 .closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Large touch target (≈44px) for easy tapping; negative margins pull it back
+     into the titlebar padding so the bar itself stays compact. */
+  min-width: 44px;
+  min-height: 44px;
+  margin: -8px -6px -8px 0;
   background: none;
   border: none;
   color: #94a3b8;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1;
-  padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: 6px;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .closeBtn:hover {

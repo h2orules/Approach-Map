@@ -45,6 +45,7 @@ const DEFAULT_RECT: PanelRect = {
 export function ProfilePanel({ mapRef }: Props) {
   const procedure = useProfileProcedure()
   const clearSelection = useSelectionStore((s) => s.clear)
+  const selectAircraft = useSelectionStore((s) => s.select)
   const selectedHex = useSelectionStore((s) => selectedHexOf(s.selected))
 
   const procedures = useProcedureStore((s) => s.procedures)
@@ -111,8 +112,15 @@ export function ProfilePanel({ mapRef }: Props) {
     const containerW = containerRect.width
     const containerH = containerRect.height
 
-    const width = Math.min(720, Math.max(PROFILE_PANEL_MIN_W, containerW - 2 * PROFILE_MARGIN_PX))
-    const height = Math.min(PROFILE_PANEL_MIN_H, Math.max(160, containerH - 2 * PROFILE_MARGIN_PX))
+    // Fit within the viewport width. On phones (portrait ≈ 360 CSS px) the
+    // 520px preferred width overflows the screen edge, so cap to what's
+    // available rather than forcing the desktop minimum.
+    const available = Math.max(160, containerW - 2 * PROFILE_MARGIN_PX)
+    const width = Math.min(720, available)
+    // A narrow (phone) layout wraps the header boxes onto extra rows; give it
+    // more vertical room so the wrapped header doesn't squeeze the plot.
+    const maxHeight = width < PROFILE_PANEL_MIN_W ? 400 : PROFILE_PANEL_MIN_H
+    const height = Math.min(maxHeight, Math.max(160, containerH - 2 * PROFILE_MARGIN_PX))
 
     const candidates: Rect[] = [
       { x: PROFILE_MARGIN_PX, y: PROFILE_MARGIN_PX, w: width, h: height },
@@ -263,7 +271,15 @@ export function ProfilePanel({ mapRef }: Props) {
         onPointerCancel={onTitlebarPointerUp}
       >
         <span className={styles.titlebarLabel}>Vertical Profile</span>
-        <button className={styles.closeBtn} onClick={() => clearSelection()} aria-label="Close profile panel">
+        <button
+          className={styles.closeBtn}
+          // Stop the titlebar's drag-start handler (which preventDefault()s the
+          // pointerdown, cancelling the button's click on touchscreens) from
+          // seeing this tap, so the native click fires normally.
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => clearSelection()}
+          aria-label="Close profile panel"
+        >
           ✕
         </button>
       </div>
@@ -277,6 +293,7 @@ export function ProfilePanel({ mapRef }: Props) {
                 model={model}
                 liveAircraft={liveAircraft}
                 selectedTrail={selectedTrail}
+                onSelectAircraft={(hex) => selectAircraft({ kind: 'aircraft', hex })}
                 width={Math.max(svgSize.width, 1)}
                 height={Math.max(svgSize.height, 1)}
               />

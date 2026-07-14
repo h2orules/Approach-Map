@@ -19,6 +19,9 @@ interface Props {
    *  time/distance gaps — see src/geo/profileTrail.ts. Empty/omitted when no
    *  aircraft is selected. Drawn as the lowest layer in the plot. */
   selectedTrail?: ProfileTrailPoint[][]
+  /** Select an aircraft (by hex) when its profile glyph is tapped/clicked —
+   *  updates the map selection and swaps in that plane's flown trail. */
+  onSelectAircraft?: (hex: string) => void
   width: number
   height: number
 }
@@ -186,12 +189,14 @@ function AircraftGlyph({
   label,
   isSelected,
   labelAbove,
+  onSelect,
 }: {
   x: number
   y: number
   label: string
   isSelected: boolean
   labelAbove: boolean
+  onSelect?: () => void
 }) {
   const labelY = y + (labelAbove ? AIRCRAFT_LABEL_ABOVE_DY : AIRCRAFT_LABEL_BELOW_DY)
   // Feather points RIGHT with its tip at (x, y). The tip — not the body center —
@@ -201,7 +206,18 @@ function AircraftGlyph({
     `${x - AIRCRAFT_BODY_LEN},${y + AIRCRAFT_BODY_HALF_H} ${x},${y} ` +
     `${x - AIRCRAFT_BODY_LEN},${y - AIRCRAFT_BODY_HALF_H} ${x - AIRCRAFT_NOTCH_LEN},${y}`
   return (
-    <g>
+    <g className={onSelect ? styles.aircraftClickable : undefined} onClick={onSelect}>
+      {/* Transparent hit target — a generous touch/click area centered on the
+          glyph body so the small feather is easy to tap on a touchscreen. */}
+      {onSelect && (
+        <rect
+          x={x - AIRCRAFT_BODY_LEN - 8}
+          y={y - AIRCRAFT_BODY_HALF_H - 12}
+          width={AIRCRAFT_BODY_LEN + 20}
+          height={AIRCRAFT_BODY_HALF_H * 2 + 24}
+          fill="transparent"
+        />
+      )}
       <polygon className={isSelected ? styles.aircraft : styles.aircraftInactive} points={points} />
       <text
         className={isSelected ? styles.aircraftLabel : styles.aircraftLabelDimmed}
@@ -459,7 +475,7 @@ function HoldInLieuFigure({
 
 // Memoized: the live-aircraft tick re-renders the parent every second, but
 // the static profile geometry only depends on model/width/height.
-export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], selectedTrail = [], width, height }: Props) {
+export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], selectedTrail = [], onSelectAircraft, width, height }: Props) {
   if (model.fixes.length < 2) {
     return (
       <svg className={styles.svg} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -879,6 +895,7 @@ export const ProfileSvg = memo(function ProfileSvg({ model, liveAircraft = [], s
             label={ac.label}
             isSelected={ac.isSelected}
             labelAbove={labelSides[i] === 'above'}
+            onSelect={onSelectAircraft ? () => onSelectAircraft(ac.hex) : undefined}
           />
         ))
       })()}

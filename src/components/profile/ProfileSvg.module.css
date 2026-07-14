@@ -14,11 +14,16 @@
    (altitude IS the y axis already) — visible as a deviation trace but never
    competing with the descent path or a live aircraft's own glyph. */
 .selectedTrail {
-  stroke: #38bdf8; /* same sky blue as the selected aircraft glyph (.aircraft), dimmed */
-  stroke-width: 1.5;
-  stroke-opacity: 0.4;
+  stroke: #7dd3fc; /* brightened sky blue — the flown trail must stay clearly visible */
+  stroke-width: 2;
+  stroke-opacity: 0.9;
   stroke-linecap: round;
   fill: none;
+}
+
+/* Aircraft glyph with a tap/click hit target (profile selection). */
+.aircraftClickable {
+  cursor: pointer;
 }
 
 /* ── ground / terrain reference ─────────────────────────────────── */

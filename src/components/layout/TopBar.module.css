@@ -20,6 +20,20 @@
   text-transform: uppercase;
 }
 
+.brandShort {
+  display: none;
+}
+
+/* Phone: shrink the wordmark to "AM" so the top-bar controls keep room. */
+@media (max-width: 640px) {
+  .brandFull {
+    display: none;
+  }
+  .brandShort {
+    display: inline;
+  }
+}
+
 .center {
   flex: 1;
   max-width: 400px;

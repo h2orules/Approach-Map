@@ -58,6 +58,7 @@ export function ProfilePanel({ mapRef }: Props) {
   const cifpData = useCifpStore((s) => s.data)
 
   const [rect, setRect] = useState<PanelRect>(DEFAULT_RECT)
+  const [collapsed, setCollapsed] = useState(false)
   const lastAutoProcId = useRef<string | null>(null)
   const dragStart = useRef<{ startClientX: number; startClientY: number; startX: number; startY: number } | null>(
     null,
@@ -261,7 +262,7 @@ export function ProfilePanel({ mapRef }: Props) {
     <div
       ref={panelRef}
       className={styles.panel}
-      style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
+      style={{ left: rect.x, top: rect.y, width: rect.width, height: collapsed ? 'auto' : rect.height }}
     >
       <div
         className={styles.titlebar}
@@ -271,20 +272,32 @@ export function ProfilePanel({ mapRef }: Props) {
         onPointerCancel={onTitlebarPointerUp}
       >
         <span className={styles.titlebarLabel}>Vertical Profile</span>
-        <button
-          className={styles.closeBtn}
-          // Stop the titlebar's drag-start handler (which preventDefault()s the
-          // pointerdown, cancelling the button's click on touchscreens) from
-          // seeing this tap, so the native click fires normally.
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={() => clearSelection()}
-          aria-label="Close profile panel"
-        >
-          ✕
-        </button>
+        <div className={styles.titlebarActions}>
+          <button
+            className={styles.iconBtn}
+            // Stop the titlebar's drag-start handler (see close button below).
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setCollapsed((c) => !c)}
+            aria-label={collapsed ? 'Expand profile panel' : 'Collapse profile panel'}
+            aria-expanded={!collapsed}
+          >
+            {collapsed ? '▾' : '▴'}
+          </button>
+          <button
+            className={styles.iconBtn}
+            // Stop the titlebar's drag-start handler (which preventDefault()s the
+            // pointerdown, cancelling the button's click on touchscreens) from
+            // seeing this tap, so the native click fires normally.
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => clearSelection()}
+            aria-label="Close profile panel"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      <div className={styles.content}>
+      <div className={styles.content} hidden={collapsed}>
         {model ? (
           <>
             <ProfileHeader procedure={procedure} model={model} />

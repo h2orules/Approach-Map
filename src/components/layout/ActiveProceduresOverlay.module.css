@@ -1,6 +1,7 @@
 .overlay {
   position: absolute;
-  bottom: 48px;
+  /* On phones add --map-bottom-inset so the box clears the peeking bottom sheet. */
+  bottom: calc(48px + var(--map-bottom-inset, 0px));
   left: 12px;
   background: var(--overlay-bg);
   border: 1px solid var(--overlay-border);

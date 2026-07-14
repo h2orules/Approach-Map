@@ -41,6 +41,24 @@
   box-sizing: border-box;
 }
 
+/* ── Mobile bottom-sheet inset ───────────────────────────────────────────── */
+/* On phones (<=640px, the PANE_OVERLAY_BREAKPOINT_PX / deriveMode breakpoint)
+   the sidebar becomes a bottom sheet that peeks 44px above the bottom edge
+   (Sidebar.module.css .sheet). Bottom-anchored map overlays add
+   --map-bottom-inset to their offset so nothing hides behind the drawer. */
+:root {
+  --map-bottom-inset: 0px;
+}
+@media (max-width: 640px) {
+  :root {
+    --map-bottom-inset: 44px;
+  }
+  /* Lift the mapbox NavigationControl cluster above the peeking bottom sheet. */
+  .mapboxgl-ctrl-bottom-right {
+    bottom: var(--map-bottom-inset);
+  }
+}
+
 html, body, #root {
   margin: 0;
   padding: 0;

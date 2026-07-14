@@ -215,12 +215,13 @@ export function AppMap() {
       {/* Bottom-right control stack: traffic filters above the altitude
           filter. Anchored at the bottom (clearing the NavigationControl) so it
           grows upward when the altitude filter shows its summary badge, keeping
-          a consistent gap between the two boxes. */}
+          a consistent gap between the two boxes. On phones the bottom offset
+          adds --map-bottom-inset so the stack clears the peeking bottom sheet. */}
       <div
         style={{
           position: 'absolute',
           right: 10,
-          bottom: 110,
+          bottom: 'calc(110px + var(--map-bottom-inset, 0px))',
           zIndex: 10,
           display: 'flex',
           flexDirection: 'column',
@@ -229,10 +230,25 @@ export function AppMap() {
           pointerEvents: 'none',
         }}
       >
-        <AxisZoomControls />
         <PathControls />
         <TrafficFilter />
         <AltitudeFilter />
+      </div>
+
+      {/* Per-axis zoom cluster parked at the bottom-right, just left of the
+          mapbox NavigationControl (bottoms aligned), so the main control column
+          above stays short instead of running the full height of the map. */}
+      <div
+        style={{
+          position: 'absolute',
+          right: 48,
+          bottom: 'calc(10px + var(--map-bottom-inset, 0px))',
+          zIndex: 10,
+          display: 'flex',
+          pointerEvents: 'none',
+        }}
+      >
+        <AxisZoomControls />
       </div>
 
       <ActiveProceduresOverlay />
